@@ -21,7 +21,13 @@ const FAMILY_MEMBERS_STATIC = {
 
 const MOOD_EMOJIS = ['😊', '😄', '😴', '✏️', '🛍️', '🍗', '💪', '❤️', '🏠', '🎮'];
 
-export default function FamilyScreen({ familyCode, familyMembersList, currentUserProfile, onUpdateMood }) {
+export default function FamilyScreen({
+  familyCode,
+  familyMembersList,
+  currentUserProfile,
+  onUpdateMood,
+  onlineUsers,
+}) {
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedMood, setSelectedMood] = useState(currentUserProfile?.mood || '😊');
   const [statusText, setStatusText] = useState(currentUserProfile?.status_text || '');
@@ -97,6 +103,11 @@ export default function FamilyScreen({ familyCode, familyMembersList, currentUse
           const memberStatusText = isDbProfile ? (member.status_text || '') : '';
 
           const isMe = isDbProfile ? currentUserProfile && currentUserProfile.id === member.id : index === 0;
+          const isOnline = onlineUsers && onlineUsers.length > 0 ? (
+            isDbProfile
+              ? onlineUsers.includes(member.id) || onlineUsers.includes(member.role) || isMe
+              : index === 0 || onlineUsers.includes(roleKey)
+          ) : isMe;
 
           return (
             <View key={isDbProfile ? member.id : roleKey} style={styles.memberItem}>
@@ -123,9 +134,11 @@ export default function FamilyScreen({ familyCode, familyMembersList, currentUse
                 </View>
               </View>
 
-              <View style={styles.statusBox}>
-                <ShieldCheck size={14} color="#2ECC71" style={{ marginRight: 4 }} />
-                <Text style={styles.statusText}>연결됨</Text>
+              <View style={[styles.statusBox, isOnline ? styles.statusBoxOnline : styles.statusBoxOffline]}>
+                <View style={[styles.statusDot, isOnline ? styles.statusDotOnline : styles.statusDotOffline]} />
+                <Text style={[styles.statusText, isOnline ? styles.statusTextOnline : styles.statusTextOffline]}>
+                  {isOnline ? '접속 중' : '오프라인'}
+                </Text>
               </View>
             </View>
           );
@@ -353,15 +366,40 @@ const styles = StyleSheet.create({
   statusBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#E8F8F5',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  statusBoxOnline: {
+    backgroundColor: '#E8F8F5',
+    borderColor: '#D1F2EB',
+  },
+  statusBoxOffline: {
+    backgroundColor: '#F8F9FA',
+    borderColor: '#EBEBEB',
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 4,
+  },
+  statusDotOnline: {
+    backgroundColor: '#2ECC71',
+  },
+  statusDotOffline: {
+    backgroundColor: '#AEAEB2',
   },
   statusText: {
     fontSize: 10,
-    color: '#2ECC71',
     fontWeight: '700',
+  },
+  statusTextOnline: {
+    color: '#2ECC71',
+  },
+  statusTextOffline: {
+    color: '#8E8E93',
   },
   inviteGuideCard: {
     backgroundColor: '#FFF8F8',

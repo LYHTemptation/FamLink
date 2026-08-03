@@ -150,6 +150,7 @@ export default function App() {
   const [currentScreen, setCurrentScreen] = useState('chat'); // chat, calendar, smalltalk, shopping, album, family
   const [userModalVisible, setUserModalVisible] = useState(false);
   const [celebrationVisible, setCelebrationVisible] = useState(false);
+  const [onlineUsers, setOnlineUsers] = useState([]);
 
   // 1. Authentication State Listener & Initialization
   useEffect(() => {
@@ -273,6 +274,30 @@ export default function App() {
       })
       .subscribe();
 
+    // Supabase Realtime Presence Channel (Online Status)
+    const currentKey = session?.user?.id || profile?.id || profile?.role || currentUser;
+    const presenceChannel = supabase.channel(`presence-${familyId}`, {
+      config: {
+        presence: { key: currentKey },
+      },
+    });
+
+    presenceChannel
+      .on('presence', { event: 'sync' }, () => {
+        const state = presenceChannel.presenceState();
+        const keys = Object.keys(state);
+        setOnlineUsers(keys);
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await presenceChannel.track({
+            online_at: new Date().toISOString(),
+            user_id: currentKey,
+            role: profile?.role || currentUser,
+          });
+        }
+      });
+
     return () => {
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(eventsChannel);
@@ -282,6 +307,7 @@ export default function App() {
       supabase.removeChannel(rewardsChannel);
       supabase.removeChannel(couponsChannel);
       supabase.removeChannel(shoppingChannel);
+      supabase.removeChannel(presenceChannel);
     };
   }, [session, profile]);
 
@@ -1203,6 +1229,7 @@ export default function App() {
             familyMembersList={familyMembersList}
             currentUserProfile={profile}
             onUpdateMood={handleUpdateMood}
+            onlineUsers={onlineUsers}
           />
         );
       default:
