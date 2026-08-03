@@ -1183,6 +1183,7 @@ export default function App() {
           <ChatScreen
             messages={messages}
             currentUser={currentUser}
+            currentUserProfile={profile}
             onSendMessage={handleSendMessage}
             memberCount={familyMembersList.length}
             familyMembers={familyMembersList}

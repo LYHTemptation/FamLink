@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Send, Image as ImageIcon, ChevronLeft, MessageSquare, Sparkles, Users, Search, Plus, Check, X } from 'lucide-react-native';
 import { Modal, ScrollView, KeyboardAvoidingView } from 'react-native';
 
-export default function ChatScreen({ messages, currentUser, onSendMessage, memberCount, familyMembers, smallTalk, onNavigateScreen, customRooms, onCreateCustomRoom }) {
+export default function ChatScreen({ messages, currentUser, currentUserProfile, onSendMessage, memberCount, familyMembers, smallTalk, onNavigateScreen, customRooms, onCreateCustomRoom }) {
   const insets = useSafeAreaInsets();
   const [selectedRoomId, setSelectedRoomId] = useState(null); // null = Chat Room List View, 'family-group' = Group Chat
   const [inputText, setInputText] = useState('');
@@ -40,14 +40,21 @@ export default function ChatScreen({ messages, currentUser, onSendMessage, membe
     daughter: { name: '딸', avatar: '👧', color: '#F39C12' },
   };
 
-  const getSenderInfo = (senderRole) => {
+  const getSenderInfo = (senderRole, senderObj) => {
+    if (senderObj && typeof senderObj === 'object') {
+      return {
+        name: senderObj.name || senderRole,
+        avatar: senderObj.avatar || '👦',
+        color: senderObj.color || '#4A90E2',
+      };
+    }
     if (familyMembers && Array.isArray(familyMembers)) {
-      const match = familyMembers.find(m => m && typeof m === 'object' && m.role === senderRole);
+      const match = familyMembers.find(m => m && typeof m === 'object' && (m.role === senderRole || m.id === senderRole));
       if (match) {
         return { name: match.name, avatar: match.avatar, color: match.color };
       }
     }
-    return DEFAULT_MEMBERS[senderRole] || { name: senderRole, avatar: '👦', color: '#8E8E93' };
+    return DEFAULT_MEMBERS[senderRole] || { name: senderRole || '가족', avatar: '👦', color: '#8E8E93' };
   };
 
   const getMemberName = (keyOrId) => {
@@ -226,8 +233,14 @@ export default function ChatScreen({ messages, currentUser, onSendMessage, membe
   };
 
   const renderMessageItem = ({ item }) => {
-    const isMe = item.sender === currentUser;
-    const senderInfo = getSenderInfo(item.sender);
+    const senderInfo = getSenderInfo(item.sender, item.senderObj);
+    
+    // Accurately determine if the message was sent by the current logged-in user
+    const isMe =
+      item.sender === currentUser ||
+      item.profile_id === currentUser ||
+      (currentUserProfile && (item.profile_id === currentUserProfile.id || item.sender === currentUserProfile.role)) ||
+      (item.senderObj && currentUserProfile && item.senderObj.role === currentUserProfile.role);
     
     // Calculate read receipts (exclude sender)
     const readByList = item.readBy || [];
@@ -250,16 +263,20 @@ export default function ChatScreen({ messages, currentUser, onSendMessage, membe
     return (
       <View style={[styles.messageRow, isMe ? styles.myRow : styles.otherRow]}>
         {!isMe && (
-          <View style={[styles.avatarContainer, { backgroundColor: senderInfo.color + '20' }]}>
+          <View style={[styles.avatarContainer, { backgroundColor: senderInfo.color + '20', borderColor: senderInfo.color }]}>
             <Text style={styles.avatarText}>{senderInfo.avatar}</Text>
           </View>
         )}
         <View style={styles.messageContent}>
-          {!isMe && <Text style={[styles.senderName, { color: senderInfo.color }]}>{senderInfo.name}</Text>}
+          {!isMe && (
+            <View style={styles.senderNameRow}>
+              <Text style={[styles.senderName, { color: senderInfo.color }]}>{senderInfo.name}</Text>
+            </View>
+          )}
           
           <View style={[
             styles.bubble, 
-            isMe ? styles.myBubble : styles.otherBubble,
+            isMe ? styles.myBubble : [styles.otherBubble, { borderLeftWidth: 3, borderLeftColor: senderInfo.color }],
             item.image ? styles.imageBubble : null
           ]}>
             {item.image && (
