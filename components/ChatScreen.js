@@ -111,6 +111,21 @@ export default function ChatScreen({ messages, currentUser, onSendMessage, membe
     smalltalkBadge = `${responseCount}명 답변`;
   }
 
+  // Calculate unread messages count for current user
+  const unreadCount = (messages || []).filter((msg) => {
+    if (msg.sender === currentUser) return false;
+    const readByList = msg.readBy || [];
+    const isReadByMe = readByList.some(id => {
+      if (id === currentUser) return true;
+      if (familyMembers && Array.isArray(familyMembers)) {
+        const match = familyMembers.find(m => m && typeof m === 'object' && (m.id === id || m.role === id));
+        if (match && match.role === currentUser) return true;
+      }
+      return false;
+    });
+    return !isReadByMe;
+  }).length;
+
   // Define chat rooms list
   const CHAT_ROOMS = [
     {
@@ -121,7 +136,7 @@ export default function ChatScreen({ messages, currentUser, onSendMessage, membe
       time: lastMessage ? lastMessage.timestamp : '방금',
       avatar: '👨‍👩‍👧‍👦',
       color: '#FF7E82',
-      badge: messages && messages.length > 0 ? `${messages.length}` : null,
+      badge: unreadCount > 0 ? `${unreadCount}` : null,
       isGroup: true,
     },
     {
