@@ -13,10 +13,11 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Send, Image as ImageIcon, Heart, ThumbsUp, Check, CheckCheck } from 'lucide-react-native';
+import { Send, Image as ImageIcon, ChevronLeft, MessageSquare, Sparkles, Users, Search } from 'lucide-react-native';
 
 export default function ChatScreen({ messages, currentUser, onSendMessage, memberCount, familyMembers }) {
   const insets = useSafeAreaInsets();
+  const [selectedRoomId, setSelectedRoomId] = useState(null); // null = Chat Room List View, 'family-group' = Group Chat
   const [inputText, setInputText] = useState('');
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const flatListRef = useRef();
@@ -82,7 +83,59 @@ export default function ChatScreen({ messages, currentUser, onSendMessage, membe
     }
   };
 
-  const renderItem = ({ item }) => {
+  // Get last message info for list preview
+  const lastMessage = messages && messages.length > 0 ? messages[messages.length - 1] : null;
+  const lastMessageSender = lastMessage ? getSenderInfo(lastMessage.sender) : null;
+  const lastMessageText = lastMessage
+    ? (lastMessage.image ? '📷 사진을 공유했습니다.' : lastMessage.text)
+    : '가족들과 대화를 시작해보세요!';
+
+  // Define chat rooms list
+  const CHAT_ROOMS = [
+    {
+      id: 'family-group',
+      title: '우리 가족 수다방 👨‍👩‍👧‍👦',
+      subtitle: `멤버 ${memberCount || 4}명 참여 중`,
+      lastMessage: lastMessageSender ? `${lastMessageSender.name}: ${lastMessageText}` : lastMessageText,
+      time: lastMessage ? lastMessage.timestamp : '방금',
+      avatar: '👨‍👩‍👧‍👦',
+      color: '#FF7E82',
+      badge: messages && messages.length > 0 ? `${messages.length}` : null,
+      isGroup: true,
+    },
+    {
+      id: 'smalltalk-room',
+      title: '오늘의 스몰톡 소통 알림방 💡',
+      subtitle: '매일 아침 새 대화 주제 도착',
+      lastMessage: '오늘의 질문: "오늘 가장 기분 좋았던 순간은?"',
+      time: '오전 09:00',
+      avatar: '💡',
+      color: '#F39C12',
+      badge: 'NEW',
+      isGroup: false,
+    },
+  ];
+
+  // Add individual family member 1:1 chat rooms
+  if (familyMembers && Array.isArray(familyMembers) && familyMembers.length > 0) {
+    familyMembers.forEach((member) => {
+      if (member && member.role !== currentUser) {
+        CHAT_ROOMS.push({
+          id: `direct-${member.id || member.role}`,
+          title: `${member.name}님과의 대화`,
+          subtitle: `1:1 대화방`,
+          lastMessage: `${member.name}님에게 메시지를 작성해보세요.`,
+          time: '대화 가능',
+          avatar: member.avatar || '👦',
+          color: member.color || '#4A90E2',
+          badge: null,
+          isGroup: false,
+        });
+      }
+    });
+  }
+
+  const renderMessageItem = ({ item }) => {
     const isMe = item.sender === currentUser;
     const senderInfo = getSenderInfo(item.sender);
     
@@ -143,24 +196,90 @@ export default function ChatScreen({ messages, currentUser, onSendMessage, membe
     );
   };
 
+  // 1. RENDER CHAT ROOM LIST VIEW
+  if (selectedRoomId === null) {
+    return (
+      <View style={styles.container}>
+        {/* Chat Room List Header */}
+        <View style={styles.roomListHeader}>
+          <View>
+            <Text style={styles.roomListHeaderTitle}>채팅 💬</Text>
+            <Text style={styles.roomListHeaderSub}>가족 대화방 {CHAT_ROOMS.length}개</Text>
+          </View>
+        </View>
+
+        {/* Chat Room List Scroll */}
+        <FlatList
+          data={CHAT_ROOMS}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.roomListContainer}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.roomItemCard}
+              onPress={() => setSelectedRoomId(item.id)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.roomAvatarBox, { backgroundColor: item.color + '20' }]}>
+                <Text style={styles.roomAvatarText}>{item.avatar}</Text>
+              </View>
+
+              <View style={styles.roomInfoContent}>
+                <View style={styles.roomTitleRow}>
+                  <Text style={styles.roomTitleText} numberOfLines={1}>{item.title}</Text>
+                  <Text style={styles.roomTimeText}>{item.time}</Text>
+                </View>
+
+                <View style={styles.roomSnippetRow}>
+                  <Text style={styles.roomSnippetText} numberOfLines={1}>
+                    {item.lastMessage}
+                  </Text>
+                  {item.badge && (
+                    <View style={styles.roomBadge}>
+                      <Text style={styles.roomBadgeText}>{item.badge}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            </TouchableOpacity>
+          )}
+        />
+      </View>
+    );
+  }
+
+  // 2. RENDER CHAT CONVERSATION VIEW (When a chat room is clicked)
+  const currentRoom = CHAT_ROOMS.find(r => r.id === selectedRoomId) || CHAT_ROOMS[0];
+
   return (
     <View style={styles.container}>
+      {/* Detail Chat Header with Back Button */}
       <View style={styles.chatHeader}>
-        <View style={styles.headerDot} />
-        <Text style={styles.headerTitle}>가족 단톡방</Text>
-        <Text style={styles.headerSub}>멤버 {memberCount || 4}명 참여 중</Text>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => setSelectedRoomId(null)}
+          activeOpacity={0.7}
+        >
+          <ChevronLeft size={24} color="#1C1C1E" />
+        </TouchableOpacity>
+
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>{currentRoom.title}</Text>
+          <Text style={styles.headerSub}>{currentRoom.subtitle}</Text>
+        </View>
       </View>
 
+      {/* Messages List */}
       <FlatList
         ref={flatListRef}
         data={messages}
         keyExtractor={(item) => item.id}
-        renderItem={renderItem}
+        renderItem={renderMessageItem}
         contentContainerStyle={styles.listContent}
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
         onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
       />
 
+      {/* Image Preview Container */}
       {selectedPhoto && (
         <View style={styles.previewContainer}>
           <Image source={{ uri: selectedPhoto }} style={styles.previewImage} />
@@ -171,6 +290,7 @@ export default function ChatScreen({ messages, currentUser, onSendMessage, membe
         </View>
       )}
 
+      {/* Message Input Box */}
       <View style={styles.inputArea}>
         <TouchableOpacity style={styles.iconButton} onPress={pickImage}>
           <ImageIcon size={22} color="#8E8E93" />
@@ -211,6 +331,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#EBEBEB',
   },
+  backBtn: {
+    paddingRight: 8,
+    paddingVertical: 4,
+  },
+  headerTitleContainer: {
+    flex: 1,
+  },
   headerDot: {
     width: 8,
     height: 8,
@@ -222,11 +349,100 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#1C1C1E',
-    marginRight: 6,
   },
   headerSub: {
+    fontSize: 11,
+    color: '#8E8E93',
+    marginTop: 1,
+  },
+  roomListHeader: {
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#EBEBEB',
+  },
+  roomListHeaderTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1C1C1E',
+  },
+  roomListHeaderSub: {
     fontSize: 12,
     color: '#8E8E93',
+    marginTop: 2,
+  },
+  roomListContainer: {
+    padding: 14,
+  },
+  roomItemCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    padding: 14,
+    borderRadius: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#EBEBEB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  roomAvatarBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  roomAvatarText: {
+    fontSize: 24,
+  },
+  roomInfoContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  roomTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  roomTitleText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    flex: 1,
+    marginRight: 6,
+  },
+  roomTimeText: {
+    fontSize: 11,
+    color: '#8E8E93',
+  },
+  roomSnippetRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  roomSnippetText: {
+    fontSize: 13,
+    color: '#8E8E93',
+    flex: 1,
+    marginRight: 6,
+  },
+  roomBadge: {
+    backgroundColor: '#FF7E82',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  roomBadgeText: {
+    fontSize: 10,
+    color: '#FFFFFF',
+    fontWeight: '800',
   },
   listContent: {
     padding: 16,
