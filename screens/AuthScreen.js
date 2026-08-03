@@ -196,11 +196,10 @@ export default function AuthScreen({ onAuthComplete }) {
 
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={styles.container}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         {/* App Logo/Header */}
         <View style={styles.headerBox}>
           <Heart size={44} color="#FF7E82" fill="#FF7E82" style={{ marginBottom: 12 }} />
