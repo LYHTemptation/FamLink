@@ -884,24 +884,32 @@ export default function App() {
           const fileUri = messageData.image;
           const fileName = `${profile.family_id}/${Date.now()}_${fileUri.split('/').pop()}`;
 
-          const response = await fetch(fileUri);
-          const blob = await response.blob();
+          try {
+            const response = await fetch(fileUri);
+            const blob = await response.blob();
 
-          const { data, error: uploadError } = await supabase.storage
-            .from('family-photos')
-            .upload(fileName, blob, {
-              cacheControl: '3600',
-              upsert: false,
-              contentType: blob.type || 'image/jpeg',
-            });
+            const { data, error: uploadError } = await supabase.storage
+              .from('family-photos')
+              .upload(fileName, blob, {
+                cacheControl: '3600',
+                upsert: false,
+                contentType: blob.type || 'image/jpeg',
+              });
 
-          if (uploadError) throw uploadError;
-
-          const { data: { publicUrl } } = supabase.storage
-            .from('family-photos')
-            .getPublicUrl(fileName);
-
-          imageUrl = publicUrl;
+            if (uploadError) {
+              console.warn('⚠️ Supabase Storage 업로드 안내:', uploadError.message);
+              // Storage 버킷이 미생성된 경우 로컬 이미지 URI를 대신 사용하여 메시지 전송 차단 방지
+              imageUrl = fileUri;
+            } else {
+              const { data: { publicUrl } } = supabase.storage
+                .from('family-photos')
+                .getPublicUrl(fileName);
+              imageUrl = publicUrl;
+            }
+          } catch (imgErr) {
+            console.warn('⚠️ 이미지 처리 안내:', imgErr);
+            imageUrl = fileUri;
+          }
         }
 
         const { error } = await supabase

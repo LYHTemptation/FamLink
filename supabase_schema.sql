@@ -152,3 +152,8 @@ BEGIN
   BEGIN alter publication supabase_realtime add table user_coupons; EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN alter publication supabase_realtime add table shopping_items; EXCEPTION WHEN OTHERS THEN NULL; END;
 END $$;
+
+-- 13. Supabase Storage 사진 업로드용 버킷 (family-photos) 생성
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('family-photos', 'family-photos', true)
+ON CONFLICT (id) DO NOTHING;
