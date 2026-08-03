@@ -2,6 +2,8 @@ import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 
+import Constants from 'expo-constants';
+
 // 1. 앱 포그라운드(켜져 있을 때) 알림 수신 설정
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -32,14 +34,26 @@ export async function registerForPushNotificationsAsync(projectId) {
       return null;
     }
 
+    const resolvedProjectId =
+      projectId ||
+      Constants?.expoConfig?.extra?.eas?.projectId ||
+      Constants?.easConfig?.projectId;
+
+    if (!resolvedProjectId) {
+      console.warn(
+        '⚠️ Push Token 발급을 위한 Expo projectId가 설정되지 않았습니다. app.json의 extra.eas.projectId 또는 npx eas-cli project:init 명령으로 개설 후 등록해 주세요.'
+      );
+      return null;
+    }
+
     try {
       const pushTokenData = await Notifications.getExpoPushTokenAsync({
-        projectId: projectId || undefined,
+        projectId: resolvedProjectId,
       });
       token = pushTokenData.data;
       console.log('발급된 Expo Push Token:', token);
     } catch (e) {
-      console.error('Push Token 발급 오류:', e);
+      console.warn('Push Token 발급 안내:', e.message || e);
     }
   } else {
     console.log('시뮬레이터/에뮬레이터에서는 푸시 알림 테스트가 제한됩니다. 실기기를 사용해주세요.');
