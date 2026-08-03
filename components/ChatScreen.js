@@ -13,14 +13,25 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Send, Image as ImageIcon, ChevronLeft, MessageSquare, Sparkles, Users, Search } from 'lucide-react-native';
+import { Send, Image as ImageIcon, ChevronLeft, MessageSquare, Sparkles, Users, Search, Plus, Check, X } from 'lucide-react-native';
+import { Modal, ScrollView, KeyboardAvoidingView } from 'react-native';
 
-export default function ChatScreen({ messages, currentUser, onSendMessage, memberCount, familyMembers, smallTalk, onNavigateScreen }) {
+export default function ChatScreen({ messages, currentUser, onSendMessage, memberCount, familyMembers, smallTalk, onNavigateScreen, customRooms, onCreateCustomRoom }) {
   const insets = useSafeAreaInsets();
   const [selectedRoomId, setSelectedRoomId] = useState(null); // null = Chat Room List View, 'family-group' = Group Chat
   const [inputText, setInputText] = useState('');
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const flatListRef = useRef();
+
+  // Create Custom Room Modal States
+  const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [newRoomTitle, setNewRoomTitle] = useState('');
+  const [selectedAvatar, setSelectedAvatar] = useState('💬');
+  const [selectedColor, setSelectedColor] = useState('#FF7E82');
+  const [selectedMembers, setSelectedMembers] = useState([]);
+
+  const EMOJI_OPTIONS = ['💬', '⛺', '⚽', '🍕', '🎁', '🏖️', '☕', '🎵', '🚗', '🐱', '🎮', '❤️'];
+  const COLOR_OPTIONS = ['#FF7E82', '#4A90E2', '#2ECC71', '#F39C12', '#9B59B6', '#1ABC9C'];
 
   const DEFAULT_MEMBERS = {
     mom: { name: '엄마', avatar: '👩‍🦰', color: '#FF7E82' },
@@ -153,6 +164,11 @@ export default function ChatScreen({ messages, currentUser, onSendMessage, membe
     },
   ];
 
+  // Add user-created custom chat rooms
+  if (customRooms && Array.isArray(customRooms) && customRooms.length > 0) {
+    CHAT_ROOMS.push(...customRooms);
+  }
+
   // Add individual family member 1:1 chat rooms
   if (familyMembers && Array.isArray(familyMembers) && familyMembers.length > 0) {
     familyMembers.forEach((member) => {
@@ -171,6 +187,43 @@ export default function ChatScreen({ messages, currentUser, onSendMessage, membe
       }
     });
   }
+
+  const handleToggleMemberSelect = (roleKey) => {
+    if (selectedMembers.includes(roleKey)) {
+      setSelectedMembers(selectedMembers.filter(r => r !== roleKey));
+    } else {
+      setSelectedMembers([...selectedMembers, roleKey]);
+    }
+  };
+
+  const handleCreateRoomSubmit = () => {
+    if (!newRoomTitle.trim()) {
+      Alert.alert('입력 안내', '대화방 이름을 입력해 주세요.');
+      return;
+    }
+
+    const createdRoom = {
+      id: `custom-${Date.now()}`,
+      title: newRoomTitle.trim(),
+      subtitle: `멤버 ${selectedMembers.length + 1}명 참여`,
+      lastMessage: '새로운 대화방이 시작되었습니다. 인사 나눠보세요!',
+      time: '방금',
+      avatar: selectedAvatar,
+      color: selectedColor,
+      badge: 'NEW',
+      isGroup: true,
+      members: [currentUser, ...selectedMembers],
+    };
+
+    if (onCreateCustomRoom) {
+      onCreateCustomRoom(createdRoom);
+    }
+
+    setNewRoomTitle('');
+    setSelectedMembers([]);
+    setCreateModalVisible(false);
+    setSelectedRoomId(createdRoom.id);
+  };
 
   const renderMessageItem = ({ item }) => {
     const isMe = item.sender === currentUser;
@@ -237,11 +290,22 @@ export default function ChatScreen({ messages, currentUser, onSendMessage, membe
   if (selectedRoomId === null) {
     return (
       <View style={styles.container}>
-        {/* Chat Room List Header */}
+        {/* Chat Room List Header with Create Button */}
         <View style={styles.roomListHeader}>
-          <View>
-            <Text style={styles.roomListHeaderTitle}>채팅 💬</Text>
-            <Text style={styles.roomListHeaderSub}>가족 대화방 {CHAT_ROOMS.length}개</Text>
+          <View style={styles.roomListHeaderTitleRow}>
+            <View>
+              <Text style={styles.roomListHeaderTitle}>채팅 💬</Text>
+              <Text style={styles.roomListHeaderSub}>가족 대화방 {CHAT_ROOMS.length}개</Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.createRoomBtn}
+              onPress={() => setCreateModalVisible(true)}
+              activeOpacity={0.8}
+            >
+              <Plus size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
+              <Text style={styles.createRoomBtnText}>새 대화방</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -286,6 +350,104 @@ export default function ChatScreen({ messages, currentUser, onSendMessage, membe
             </TouchableOpacity>
           )}
         />
+
+        {/* Create Custom Room Modal */}
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={createModalVisible}
+          onRequestClose={() => setCreateModalVisible(false)}
+        >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.modalOverlay}
+          >
+            <View style={styles.modalView}>
+              <View style={styles.modalHeaderRow}>
+                <View style={styles.modalHeaderTitleRow}>
+                  <Plus size={20} color="#FF7E82" style={{ marginRight: 6 }} />
+                  <Text style={styles.modalHeader}>새 대화방 만들기</Text>
+                </View>
+                <TouchableOpacity onPress={() => setCreateModalVisible(false)}>
+                  <X size={20} color="#8E8E93" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.modalScrollContent} keyboardShouldPersistTaps="handled">
+                <Text style={styles.modalLabel}>대화방 이름</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="예: 주말 모임방, 엄마 & 딸 비밀방"
+                  placeholderTextColor="#AEAEB2"
+                  value={newRoomTitle}
+                  onChangeText={setNewRoomTitle}
+                />
+
+                <Text style={styles.modalLabel}>대표 이모티콘</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
+                  {EMOJI_OPTIONS.map((emoji) => (
+                    <TouchableOpacity
+                      key={emoji}
+                      style={[styles.emojiChip, selectedAvatar === emoji && styles.emojiChipSelected]}
+                      onPress={() => setSelectedAvatar(emoji)}
+                    >
+                      <Text style={styles.emojiChipText}>{emoji}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+
+                <Text style={styles.modalLabel}>테마 컬러</Text>
+                <View style={styles.colorPaletteRow}>
+                  {COLOR_OPTIONS.map((colorItem) => (
+                    <TouchableOpacity
+                      key={colorItem}
+                      style={[
+                        styles.colorDot,
+                        { backgroundColor: colorItem },
+                        selectedColor === colorItem && styles.colorDotSelected,
+                      ]}
+                      onPress={() => setSelectedColor(colorItem)}
+                    />
+                  ))}
+                </View>
+
+                <Text style={styles.modalLabel}>초대할 가족 멤버</Text>
+                <View style={styles.memberChecklistRow}>
+                  {(familyMembers || [
+                    { role: 'mom', name: '엄마', avatar: '👩‍🦰' },
+                    { role: 'dad', name: '아빠', avatar: '👨‍💼' },
+                    { role: 'son', name: '아들', avatar: '👦' },
+                    { role: 'daughter', name: '딸', avatar: '👧' },
+                  ]).map((m) => {
+                    const roleKey = typeof m === 'object' ? (m.role || m.id) : m;
+                    if (roleKey === currentUser) return null;
+                    const name = typeof m === 'object' ? m.name : getMemberName(roleKey);
+                    const avatar = typeof m === 'object' ? m.avatar : '👦';
+                    const isSelected = selectedMembers.includes(roleKey);
+
+                    return (
+                      <TouchableOpacity
+                        key={roleKey}
+                        style={[styles.memberCheckChip, isSelected && styles.memberCheckChipSelected]}
+                        onPress={() => handleToggleMemberSelect(roleKey)}
+                      >
+                        <Text style={styles.memberCheckAvatar}>{avatar}</Text>
+                        <Text style={[styles.memberCheckName, isSelected && styles.memberCheckNameSelected]}>
+                          {name}
+                        </Text>
+                        {isSelected && <Check size={14} color="#FF7E82" style={{ marginLeft: 4 }} />}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <TouchableOpacity style={styles.modalConfirmBtn} onPress={handleCreateRoomSubmit}>
+                  <Text style={styles.modalConfirmBtnText}>대화방 만들기</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
       </View>
     );
   }
@@ -406,6 +568,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#EBEBEB',
   },
+  roomListHeaderTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   roomListHeaderTitle: {
     fontSize: 20,
     fontWeight: '800',
@@ -415,6 +582,149 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#8E8E93',
     marginTop: 2,
+  },
+  createRoomBtn: {
+    backgroundColor: '#FF7E82',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#FF7E82',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  createRoomBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalView: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 22,
+    maxHeight: '85%',
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  modalHeaderTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  modalHeader: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#1C1C1E',
+  },
+  modalScrollContent: {
+    paddingVertical: 4,
+  },
+  modalLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#8E8E93',
+    marginTop: 14,
+    marginBottom: 6,
+  },
+  modalInput: {
+    backgroundColor: '#F1F2F4',
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 14,
+    color: '#1C1C1E',
+  },
+  chipScroll: {
+    flexDirection: 'row',
+    paddingVertical: 4,
+  },
+  emojiChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: '#F1F2F4',
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#F1F2F4',
+  },
+  emojiChipSelected: {
+    backgroundColor: '#FFEBEB',
+    borderColor: '#FF7E82',
+  },
+  emojiChipText: {
+    fontSize: 20,
+  },
+  colorPaletteRow: {
+    flexDirection: 'row',
+    paddingVertical: 4,
+  },
+  colorDot: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    marginRight: 10,
+  },
+  colorDotSelected: {
+    borderWidth: 3,
+    borderColor: '#1C1C1E',
+  },
+  memberChecklistRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 4,
+  },
+  memberCheckChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F2F4',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#F1F2F4',
+  },
+  memberCheckChipSelected: {
+    backgroundColor: '#FFEBEB',
+    borderColor: '#FF7E82',
+  },
+  memberCheckAvatar: {
+    fontSize: 14,
+    marginRight: 4,
+  },
+  memberCheckName: {
+    fontSize: 12,
+    color: '#8E8E93',
+    fontWeight: '600',
+  },
+  memberCheckNameSelected: {
+    color: '#FF7E82',
+    fontWeight: '700',
+  },
+  modalConfirmBtn: {
+    backgroundColor: '#FF7E82',
+    padding: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    marginTop: 22,
+    marginBottom: 12,
+  },
+  modalConfirmBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   roomListContainer: {
     padding: 14,

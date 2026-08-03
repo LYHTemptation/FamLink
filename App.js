@@ -140,6 +140,7 @@ export default function App() {
   const [rewardsList, setRewardsList] = useState([]);
   const [userCoupons, setUserCoupons] = useState([]);
   const [shoppingItems, setShoppingItems] = useState([]);
+  const [customRooms, setCustomRooms] = useState([]);
 
   const [smallTalk, setSmallTalk] = useState({
     topic: getTopicForToday(),
@@ -1187,6 +1188,8 @@ export default function App() {
             familyMembers={familyMembersList}
             smallTalk={smallTalk}
             onNavigateScreen={setCurrentScreen}
+            customRooms={customRooms}
+            onCreateCustomRoom={(newRoom) => setCustomRooms(prev => [newRoom, ...prev])}
           />
         );
       case 'calendar':
