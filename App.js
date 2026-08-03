@@ -1177,6 +1177,8 @@ export default function App() {
             onSendMessage={handleSendMessage}
             memberCount={familyMembersList.length}
             familyMembers={familyMembersList}
+            smallTalk={smallTalk}
+            onNavigateScreen={setCurrentScreen}
           />
         );
       case 'calendar':

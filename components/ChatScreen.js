@@ -15,7 +15,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Send, Image as ImageIcon, ChevronLeft, MessageSquare, Sparkles, Users, Search } from 'lucide-react-native';
 
-export default function ChatScreen({ messages, currentUser, onSendMessage, memberCount, familyMembers }) {
+export default function ChatScreen({ messages, currentUser, onSendMessage, memberCount, familyMembers, smallTalk, onNavigateScreen }) {
   const insets = useSafeAreaInsets();
   const [selectedRoomId, setSelectedRoomId] = useState(null); // null = Chat Room List View, 'family-group' = Group Chat
   const [inputText, setInputText] = useState('');
@@ -90,6 +90,27 @@ export default function ChatScreen({ messages, currentUser, onSendMessage, membe
     ? (lastMessage.image ? '📷 사진을 공유했습니다.' : lastMessage.text)
     : '가족들과 대화를 시작해보세요!';
 
+  // Dynamic SmallTalk topic and latest response info
+  const todayTopic = smallTalk?.topic || '오늘 가장 기분 좋았던 순간은?';
+  const responses = smallTalk?.responses || {};
+  const responseCount = Object.keys(responses).length;
+  const isMyAnswered = Boolean(responses[currentUser]);
+
+  let smalltalkLastMsg = `오늘의 질문: "${todayTopic}"`;
+  if (responseCount > 0) {
+    const lastUserKey = Object.keys(responses).pop();
+    const lastUserName = getMemberName(lastUserKey);
+    const lastUserAns = responses[lastUserKey];
+    smalltalkLastMsg = `${lastUserName}: "${lastUserAns}"`;
+  }
+
+  let smalltalkBadge = 'NEW';
+  if (smallTalk?.pointsAwarded) {
+    smalltalkBadge = '🎉 100P';
+  } else if (isMyAnswered) {
+    smalltalkBadge = `${responseCount}명 답변`;
+  }
+
   // Define chat rooms list
   const CHAT_ROOMS = [
     {
@@ -107,12 +128,13 @@ export default function ChatScreen({ messages, currentUser, onSendMessage, membe
       id: 'smalltalk-room',
       title: '오늘의 스몰톡 소통 알림방 💡',
       subtitle: '매일 아침 새 대화 주제 도착',
-      lastMessage: '오늘의 질문: "오늘 가장 기분 좋았던 순간은?"',
-      time: '오전 09:00',
+      lastMessage: smalltalkLastMsg,
+      time: '오늘',
       avatar: '💡',
       color: '#F39C12',
-      badge: 'NEW',
+      badge: smalltalkBadge,
       isGroup: false,
+      targetScreen: 'smalltalk',
     },
   ];
 
@@ -216,7 +238,13 @@ export default function ChatScreen({ messages, currentUser, onSendMessage, membe
           renderItem={({ item }) => (
             <TouchableOpacity
               style={styles.roomItemCard}
-              onPress={() => setSelectedRoomId(item.id)}
+              onPress={() => {
+                if (item.targetScreen && onNavigateScreen) {
+                  onNavigateScreen(item.targetScreen);
+                } else {
+                  setSelectedRoomId(item.id);
+                }
+              }}
               activeOpacity={0.7}
             >
               <View style={[styles.roomAvatarBox, { backgroundColor: item.color + '20' }]}>
