@@ -117,11 +117,7 @@ const INITIAL_MOCK_DATA = {
   ],
   smallTalk: {
     topic: getTopicForToday(),
-    responses: {
-      mom: '오늘 날씨 좋아서 동네 산책할 때 제일 기분 좋았어~',
-      dad: '퇴근하고 시원하게 씻고 소파에 누웠을 때!',
-      son: '오늘 체육 시간에 친구들이랑 축구하고 이겼을 때 ⚽',
-    },
+    responses: {},
     pointsAwarded: false,
   },
 };
@@ -502,8 +498,9 @@ export default function App() {
     const responsesMap = {};
     if (data) {
       data.forEach(resp => {
-        if (resp.profiles?.role) {
-          responsesMap[resp.profiles.role] = resp.text;
+        const key = resp.profiles?.role || resp.profile_id;
+        if (key) {
+          responsesMap[key] = resp.text;
         }
       });
     }
