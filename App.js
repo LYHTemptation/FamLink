@@ -776,9 +776,33 @@ export default function App() {
     }
   };
 
+  const addDaysToDateStr = (dateStr, days) => {
+    if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + days);
+    const ry = dt.getFullYear();
+    const rm = String(dt.getMonth() + 1).padStart(2, '0');
+    const rd = String(dt.getDate()).padStart(2, '0');
+    return `${ry}-${rm}-${rd}`;
+  };
+
   const handleRedeemReward = async (reward) => {
     const cost = reward.cost;
     const newPoints = points - cost;
+    const todayStr = getTodayString();
+    const expireDateStr = addDaysToDateStr(todayStr, 30);
+
+    const couponPayload = {
+      family_id: profile ? profile.family_id : null,
+      profile_id: session ? session.user.id : null,
+      reward_id: reward.id,
+      title: reward.title,
+      cost: reward.cost,
+      provider: reward.provider,
+      status: 'available',
+      expire_date: expireDateStr,
+    };
 
     if (isSupabaseReady) {
       try {
@@ -790,16 +814,21 @@ export default function App() {
 
         const { error: cError } = await supabase
           .from('user_coupons')
-          .insert({
-            family_id: profile.family_id,
-            profile_id: session.user.id,
-            reward_id: reward.id,
-            title: reward.title,
-            cost: reward.cost,
-            provider: reward.provider,
-            status: 'available',
-          });
-        if (cError) throw cError;
+          .insert(couponPayload);
+
+        if (cError) {
+          if (cError.code === 'PGRST204' || (cError.message && cError.message.includes('expire_date'))) {
+            delete couponPayload.expire_date;
+            const { error: fallbackError } = await supabase
+              .from('user_coupons')
+              .insert(couponPayload);
+            if (fallbackError) throw fallbackError;
+          } else {
+            throw cError;
+          }
+        }
+
+        setPoints(newPoints);
       } catch (e) {
         showError(e, '쿠폰 교환에 실패했습니다.');
       }
@@ -810,6 +839,7 @@ export default function App() {
         cost: reward.cost,
         provider: reward.provider,
         status: 'available',
+        expire_date: expireDateStr,
       };
       const updatedCoupons = [newCoupon, ...userCoupons];
       setPoints(newPoints);

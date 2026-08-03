@@ -35,6 +35,9 @@ export default function SmallTalkScreen({
   const [couponDesc, setCouponDesc] = useState('');
   const [couponProvider, setCouponProvider] = useState('');
 
+  // Coupon Wallet Tab State ('available', 'used', 'expired')
+  const [walletTab, setWalletTab] = useState('available');
+
   const DEFAULT_MEMBERS = {
     mom: { name: '엄마', avatar: '👩‍🦰', color: '#FF7E82' },
     dad: { name: '아빠', avatar: '👨‍💼', color: '#4A90E2' },
@@ -133,8 +136,61 @@ export default function SmallTalkScreen({
     );
   };
 
-  const availableCoupons = userCoupons ? userCoupons.filter(c => c.status !== 'used') : [];
-  const usedCoupons = userCoupons ? userCoupons.filter(c => c.status === 'used') : [];
+  const getTodayString = (dateObj = new Date()) => {
+    const y = dateObj.getFullYear();
+    const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const d = String(dateObj.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  const getDDayDays = (expireDateStr) => {
+    if (!expireDateStr || !/^\d{4}-\d{2}-\d{2}$/.test(expireDateStr)) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const [y, m, d] = expireDateStr.split('-').map(Number);
+    const expDate = new Date(y, m - 1, d);
+    expDate.setHours(23, 59, 59, 999);
+    const diffTime = expDate - today;
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  };
+
+  const todayStr = getTodayString();
+  const availableCoupons = [];
+  const usedCoupons = [];
+  const expiredCoupons = [];
+
+  (userCoupons || []).forEach(c => {
+    if (c.status === 'used') {
+      usedCoupons.push(c);
+    } else if (c.expire_date && c.expire_date < todayStr) {
+      expiredCoupons.push(c);
+    } else {
+      availableCoupons.push(c);
+    }
+  });
+
+  // Stack available coupons by title & provider
+  const stackedAvailableCoupons = [];
+  const stackMap = {};
+
+  availableCoupons.forEach(coupon => {
+    const key = `${coupon.title}_${coupon.provider || '가족'}`;
+    if (!stackMap[key]) {
+      stackMap[key] = {
+        title: coupon.title,
+        provider: coupon.provider || '가족',
+        cost: coupon.cost,
+        expire_date: coupon.expire_date,
+        items: [coupon],
+      };
+      stackedAvailableCoupons.push(stackMap[key]);
+    } else {
+      stackMap[key].items.push(coupon);
+      if (coupon.expire_date && (!stackMap[key].expire_date || coupon.expire_date < stackMap[key].expire_date)) {
+        stackMap[key].expire_date = coupon.expire_date;
+      }
+    }
+  });
 
   return (
     <View style={styles.container}>
@@ -374,31 +430,82 @@ export default function SmallTalkScreen({
               </TouchableOpacity>
             </View>
 
+            {/* Wallet Tabs (사용 가능 / 사용 완료 / 만료됨) */}
+            <View style={styles.walletTabRow}>
+              <TouchableOpacity
+                style={[styles.walletTabItem, walletTab === 'available' && styles.walletTabItemActive]}
+                onPress={() => setWalletTab('available')}
+              >
+                <Text style={[styles.walletTabText, walletTab === 'available' && styles.walletTabTextActive]}>
+                  사용 가능 ({availableCoupons.length})
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.walletTabItem, walletTab === 'used' && styles.walletTabItemActive]}
+                onPress={() => setWalletTab('used')}
+              >
+                <Text style={[styles.walletTabText, walletTab === 'used' && styles.walletTabTextActive]}>
+                  사용 완료 ({usedCoupons.length})
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.walletTabItem, walletTab === 'expired' && styles.walletTabItemActive]}
+                onPress={() => setWalletTab('expired')}
+              >
+                <Text style={[styles.walletTabText, walletTab === 'expired' && styles.walletTabTextActive]}>
+                  만료됨 ({expiredCoupons.length})
+                </Text>
+              </TouchableOpacity>
+            </View>
+
             <ScrollView style={styles.walletScrollContent}>
-              <Text style={styles.walletSectionTitle}>사용 가능한 쿠폰 ({availableCoupons.length})</Text>
-              {availableCoupons.length === 0 ? (
-                <Text style={styles.emptyWalletText}>보유 중인 쿠폰이 없습니다. 포인트 상점에서 교환해보세요!</Text>
-              ) : (
-                availableCoupons.map((coupon) => (
-                  <View key={coupon.id} style={styles.walletItem}>
-                    <View style={styles.walletItemInfo}>
-                      <Text style={styles.walletItemTitle}>{coupon.title}</Text>
-                      <Text style={styles.walletItemProvider}>제공자: {coupon.provider || '가족'}</Text>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.useCouponBtn}
-                      onPress={() => handleUseCouponClick(coupon)}
-                    >
-                      <Text style={styles.useCouponBtnText}>사용하기</Text>
-                    </TouchableOpacity>
-                  </View>
-                ))
+              {/* TAB 1: Available Coupons (Stacked) */}
+              {walletTab === 'available' && (
+                stackedAvailableCoupons.length === 0 ? (
+                  <Text style={styles.emptyWalletText}>보유 중인 사용 가능 쿠폰이 없습니다. 포인트 상점에서 교환해보세요!</Text>
+                ) : (
+                  stackedAvailableCoupons.map((stack, idx) => {
+                    const dDay = getDDayDays(stack.expire_date);
+                    return (
+                      <View key={`stack-${idx}`} style={styles.walletItem}>
+                        <View style={styles.walletItemInfo}>
+                          <View style={styles.couponTitleRow}>
+                            <Text style={styles.walletItemTitle}>{stack.title}</Text>
+                            {stack.items.length > 1 && (
+                              <View style={styles.stackBadge}>
+                                <Text style={styles.stackBadgeText}>× {stack.items.length}장</Text>
+                              </View>
+                            )}
+                          </View>
+                          <View style={styles.couponMetaRow}>
+                            <Text style={styles.walletItemProvider}>제공자: {stack.provider}</Text>
+                            {dDay !== null && (
+                              <Text style={styles.expireBadgeText}>
+                                ⏳ D-{dDay}일 (까지 {stack.expire_date})
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+                        <TouchableOpacity
+                          style={styles.useCouponBtn}
+                          onPress={() => handleUseCouponClick(stack.items[0])}
+                        >
+                          <Text style={styles.useCouponBtnText}>사용하기</Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })
+                )
               )}
 
-              {usedCoupons.length > 0 && (
-                <View style={styles.usedSection}>
-                  <Text style={styles.walletSectionTitleDone}>사용 완료된 쿠폰 ({usedCoupons.length})</Text>
-                  {usedCoupons.map((coupon) => (
+              {/* TAB 2: Used Coupons */}
+              {walletTab === 'used' && (
+                usedCoupons.length === 0 ? (
+                  <Text style={styles.emptyWalletText}>사용 완료된 쿠폰 내역이 없습니다.</Text>
+                ) : (
+                  usedCoupons.map((coupon) => (
                     <View key={coupon.id} style={styles.walletItemDone}>
                       <View style={styles.walletItemInfo}>
                         <Text style={styles.walletItemTitleDone}>{coupon.title}</Text>
@@ -409,8 +516,27 @@ export default function SmallTalkScreen({
                         <Text style={styles.usedBadgeText}>사용됨</Text>
                       </View>
                     </View>
-                  ))}
-                </View>
+                  ))
+                )
+              )}
+
+              {/* TAB 3: Expired Coupons */}
+              {walletTab === 'expired' && (
+                expiredCoupons.length === 0 ? (
+                  <Text style={styles.emptyWalletText}>만료된 쿠폰이 없습니다.</Text>
+                ) : (
+                  expiredCoupons.map((coupon) => (
+                    <View key={coupon.id} style={styles.walletItemExpired}>
+                      <View style={styles.walletItemInfo}>
+                        <Text style={styles.walletItemTitleExpired}>{coupon.title}</Text>
+                        <Text style={styles.walletItemProvider}>제공자: {coupon.provider || '가족'} (만료일: {coupon.expire_date})</Text>
+                      </View>
+                      <View style={styles.expiredBadge}>
+                        <Text style={styles.expiredBadgeText}>만료됨</Text>
+                      </View>
+                    </View>
+                  ))
+                )
               )}
             </ScrollView>
           </View>
@@ -911,7 +1037,87 @@ const styles = StyleSheet.create({
     color: '#2ECC71',
     fontWeight: '700',
   },
-  usedSection: {
-    marginTop: 10,
+  walletTabRow: {
+    flexDirection: 'row',
+    backgroundColor: '#F1F2F4',
+    borderRadius: 10,
+    padding: 3,
+    marginVertical: 12,
+  },
+  walletTabItem: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  walletTabItemActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  walletTabText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8E8E93',
+  },
+  walletTabTextActive: {
+    color: '#1C1C1E',
+    fontWeight: '700',
+  },
+  couponTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  stackBadge: {
+    backgroundColor: '#E6F4FE',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: 6,
+  },
+  stackBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#4A90E2',
+  },
+  couponMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  expireBadgeText: {
+    fontSize: 11,
+    color: '#FF7E82',
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  walletItemExpired: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 8,
+    opacity: 0.5,
+  },
+  walletItemTitleExpired: {
+    fontSize: 13,
+    color: '#8E8E93',
+    textDecorationLine: 'line-through',
+    marginBottom: 2,
+  },
+  expiredBadge: {
+    backgroundColor: '#EBEBEB',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  expiredBadgeText: {
+    fontSize: 11,
+    color: '#8E8E93',
+    fontWeight: '600',
   },
 });

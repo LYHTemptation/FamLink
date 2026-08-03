@@ -90,8 +90,11 @@ CREATE TABLE IF NOT EXISTS user_coupons (
   cost INTEGER NOT NULL,
   provider TEXT,
   status TEXT DEFAULT 'available' NOT NULL,
+  expire_date TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+ALTER TABLE user_coupons ADD COLUMN IF NOT EXISTS expire_date TEXT;
 
 -- 9. 가족 장보기 및 체크리스트 테이블 (shopping_items)
 CREATE TABLE IF NOT EXISTS shopping_items (
