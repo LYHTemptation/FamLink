@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Home, ShoppingBag, Plus, Trash2, RotateCw, Camera, X, Trophy, Sparkles, Check, Edit3, Grid, Layers, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, CornerDownLeft, Undo2, PenTool } from 'lucide-react-native';
+import { Home, ShoppingBag, Plus, Trash2, RotateCw, Camera, X, Trophy, Sparkles, Check, Edit3, Grid, Layers, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, CornerDownLeft, Undo2, PenTool, Wand2 } from 'lucide-react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CANVAS_SIZE = SCREEN_WIDTH - 32; // Square canvas size
@@ -52,8 +52,8 @@ export default function InteriorScreen({
   const [selectedCategory, setSelectedCategory] = useState('living');
   const [selectedFurnitureId, setSelectedFurnitureId] = useState(null);
 
-  // HYBRID MAKER STATES (Method 1: Room Blocks + Method 2: Walls/Doors + Method 3: Freehand Finger Sketch)
-  const [makerActiveTab, setMakerActiveTab] = useState('rooms'); // 'rooms', 'walls', 'sketch'
+  // HYBRID MAKER STATES (Method 1: Magicplan Rooms + Method 2: Walls/Doors + Method 3: Sketch)
+  const [makerActiveTab, setMakerActiveTab] = useState('magicplan'); // 'magicplan', 'walls', 'sketch'
   const [customRooms, setCustomRooms] = useState([
     { id: 'r1', name: '거실', emoji: '🛋️', x: 5, y: 5, w: 48, h: 42, color: '#FFF5EB' },
     { id: 'r2', name: '안방', emoji: '🛏️', x: 58, y: 5, w: 37, h: 42, color: '#EBF5FF' },
@@ -120,10 +120,8 @@ export default function InteriorScreen({
       onPanResponderRelease: () => {
         const strokePts = [...activeStrokeRef.current];
         if (strokePts.length > 3) {
-          // Add completed stroke to sketchStrokes list
           setSketchStrokes((prev) => [...prev, { id: `stroke-${Date.now()}`, points: strokePts }]);
 
-          // Auto-detect closed loop to form custom room block
           const firstPt = strokePts[0];
           const lastPt = strokePts[strokePts.length - 1];
           const dist = Math.hypot(lastPt.x - firstPt.x, lastPt.y - firstPt.y);
@@ -176,7 +174,7 @@ export default function InteriorScreen({
     }
   };
 
-  // Move Selected Element in Maker Canvas
+  // Move Selected Element in Maker Canvas with Magicplan Magnetic Snap
   const handleMoveSelectedMakerElement = (dxPercent, dyPercent) => {
     if (!selectedMakerElement) return;
 
@@ -184,8 +182,19 @@ export default function InteriorScreen({
       setCustomRooms((prev) =>
         prev.map((r) => {
           if (r.id === selectedMakerElement.id) {
-            const newX = Math.max(0, Math.min(100 - r.w, r.x + dxPercent));
-            const newY = Math.max(0, Math.min(100 - r.h, r.y + dyPercent));
+            let newX = Math.max(0, Math.min(100 - r.w, r.x + dxPercent));
+            let newY = Math.max(0, Math.min(100 - r.h, r.y + dyPercent));
+
+            // Magicplan Snap Alignment to adjacent rooms
+            prev.forEach((otherRoom) => {
+              if (otherRoom.id !== r.id) {
+                if (Math.abs(newX - (otherRoom.x + otherRoom.w)) < 3) newX = otherRoom.x + otherRoom.w;
+                if (Math.abs((newX + r.w) - otherRoom.x) < 3) newX = otherRoom.x - r.w;
+                if (Math.abs(newY - (otherRoom.y + otherRoom.h)) < 3) newY = otherRoom.y + otherRoom.h;
+                if (Math.abs((newY + r.h) - otherRoom.y) < 3) newY = otherRoom.y - r.h;
+              }
+            });
+
             return { ...r, x: newX, y: newY };
           }
           return r;
@@ -214,6 +223,43 @@ export default function InteriorScreen({
         })
       );
     }
+  };
+
+  // Magicplan Wall Length Dimension Prompt
+  const handleEditMagicplanWallDimension = (room, side) => {
+    const currentMeters = side === 'width' ? (room.w / 10).toFixed(1) : (room.h / 10).toFixed(1);
+
+    Alert.prompt(
+      'Magicplan 벽면 길이 수정 📐',
+      `[${room.name}] ${side === 'width' ? '가로' : '세로'} 벽면의실제 치수를 미터(m) 단위로 입력하세요.\n(현재: ${currentMeters}m)`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '치수 적용',
+          onPress: (val) => {
+            const metersNum = parseFloat(val);
+            if (isNaN(metersNum) || metersNum <= 0) {
+              Alert.alert('알림', '올바른 숫자를 입력해주세요.');
+              return;
+            }
+
+            const newPercent = Math.max(10, Math.min(85, Math.round(metersNum * 10)));
+            setCustomRooms((prev) =>
+              prev.map((r) =>
+                r.id === room.id
+                  ? side === 'width'
+                    ? { ...r, w: newPercent }
+                    : { ...r, h: newPercent }
+                  : r
+              )
+            );
+            Alert.alert('치수 업데이트 완료 🪄', `${room.name} ${side === 'width' ? '가로' : '세로'} 벽면이 ${metersNum.toFixed(1)}m 로 조정되었습니다.`);
+          },
+        },
+      ],
+      'plain-text',
+      currentMeters
+    );
   };
 
   // Apply Numerical Size Input Change
@@ -254,11 +300,11 @@ export default function InteriorScreen({
   // Add Room Block in Maker
   const handleAddRoomBlock = (type) => {
     const PRESETS = {
-      living: { name: '거실', emoji: '🛋️', w: 45, h: 40, color: '#FFF5EB' },
-      bedroom: { name: '침실', emoji: '🛏️', w: 35, h: 35, color: '#EBF5FF' },
-      kitchen: { name: '주방', emoji: '🍳', w: 38, h: 35, color: '#EFFFFA' },
-      bathroom: { name: '욕실', emoji: '🛁', w: 25, h: 25, color: '#F5F5F5' },
-      balcony: { name: '발코니', emoji: '🪴', w: 40, h: 20, color: '#F0F9FF' },
+      living: { name: '거실 L자형', emoji: '🛋️', w: 48, h: 42, color: '#FFF5EB' },
+      bedroom: { name: '안방', emoji: '🛏️', w: 38, h: 36, color: '#EBF5FF' },
+      kitchen: { name: '주방 ㄷ자형', emoji: '🍳', w: 40, h: 36, color: '#EFFFFA' },
+      bathroom: { name: '욕실', emoji: '🛁', w: 24, h: 22, color: '#F5F5F5' },
+      balcony: { name: '발코니', emoji: '🪴', w: 42, h: 18, color: '#F0F9FF' },
     };
 
     const preset = PRESETS[type] || PRESETS.bedroom;
@@ -458,7 +504,7 @@ export default function InteriorScreen({
     );
   };
 
-  // Draggable Room Block in Hybrid Maker
+  // Draggable Room Block with Magicplan Realtime Wall Dimensions
   const DraggableMakerRoom = ({ room }) => {
     const isSelected = selectedMakerElement?.id === room.id;
     const [pos, setPos] = useState({ x: room.x, y: room.y });
@@ -467,6 +513,9 @@ export default function InteriorScreen({
     useEffect(() => {
       setPos({ x: room.x, y: room.y });
     }, [room.x, room.y]);
+
+    const widthMeters = (room.w / 10).toFixed(1);
+    const heightMeters = (room.h / 10).toFixed(1);
 
     const panResponder = useRef(
       PanResponder.create({
@@ -516,6 +565,22 @@ export default function InteriorScreen({
           isSelected && styles.makerElementSelected,
         ]}
       >
+        {/* Magicplan Top Wall Dimension Chip */}
+        <TouchableOpacity
+          style={styles.magicplanWallTopChip}
+          onPress={() => handleEditMagicplanWallDimension(room, 'width')}
+        >
+          <Text style={styles.magicplanWallChipText}>{widthMeters}m</Text>
+        </TouchableOpacity>
+
+        {/* Magicplan Left Wall Dimension Chip */}
+        <TouchableOpacity
+          style={styles.magicplanWallLeftChip}
+          onPress={() => handleEditMagicplanWallDimension(room, 'height')}
+        >
+          <Text style={styles.magicplanWallChipText}>{heightMeters}m</Text>
+        </TouchableOpacity>
+
         <Text style={styles.makerRoomText}>{room.emoji} {room.name}</Text>
       </View>
     );
@@ -675,8 +740,8 @@ export default function InteriorScreen({
                 style={[styles.changePlanBtn, { backgroundColor: '#FFEBEB', marginRight: 6 }]}
                 onPress={() => setMakerModalVisible(true)}
               >
-                <Edit3 size={13} color="#FF7E82" style={{ marginRight: 4 }} />
-                <Text style={[styles.changePlanBtnText, { color: '#FF7E82' }]}>직접 그리기</Text>
+                <Wand2 size={13} color="#FF7E82" style={{ marginRight: 4 }} />
+                <Text style={[styles.changePlanBtnText, { color: '#FF7E82' }]}>Magicplan 그리기</Text>
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.changePlanBtn} onPress={pickFloorPlanImage}>
@@ -789,7 +854,7 @@ export default function InteriorScreen({
         </View>
       </ScrollView>
 
-      {/* Hybrid Floor Plan Maker Modal */}
+      {/* Magicplan Style Floor Plan Maker Modal */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -800,8 +865,8 @@ export default function InteriorScreen({
           <View style={styles.modalViewLarge}>
             <View style={styles.modalHeaderRow}>
               <View style={styles.modalHeaderTitleRow}>
-                <Edit3 size={20} color="#FF7E82" style={{ marginRight: 6 }} />
-                <Text style={styles.modalHeader}>하이브리드 평면도 메이커</Text>
+                <Wand2 size={20} color="#FF7E82" style={{ marginRight: 6 }} />
+                <Text style={styles.modalHeader}>Magicplan 매직 평면도 에디터 🪄</Text>
               </View>
               <TouchableOpacity onPress={() => setMakerModalVisible(false)}>
                 <X size={20} color="#8E8E93" />
@@ -811,11 +876,11 @@ export default function InteriorScreen({
             {/* Maker Tool Tabs */}
             <View style={styles.categoryTabRow}>
               <TouchableOpacity
-                style={[styles.categoryTab, makerActiveTab === 'rooms' && styles.categoryTabActive]}
-                onPress={() => setMakerActiveTab('rooms')}
+                style={[styles.categoryTab, makerActiveTab === 'magicplan' && styles.categoryTabActive]}
+                onPress={() => setMakerActiveTab('magicplan')}
               >
-                <Text style={[styles.categoryTabText, makerActiveTab === 'rooms' && styles.categoryTabTextActive]}>
-                  1. 룸 블록 🏠
+                <Text style={[styles.categoryTabText, makerActiveTab === 'magicplan' && styles.categoryTabTextActive]}>
+                  1. Magicplan 방 🪄
                 </Text>
               </TouchableOpacity>
 
@@ -833,22 +898,22 @@ export default function InteriorScreen({
                 onPress={() => setMakerActiveTab('sketch')}
               >
                 <Text style={[styles.categoryTabText, makerActiveTab === 'sketch' && styles.categoryTabTextActive]}>
-                  3. 손가락 자유 드로잉 ✏️
+                  3. 자유 스케치 ✏️
                 </Text>
               </TouchableOpacity>
             </View>
 
             {/* Tool Bar Controls */}
-            {makerActiveTab === 'rooms' ? (
+            {makerActiveTab === 'magicplan' ? (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.toolBarRow}>
                 <TouchableOpacity style={styles.toolChip} onPress={() => handleAddRoomBlock('living')}>
-                  <Text style={styles.toolChipText}>+ 거실 🛋️</Text>
+                  <Text style={styles.toolChipText}>+ 거실 L자형 🛋️</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.toolChip} onPress={() => handleAddRoomBlock('bedroom')}>
-                  <Text style={styles.toolChipText}>+ 침실 🛏️</Text>
+                  <Text style={styles.toolChipText}>+ 안방 🛏️</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.toolChip} onPress={() => handleAddRoomBlock('kitchen')}>
-                  <Text style={styles.toolChipText}>+ 주방 🍳</Text>
+                  <Text style={styles.toolChipText}>+ 주방 ㄷ자형 🍳</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.toolChip} onPress={() => handleAddRoomBlock('bathroom')}>
                   <Text style={styles.toolChipText}>+ 욕실 🛁</Text>
@@ -883,14 +948,14 @@ export default function InteriorScreen({
             {/* Numerical Size Input Row for Selected Room */}
             {selectedMakerElement?.type === 'room' && (
               <View style={styles.numericSizeRow}>
-                <Text style={styles.numericLabel}>수치 직접 입력 크기:</Text>
+                <Text style={styles.numericLabel}>Magicplan 수치 입력:</Text>
                 <Text style={styles.inputSubLabel}>가로%</Text>
                 <TextInput
                   style={styles.numericInput}
                   keyboardType="numeric"
                   value={inputWidth}
                   onChangeText={setInputWidth}
-                  placeholder="45"
+                  placeholder="48"
                 />
                 <Text style={styles.inputSubLabel}>세로%</Text>
                 <TextInput
@@ -898,7 +963,7 @@ export default function InteriorScreen({
                   keyboardType="numeric"
                   value={inputHeight}
                   onChangeText={setInputHeight}
-                  placeholder="40"
+                  placeholder="42"
                 />
                 <TouchableOpacity style={styles.numericApplyBtn} onPress={handleApplyNumericSize}>
                   <Text style={styles.numericApplyBtnText}>적용</Text>
@@ -909,7 +974,7 @@ export default function InteriorScreen({
             {/* Directional Arrow Movement Pad & Controls Toolbar */}
             {selectedMakerElement && makerActiveTab !== 'sketch' && (
               <View style={styles.directionalPadContainer}>
-                <Text style={styles.directionalPadTitle}>선택 항목 미세 이동:</Text>
+                <Text style={styles.directionalPadTitle}>Magicplan 미세 이동 & 스냅:</Text>
                 <View style={styles.directionalPadBtnRow}>
                   <TouchableOpacity style={styles.arrowBtn} onPress={() => handleMoveSelectedMakerElement(0, -4)}>
                     <ArrowUp size={14} color="#1C1C1E" />
@@ -931,12 +996,12 @@ export default function InteriorScreen({
               </View>
             )}
 
-            {/* Maker Editor Canvas with Interactive Draggable & Freehand Sketch Modes */}
+            {/* Maker Editor Canvas with Magicplan Dimension Labels */}
             <View
               {...sketchPanResponder.panHandlers}
               style={styles.makerEditorCanvas}
             >
-              {/* Draggable Room Blocks */}
+              {/* Draggable Room Blocks with Realtime Wall Meters */}
               {customRooms.map((room) => (
                 <DraggableMakerRoom key={room.id} room={room} />
               ))}
@@ -1001,7 +1066,7 @@ export default function InteriorScreen({
               onPress={() => {
                 if (onUpdateFloorPlan) onUpdateFloorPlan(null);
                 setMakerModalVisible(false);
-                Alert.alert('하이브리드 자유 스케치 평면도 완성! 🎉', '손가락 자유 드로잉으로 작성된 평면도가 성공적으로 반영되었습니다.');
+                Alert.alert('Magicplan 평면도 저장 완료! 🪄', 'Magicplan 스타일의 실시간 치수 평면도가 성공적으로 반영되었습니다.');
               }}
             >
               <Text style={styles.makerConfirmBtnText}>이 평면도로 저장 & 적용하기</Text>
@@ -1485,6 +1550,27 @@ const styles = StyleSheet.create({
     borderColor: '#1C1C1E',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  magicplanWallTopChip: {
+    position: 'absolute',
+    top: -10,
+    backgroundColor: '#1C1C1E',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  magicplanWallLeftChip: {
+    position: 'absolute',
+    left: -18,
+    backgroundColor: '#1C1C1E',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  magicplanWallChipText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '800',
   },
   makerWallLine: {
     position: 'absolute',
