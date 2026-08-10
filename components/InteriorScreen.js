@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Home, ShoppingBag, Plus, Trash2, RotateCw, Camera, X, Trophy, Sparkles, Check, Edit3, Grid, Layers, Maximize2, Minimize2 } from 'lucide-react-native';
+import { Home, ShoppingBag, Plus, Trash2, RotateCw, Camera, X, Trophy, Sparkles, Check, Edit3, Grid, Layers, ArrowUp, ArrowDown, ArrowLeft, ArrowRight } from 'lucide-react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CANVAS_SIZE = SCREEN_WIDTH - 32; // Square canvas size
@@ -88,6 +88,46 @@ export default function InteriorScreen({
       if (onUpdateFloorPlan) {
         onUpdateFloorPlan(newUri);
       }
+    }
+  };
+
+  // Move Selected Element in Maker Canvas
+  const handleMoveSelectedMakerElement = (dxPercent, dyPercent) => {
+    if (!selectedMakerElement) return;
+
+    if (selectedMakerElement.type === 'room') {
+      setCustomRooms((prev) =>
+        prev.map((r) => {
+          if (r.id === selectedMakerElement.id) {
+            const newX = Math.max(0, Math.min(100 - r.w, r.x + dxPercent));
+            const newY = Math.max(0, Math.min(100 - r.h, r.y + dyPercent));
+            return { ...r, x: newX, y: newY };
+          }
+          return r;
+        })
+      );
+    } else if (selectedMakerElement.type === 'wall') {
+      setCustomWalls((prev) =>
+        prev.map((w) => {
+          if (w.id === selectedMakerElement.id) {
+            const newX = Math.max(0, Math.min(95, w.x + dxPercent));
+            const newY = Math.max(0, Math.min(95, w.y + dyPercent));
+            return { ...w, x: newX, y: newY };
+          }
+          return w;
+        })
+      );
+    } else if (selectedMakerElement.type === 'opening') {
+      setCustomOpenings((prev) =>
+        prev.map((op) => {
+          if (op.id === selectedMakerElement.id) {
+            const newX = Math.max(0, Math.min(95, op.x + dxPercent));
+            const newY = Math.max(0, Math.min(95, op.y + dyPercent));
+            return { ...op, x: newX, y: newY };
+          }
+          return op;
+        })
+      );
     }
   };
 
@@ -237,19 +277,28 @@ export default function InteriorScreen({
   const DraggableFurniture = ({ item }) => {
     const isSelected = selectedFurnitureId === item.id;
     const [pos, setPos] = useState({ x: item.x, y: item.y });
+    const startPos = useRef({ x: item.x, y: item.y });
+
+    useEffect(() => {
+      setPos({ x: item.x, y: item.y });
+    }, [item.x, item.y]);
 
     const panResponder = useRef(
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponderCapture: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponderCapture: () => true,
         onPanResponderGrant: () => {
           setSelectedFurnitureId(item.id);
+          startPos.current = { x: item.x, y: item.y };
         },
         onPanResponderMove: (evt, gestureState) => {
           const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
           const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
 
-          const newX = Math.max(0, Math.min(84, item.x + deltaX));
-          const newY = Math.max(0, Math.min(84, item.y + deltaY));
+          const newX = Math.max(0, Math.min(84, startPos.current.x + deltaX));
+          const newY = Math.max(0, Math.min(84, startPos.current.y + deltaY));
 
           setPos({ x: newX, y: newY });
         },
@@ -257,8 +306,8 @@ export default function InteriorScreen({
           const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
           const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
 
-          const finalX = Math.max(0, Math.min(84, item.x + deltaX));
-          const finalY = Math.max(0, Math.min(84, item.y + deltaY));
+          const finalX = Math.max(0, Math.min(84, startPos.current.x + deltaX));
+          const finalY = Math.max(0, Math.min(84, startPos.current.y + deltaY));
 
           const updated = (placedFurniture || []).map((f) =>
             f.id === item.id ? { ...f, x: finalX, y: finalY } : f
@@ -308,19 +357,28 @@ export default function InteriorScreen({
   const DraggableMakerRoom = ({ room }) => {
     const isSelected = selectedMakerElement?.id === room.id;
     const [pos, setPos] = useState({ x: room.x, y: room.y });
+    const startPos = useRef({ x: room.x, y: room.y });
+
+    useEffect(() => {
+      setPos({ x: room.x, y: room.y });
+    }, [room.x, room.y]);
 
     const panResponder = useRef(
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponderCapture: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponderCapture: () => true,
         onPanResponderGrant: () => {
           setSelectedMakerElement({ type: 'room', id: room.id });
+          startPos.current = { x: room.x, y: room.y };
         },
         onPanResponderMove: (evt, gestureState) => {
           const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
           const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
 
-          const newX = Math.max(0, Math.min(100 - room.w, room.x + deltaX));
-          const newY = Math.max(0, Math.min(100 - room.h, room.y + deltaY));
+          const newX = Math.max(0, Math.min(100 - room.w, startPos.current.x + deltaX));
+          const newY = Math.max(0, Math.min(100 - room.h, startPos.current.y + deltaY));
 
           setPos({ x: newX, y: newY });
         },
@@ -328,8 +386,8 @@ export default function InteriorScreen({
           const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
           const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
 
-          const finalX = Math.max(0, Math.min(100 - room.w, room.x + deltaX));
-          const finalY = Math.max(0, Math.min(100 - room.h, room.y + deltaY));
+          const finalX = Math.max(0, Math.min(100 - room.w, startPos.current.x + deltaX));
+          const finalY = Math.max(0, Math.min(100 - room.h, startPos.current.y + deltaY));
 
           setCustomRooms((prev) =>
             prev.map((r) => (r.id === room.id ? { ...r, x: finalX, y: finalY } : r))
@@ -362,19 +420,28 @@ export default function InteriorScreen({
   const DraggableMakerWall = ({ wall }) => {
     const isSelected = selectedMakerElement?.id === wall.id;
     const [pos, setPos] = useState({ x: wall.x, y: wall.y });
+    const startPos = useRef({ x: wall.x, y: wall.y });
+
+    useEffect(() => {
+      setPos({ x: wall.x, y: wall.y });
+    }, [wall.x, wall.y]);
 
     const panResponder = useRef(
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponderCapture: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponderCapture: () => true,
         onPanResponderGrant: () => {
           setSelectedMakerElement({ type: 'wall', id: wall.id });
+          startPos.current = { x: wall.x, y: wall.y };
         },
         onPanResponderMove: (evt, gestureState) => {
           const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
           const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
 
-          const newX = Math.max(0, Math.min(95, wall.x + deltaX));
-          const newY = Math.max(0, Math.min(95, wall.y + deltaY));
+          const newX = Math.max(0, Math.min(95, startPos.current.x + deltaX));
+          const newY = Math.max(0, Math.min(95, startPos.current.y + deltaY));
 
           setPos({ x: newX, y: newY });
         },
@@ -382,8 +449,8 @@ export default function InteriorScreen({
           const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
           const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
 
-          const finalX = Math.max(0, Math.min(95, wall.x + deltaX));
-          const finalY = Math.max(0, Math.min(95, wall.y + deltaY));
+          const finalX = Math.max(0, Math.min(95, startPos.current.x + deltaX));
+          const finalY = Math.max(0, Math.min(95, startPos.current.y + deltaY));
 
           setCustomWalls((prev) =>
             prev.map((w) => (w.id === wall.id ? { ...w, x: finalX, y: finalY } : w))
@@ -408,19 +475,28 @@ export default function InteriorScreen({
   const DraggableMakerOpening = ({ op }) => {
     const isSelected = selectedMakerElement?.id === op.id;
     const [pos, setPos] = useState({ x: op.x, y: op.y });
+    const startPos = useRef({ x: op.x, y: op.y });
+
+    useEffect(() => {
+      setPos({ x: op.x, y: op.y });
+    }, [op.x, op.y]);
 
     const panResponder = useRef(
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponderCapture: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponderCapture: () => true,
         onPanResponderGrant: () => {
           setSelectedMakerElement({ type: 'opening', id: op.id });
+          startPos.current = { x: op.x, y: op.y };
         },
         onPanResponderMove: (evt, gestureState) => {
           const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
           const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
 
-          const newX = Math.max(0, Math.min(95, op.x + deltaX));
-          const newY = Math.max(0, Math.min(95, op.y + deltaY));
+          const newX = Math.max(0, Math.min(95, startPos.current.x + deltaX));
+          const newY = Math.max(0, Math.min(95, startPos.current.y + deltaY));
 
           setPos({ x: newX, y: newY });
         },
@@ -428,8 +504,8 @@ export default function InteriorScreen({
           const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
           const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
 
-          const finalX = Math.max(0, Math.min(95, op.x + deltaX));
-          const finalY = Math.max(0, Math.min(95, op.y + deltaY));
+          const finalX = Math.max(0, Math.min(95, startPos.current.x + deltaX));
+          const finalY = Math.max(0, Math.min(95, startPos.current.y + deltaY));
 
           setCustomOpenings((prev) =>
             prev.map((o) => (o.id === op.id ? { ...o, x: finalX, y: finalY } : o))
@@ -666,22 +742,6 @@ export default function InteriorScreen({
                 <TouchableOpacity style={styles.toolChip} onPress={() => handleAddRoomBlock('balcony')}>
                   <Text style={styles.toolChipText}>+ 발코니 🪴</Text>
                 </TouchableOpacity>
-
-                {selectedMakerElement?.type === 'room' && (
-                  <>
-                    <TouchableOpacity style={[styles.toolChip, { backgroundColor: '#EBF5FF' }]} onPress={() => handleResizeRoom(5)}>
-                      <Text style={[styles.toolChipText, { color: '#4A90E2' }]}>크기 ➕</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.toolChip, { backgroundColor: '#EBF5FF' }]} onPress={() => handleResizeRoom(-5)}>
-                      <Text style={[styles.toolChipText, { color: '#4A90E2' }]}>크기 ➖</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-                {selectedMakerElement && (
-                  <TouchableOpacity style={[styles.toolChip, styles.toolChipDelete]} onPress={handleDeleteMakerElement}>
-                    <Text style={[styles.toolChipText, { color: '#FFFFFF' }]}>삭제 🗑️</Text>
-                  </TouchableOpacity>
-                )}
               </ScrollView>
             ) : (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.toolBarRow}>
@@ -694,15 +754,46 @@ export default function InteriorScreen({
                 <TouchableOpacity style={styles.toolChip} onPress={() => handleAddOpening('window')}>
                   <Text style={styles.toolChipText}>+ 창문 🪟</Text>
                 </TouchableOpacity>
-                {selectedMakerElement && (
-                  <TouchableOpacity style={[styles.toolChip, styles.toolChipDelete]} onPress={handleDeleteMakerElement}>
-                    <Text style={[styles.toolChipText, { color: '#FFFFFF' }]}>삭제 🗑️</Text>
-                  </TouchableOpacity>
-                )}
               </ScrollView>
             )}
 
-            {/* Maker Editor Canvas with Interactive Draggable Elements */}
+            {/* Directional Arrow Movement Pad & Controls Toolbar */}
+            {selectedMakerElement && (
+              <View style={styles.directionalPadContainer}>
+                <Text style={styles.directionalPadTitle}>선택 항목 이동 & 크기 조절:</Text>
+                <View style={styles.directionalPadBtnRow}>
+                  <TouchableOpacity style={styles.arrowBtn} onPress={() => handleMoveSelectedMakerElement(0, -5)}>
+                    <ArrowUp size={14} color="#1C1C1E" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.arrowBtn} onPress={() => handleMoveSelectedMakerElement(0, 5)}>
+                    <ArrowDown size={14} color="#1C1C1E" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.arrowBtn} onPress={() => handleMoveSelectedMakerElement(-5, 0)}>
+                    <ArrowLeft size={14} color="#1C1C1E" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.arrowBtn} onPress={() => handleMoveSelectedMakerElement(5, 0)}>
+                    <ArrowRight size={14} color="#1C1C1E" />
+                  </TouchableOpacity>
+
+                  {selectedMakerElement.type === 'room' && (
+                    <>
+                      <TouchableOpacity style={[styles.arrowBtn, { backgroundColor: '#EBF5FF' }]} onPress={() => handleResizeRoom(5)}>
+                        <Text style={styles.sizeBtnText}>➕</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.arrowBtn, { backgroundColor: '#EBF5FF' }]} onPress={() => handleResizeRoom(-5)}>
+                        <Text style={styles.sizeBtnText}>➖</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
+
+                  <TouchableOpacity style={[styles.arrowBtn, styles.deleteElemBtn]} onPress={handleDeleteMakerElement}>
+                    <Trash2 size={14} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {/* Maker Editor Canvas with Interactive Draggable & Tappable Elements */}
             <View style={styles.makerEditorCanvas}>
               {/* Draggable Room Blocks */}
               {customRooms.map((room) => (
@@ -1072,7 +1163,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 20,
-    maxHeight: '90%',
+    maxHeight: '92%',
   },
   modalHeaderRow: {
     flexDirection: 'row',
@@ -1091,7 +1182,7 @@ const styles = StyleSheet.create({
   },
   toolBarRow: {
     flexDirection: 'row',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   toolChip: {
     backgroundColor: '#F1F2F4',
@@ -1107,6 +1198,45 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#1C1C1E',
+  },
+  directionalPadContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFF9E6',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#FFEAA7',
+  },
+  directionalPadTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#D4AC0D',
+  },
+  directionalPadBtnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  arrowBtn: {
+    backgroundColor: '#FFFFFF',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 3,
+    borderWidth: 1,
+    borderColor: '#EBEBEB',
+  },
+  sizeBtnText: {
+    fontSize: 12,
+  },
+  deleteElemBtn: {
+    backgroundColor: '#E74C3C',
+    borderColor: '#E74C3C',
   },
   makerEditorCanvas: {
     width: CANVAS_SIZE,
