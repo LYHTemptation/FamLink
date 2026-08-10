@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Home, ShoppingBag, Plus, Trash2, RotateCw, Camera, X, Trophy, Sparkles, Check, Edit3, Grid, Layers } from 'lucide-react-native';
+import { Home, ShoppingBag, Plus, Trash2, RotateCw, Camera, X, Trophy, Sparkles, Check, Edit3, Grid, Layers, Maximize2, Minimize2 } from 'lucide-react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CANVAS_SIZE = SCREEN_WIDTH - 32; // Square canvas size
@@ -54,18 +54,18 @@ export default function InteriorScreen({
   // HYBRID MAKER STATES (Method 1: Room Blocks + Method 2: Walls & Doors Drawing)
   const [makerActiveTab, setMakerActiveTab] = useState('rooms'); // 'rooms', 'walls', 'doors'
   const [customRooms, setCustomRooms] = useState([
-    { id: 'r1', name: '거실', emoji: '🛋️', x: 5, y: 5, w: 50, h: 45, color: '#FFF5EB' },
-    { id: 'r2', name: '안방', emoji: '🛏️', x: 58, y: 5, w: 37, h: 45, color: '#EBF5FF' },
+    { id: 'r1', name: '거실', emoji: '🛋️', x: 5, y: 5, w: 48, h: 42, color: '#FFF5EB' },
+    { id: 'r2', name: '안방', emoji: '🛏️', x: 58, y: 5, w: 37, h: 42, color: '#EBF5FF' },
     { id: 'r3', name: '주방', emoji: '🍳', x: 5, y: 53, w: 42, h: 42, color: '#EFFFFA' },
     { id: 'r4', name: '작은방', emoji: '👦', x: 50, y: 53, w: 45, h: 42, color: '#FDF0FF' },
   ]);
   const [customWalls, setCustomWalls] = useState([
-    { id: 'w1', x: 55, y: 5, w: 2, h: 45 },
-    { id: 'w2', x: 5, y: 51, w: 90, h: 2 },
+    { id: 'w1', x: 55, y: 5, w: 2, h: 42 },
+    { id: 'w2', x: 5, y: 50, w: 90, h: 2 },
   ]);
   const [customOpenings, setCustomOpenings] = useState([
     { id: 'd1', type: 'door', emoji: '🚪', x: 48, y: 22 },
-    { id: 'd2', type: 'window', emoji: '🪟', x: 25, y: 3 },
+    { id: 'd2', type: 'window', emoji: '🪟', x: 25, y: 2 },
   ]);
   const [selectedMakerElement, setSelectedMakerElement] = useState(null);
 
@@ -127,6 +127,7 @@ export default function InteriorScreen({
       h: 40,
     };
     setCustomWalls([...customWalls, newWall]);
+    setSelectedMakerElement({ type: 'wall', id: newWall.id });
   };
 
   // Add Door or Window in Maker
@@ -139,6 +140,22 @@ export default function InteriorScreen({
       y: 40,
     };
     setCustomOpenings([...customOpenings, newOpening]);
+    setSelectedMakerElement({ type: 'opening', id: newOpening.id });
+  };
+
+  // Resize Selected Room Block
+  const handleResizeRoom = (deltaSize) => {
+    if (!selectedMakerElement || selectedMakerElement.type !== 'room') return;
+    setCustomRooms((prev) =>
+      prev.map((r) => {
+        if (r.id === selectedMakerElement.id) {
+          const newW = Math.max(15, Math.min(80, r.w + deltaSize));
+          const newH = Math.max(15, Math.min(80, r.h + deltaSize));
+          return { ...r, w: newW, h: newH };
+        }
+        return r;
+      })
+    );
   };
 
   // Delete Maker Element
@@ -216,7 +233,7 @@ export default function InteriorScreen({
     ]);
   };
 
-  // PanResponder Draggable Item Component
+  // PanResponder Draggable Item Component (For Placed Furniture)
   const DraggableFurniture = ({ item }) => {
     const isSelected = selectedFurnitureId === item.id;
     const [pos, setPos] = useState({ x: item.x, y: item.y });
@@ -283,6 +300,154 @@ export default function InteriorScreen({
             </TouchableOpacity>
           </View>
         )}
+      </View>
+    );
+  };
+
+  // Draggable Room Block in Hybrid Maker
+  const DraggableMakerRoom = ({ room }) => {
+    const isSelected = selectedMakerElement?.id === room.id;
+    const [pos, setPos] = useState({ x: room.x, y: room.y });
+
+    const panResponder = useRef(
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onPanResponderGrant: () => {
+          setSelectedMakerElement({ type: 'room', id: room.id });
+        },
+        onPanResponderMove: (evt, gestureState) => {
+          const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
+          const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
+
+          const newX = Math.max(0, Math.min(100 - room.w, room.x + deltaX));
+          const newY = Math.max(0, Math.min(100 - room.h, room.y + deltaY));
+
+          setPos({ x: newX, y: newY });
+        },
+        onPanResponderRelease: (evt, gestureState) => {
+          const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
+          const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
+
+          const finalX = Math.max(0, Math.min(100 - room.w, room.x + deltaX));
+          const finalY = Math.max(0, Math.min(100 - room.h, room.y + deltaY));
+
+          setCustomRooms((prev) =>
+            prev.map((r) => (r.id === room.id ? { ...r, x: finalX, y: finalY } : r))
+          );
+        },
+      })
+    ).current;
+
+    return (
+      <View
+        {...panResponder.panHandlers}
+        style={[
+          styles.makerRoomBlock,
+          {
+            left: `${pos.x}%`,
+            top: `${pos.y}%`,
+            width: `${room.w}%`,
+            height: `${room.h}%`,
+            backgroundColor: room.color,
+          },
+          isSelected && styles.makerElementSelected,
+        ]}
+      >
+        <Text style={styles.makerRoomText}>{room.emoji} {room.name}</Text>
+      </View>
+    );
+  };
+
+  // Draggable Wall Line in Hybrid Maker
+  const DraggableMakerWall = ({ wall }) => {
+    const isSelected = selectedMakerElement?.id === wall.id;
+    const [pos, setPos] = useState({ x: wall.x, y: wall.y });
+
+    const panResponder = useRef(
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onPanResponderGrant: () => {
+          setSelectedMakerElement({ type: 'wall', id: wall.id });
+        },
+        onPanResponderMove: (evt, gestureState) => {
+          const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
+          const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
+
+          const newX = Math.max(0, Math.min(95, wall.x + deltaX));
+          const newY = Math.max(0, Math.min(95, wall.y + deltaY));
+
+          setPos({ x: newX, y: newY });
+        },
+        onPanResponderRelease: (evt, gestureState) => {
+          const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
+          const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
+
+          const finalX = Math.max(0, Math.min(95, wall.x + deltaX));
+          const finalY = Math.max(0, Math.min(95, wall.y + deltaY));
+
+          setCustomWalls((prev) =>
+            prev.map((w) => (w.id === wall.id ? { ...w, x: finalX, y: finalY } : w))
+          );
+        },
+      })
+    ).current;
+
+    return (
+      <View
+        {...panResponder.panHandlers}
+        style={[
+          styles.makerWallLine,
+          { left: `${pos.x}%`, top: `${pos.y}%`, width: `${wall.w}%`, height: `${wall.h}%` },
+          isSelected && styles.makerElementSelected,
+        ]}
+      />
+    );
+  };
+
+  // Draggable Door/Window in Hybrid Maker
+  const DraggableMakerOpening = ({ op }) => {
+    const isSelected = selectedMakerElement?.id === op.id;
+    const [pos, setPos] = useState({ x: op.x, y: op.y });
+
+    const panResponder = useRef(
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onPanResponderGrant: () => {
+          setSelectedMakerElement({ type: 'opening', id: op.id });
+        },
+        onPanResponderMove: (evt, gestureState) => {
+          const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
+          const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
+
+          const newX = Math.max(0, Math.min(95, op.x + deltaX));
+          const newY = Math.max(0, Math.min(95, op.y + deltaY));
+
+          setPos({ x: newX, y: newY });
+        },
+        onPanResponderRelease: (evt, gestureState) => {
+          const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
+          const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
+
+          const finalX = Math.max(0, Math.min(95, op.x + deltaX));
+          const finalY = Math.max(0, Math.min(95, op.y + deltaY));
+
+          setCustomOpenings((prev) =>
+            prev.map((o) => (o.id === op.id ? { ...o, x: finalX, y: finalY } : o))
+          );
+        },
+      })
+    ).current;
+
+    return (
+      <View
+        {...panResponder.panHandlers}
+        style={[
+          styles.makerOpeningText,
+          { left: `${pos.x}%`, top: `${pos.y}%` },
+          isSelected && styles.makerElementSelected,
+        ]}
+      >
+        <Text style={{ fontSize: 18 }}>{op.emoji}</Text>
       </View>
     );
   };
@@ -501,6 +666,22 @@ export default function InteriorScreen({
                 <TouchableOpacity style={styles.toolChip} onPress={() => handleAddRoomBlock('balcony')}>
                   <Text style={styles.toolChipText}>+ 발코니 🪴</Text>
                 </TouchableOpacity>
+
+                {selectedMakerElement?.type === 'room' && (
+                  <>
+                    <TouchableOpacity style={[styles.toolChip, { backgroundColor: '#EBF5FF' }]} onPress={() => handleResizeRoom(5)}>
+                      <Text style={[styles.toolChipText, { color: '#4A90E2' }]}>크기 ➕</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.toolChip, { backgroundColor: '#EBF5FF' }]} onPress={() => handleResizeRoom(-5)}>
+                      <Text style={[styles.toolChipText, { color: '#4A90E2' }]}>크기 ➖</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+                {selectedMakerElement && (
+                  <TouchableOpacity style={[styles.toolChip, styles.toolChipDelete]} onPress={handleDeleteMakerElement}>
+                    <Text style={[styles.toolChipText, { color: '#FFFFFF' }]}>삭제 🗑️</Text>
+                  </TouchableOpacity>
+                )}
               </ScrollView>
             ) : (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.toolBarRow}>
@@ -515,62 +696,27 @@ export default function InteriorScreen({
                 </TouchableOpacity>
                 {selectedMakerElement && (
                   <TouchableOpacity style={[styles.toolChip, styles.toolChipDelete]} onPress={handleDeleteMakerElement}>
-                    <Text style={[styles.toolChipText, { color: '#FFFFFF' }]}>선택 삭제 🗑️</Text>
+                    <Text style={[styles.toolChipText, { color: '#FFFFFF' }]}>삭제 🗑️</Text>
                   </TouchableOpacity>
                 )}
               </ScrollView>
             )}
 
-            {/* Maker Editor Canvas */}
+            {/* Maker Editor Canvas with Interactive Draggable Elements */}
             <View style={styles.makerEditorCanvas}>
-              {/* Room Blocks */}
-              {customRooms.map((r) => (
-                <TouchableOpacity
-                  key={r.id}
-                  activeOpacity={0.8}
-                  style={[
-                    styles.makerRoomBlock,
-                    {
-                      left: `${r.x}%`,
-                      top: `${r.y}%`,
-                      width: `${r.w}%`,
-                      height: `${r.h}%`,
-                      backgroundColor: r.color,
-                    },
-                    selectedMakerElement?.id === r.id && styles.makerElementSelected,
-                  ]}
-                  onPress={() => setSelectedMakerElement({ type: 'room', id: r.id })}
-                >
-                  <Text style={styles.makerRoomText}>{r.emoji} {r.name}</Text>
-                </TouchableOpacity>
+              {/* Draggable Room Blocks */}
+              {customRooms.map((room) => (
+                <DraggableMakerRoom key={room.id} room={room} />
               ))}
 
-              {/* Walls */}
-              {customWalls.map((w) => (
-                <TouchableOpacity
-                  key={w.id}
-                  style={[
-                    styles.makerWallLine,
-                    { left: `${w.x}%`, top: `${w.y}%`, width: `${w.w}%`, height: `${w.h}%` },
-                    selectedMakerElement?.id === w.id && styles.makerElementSelected,
-                  ]}
-                  onPress={() => setSelectedMakerElement({ type: 'wall', id: w.id })}
-                />
+              {/* Draggable Wall Lines */}
+              {customWalls.map((wall) => (
+                <DraggableMakerWall key={wall.id} wall={wall} />
               ))}
 
-              {/* Openings */}
+              {/* Draggable Openings */}
               {customOpenings.map((op) => (
-                <TouchableOpacity
-                  key={op.id}
-                  style={[
-                    styles.makerOpeningText,
-                    { left: `${op.x}%`, top: `${op.y}%` },
-                    selectedMakerElement?.id === op.id && styles.makerElementSelected,
-                  ]}
-                  onPress={() => setSelectedMakerElement({ type: 'opening', id: op.id })}
-                >
-                  <Text style={{ fontSize: 18 }}>{op.emoji}</Text>
-                </TouchableOpacity>
+                <DraggableMakerOpening key={op.id} op={op} />
               ))}
             </View>
 
@@ -579,7 +725,7 @@ export default function InteriorScreen({
               onPress={() => {
                 if (onUpdateFloorPlan) onUpdateFloorPlan(null); // Use custom drawn hybrid layout
                 setMakerModalVisible(false);
-                Alert.alert('하이브리드 평면도 완성! 🎉', '직접 제작한 나만의 우리 집 평면도가 성공적으로 반영되었습니다.');
+                Alert.alert('하이브리드 평면도 완성! 🎉', '손가락으로 배치한 나만의 우리 집 평면도가 성공적으로 반영되었습니다.');
               }}
             >
               <Text style={styles.makerConfirmBtnText}>이 평면도로 저장 & 적용하기</Text>
