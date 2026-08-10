@@ -37,10 +37,12 @@ import {
   Maximize2,
   Minimize2,
   Sliders,
+  Move,
+  Scaling,
 } from 'lucide-react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CANVAS_SIZE = SCREEN_WIDTH - 32; // Square canvas size in dp
+const BASE_CANVAS_SIZE = SCREEN_WIDTH - 32; // Standard base canvas size in dp
 
 // Furniture Catalog items for 3D/2D Decoration
 const FURNITURE_CATALOG = [
@@ -70,6 +72,10 @@ export default function InteriorScreen({
 
   const [selectedCategory, setSelectedCategory] = useState('living');
   const [selectedFurnitureId, setSelectedFurnitureId] = useState(null);
+
+  // DYNAMIC CANVAS WORKSPACE SIZE MULTIPLIER (1.0x, 1.5x, 2.0x, 2.5x)
+  const [canvasScaleMultiplier, setCanvasScaleMultiplier] = useState(1.0);
+  const activeCanvasSize = BASE_CANVAS_SIZE * canvasScaleMultiplier;
 
   // MAGICPLAN ARCHITECTURAL FLOOR PLAN ENGINE STATES
   const [magicRooms, setMagicRooms] = useState([
@@ -166,12 +172,15 @@ export default function InteriorScreen({
     };
 
     const preset = PRESETS[type] || PRESETS.bedroom;
+
+    // Calculate intelligent placement offset to avoid overlap
+    const offset = (magicRooms.length % 5) * 12;
     const newRoom = {
       id: `magic-room-${Date.now()}`,
       name: preset.name,
       emoji: preset.emoji,
-      x: 20,
-      y: 20,
+      x: 10 + offset,
+      y: 10 + offset,
       wMeters: preset.wMeters,
       hMeters: preset.hMeters,
       color: preset.color,
@@ -271,8 +280,8 @@ export default function InteriorScreen({
   // Apply Dimension Change
   const handleApplyDimensionChange = () => {
     const num = parseFloat(dimInputValue);
-    if (isNaN(num) || num <= 0.5 || num > 20) {
-      Alert.alert('알림', '올바른 미터 수치(0.5 ~ 20.0)를 입력해주세요.');
+    if (isNaN(num) || num <= 0.5 || num > 25) {
+      Alert.alert('알림', '올바른 미터 수치(0.5 ~ 25.0)를 입력해주세요.');
       return;
     }
 
@@ -367,7 +376,6 @@ export default function InteriorScreen({
             wall === 'left' && { left: -7, top: `${offset}%` },
           ]}
         >
-          {/* Architectural 2D Door Swing Arc Symbol */}
           <View style={[styles.archDoorSymbolContainer, !isHorizontal && { transform: [{ rotate: '90deg' }] }]}>
             <View style={styles.archDoorGap} />
             <View style={styles.archDoorLeafLine} />
@@ -387,7 +395,6 @@ export default function InteriorScreen({
           wall === 'left' && { left: -5, top: `${offset}%` },
         ]}
       >
-        {/* Architectural 2D Window Double Glass Pane Symbol */}
         <View style={[styles.archWindowSymbolContainer, !isHorizontal && { transform: [{ rotate: '90deg' }] }]}>
           <View style={styles.archWindowPaneLine} />
           <View style={styles.archWindowPaneLine} />
@@ -396,11 +403,12 @@ export default function InteriorScreen({
     );
   };
 
-  // Magicplan Draggable Room Block Component inside Editor
-  const MagicRoomComponent = ({ room }) => {
+  // Magicplan Draggable & Drag-to-Resize Room Component
+  const MagicRoomComponent = ({ room, canvasWidth }) => {
     const isSelected = selectedRoomId === room.id;
     const [pos, setPos] = useState({ x: room.x, y: room.y });
     const startPos = useRef({ x: room.x, y: room.y });
+    const startSize = useRef({ wMeters: room.wMeters, hMeters: room.hMeters });
 
     useEffect(() => {
       setPos({ x: room.x, y: room.y });
@@ -410,7 +418,8 @@ export default function InteriorScreen({
     const heightPercent = room.hMeters * 10;
     const roomSqMeters = (room.wMeters * room.hMeters).toFixed(1);
 
-    const panResponder = useRef(
+    // PanResponder for Moving Room
+    const movePanResponder = useRef(
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: () => true,
@@ -419,8 +428,8 @@ export default function InteriorScreen({
           startPos.current = { x: room.x, y: room.y };
         },
         onPanResponderMove: (evt, gestureState) => {
-          const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
-          const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
+          const deltaX = (gestureState.dx / canvasWidth) * 100;
+          const deltaY = (gestureState.dy / canvasWidth) * 100;
 
           const newX = Math.max(0, Math.min(100 - widthPercent, startPos.current.x + deltaX));
           const newY = Math.max(0, Math.min(100 - heightPercent, startPos.current.y + deltaY));
@@ -428,8 +437,8 @@ export default function InteriorScreen({
           setPos({ x: newX, y: newY });
         },
         onPanResponderRelease: (evt, gestureState) => {
-          const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
-          const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
+          const deltaX = (gestureState.dx / canvasWidth) * 100;
+          const deltaY = (gestureState.dy / canvasWidth) * 100;
 
           if (Math.abs(gestureState.dx) < 3 && Math.abs(gestureState.dy) < 3) {
             setSelectedRoomId(room.id);
@@ -459,9 +468,38 @@ export default function InteriorScreen({
       })
     ).current;
 
+    // PanResponder for Drag-to-Resize Corner Handle (Feature 1)
+    const resizePanResponder = useRef(
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponderCapture: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponderCapture: () => true,
+        onPanResponderGrant: () => {
+          setSelectedRoomId(room.id);
+          startSize.current = { wMeters: room.wMeters, hMeters: room.hMeters };
+        },
+        onPanResponderMove: (evt, gestureState) => {
+          const deltaWMeters = (gestureState.dx / canvasWidth) * 10;
+          const deltaHMeters = (gestureState.dy / canvasWidth) * 10;
+
+          const newW = Math.max(1.2, Math.min(20.0, startSize.current.wMeters + deltaWMeters));
+          const newH = Math.max(1.2, Math.min(20.0, startSize.current.hMeters + deltaHMeters));
+
+          setMagicRooms((prev) =>
+            prev.map((r) =>
+              r.id === room.id
+                ? { ...r, wMeters: parseFloat(newW.toFixed(1)), hMeters: parseFloat(newH.toFixed(1)) }
+                : r
+            )
+          );
+        },
+      })
+    ).current;
+
     return (
       <View
-        {...panResponder.panHandlers}
+        {...movePanResponder.panHandlers}
         style={[
           styles.magicRoomBox,
           {
@@ -496,6 +534,16 @@ export default function InteriorScreen({
         <Text style={styles.magicRoomTitle}>{room.emoji} {room.name}</Text>
         <Text style={styles.magicRoomAreaText}>{roomSqMeters} m²</Text>
 
+        {/* Feature 1: Drag-and-Drop Corner Handle for Realtime Resizing */}
+        {isSelected && (
+          <View
+            {...resizePanResponder.panHandlers}
+            style={styles.roomCornerResizeHandle}
+          >
+            <Scaling size={12} color="#FFFFFF" />
+          </View>
+        )}
+
         {/* Architectural 2D Doors & Windows Symbols */}
         {room.openings.map((op) => (
           <RenderArchitecturalOpeningSymbol
@@ -528,8 +576,8 @@ export default function InteriorScreen({
           startPos.current = { x: item.x, y: item.y };
         },
         onPanResponderMove: (evt, gestureState) => {
-          const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
-          const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
+          const deltaX = (gestureState.dx / BASE_CANVAS_SIZE) * 100;
+          const deltaY = (gestureState.dy / BASE_CANVAS_SIZE) * 100;
 
           const newX = Math.max(0, Math.min(84, startPos.current.x + deltaX));
           const newY = Math.max(0, Math.min(84, startPos.current.y + deltaY));
@@ -537,8 +585,8 @@ export default function InteriorScreen({
           setPos({ x: newX, y: newY });
         },
         onPanResponderRelease: (evt, gestureState) => {
-          const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
-          const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
+          const deltaX = (gestureState.dx / BASE_CANVAS_SIZE) * 100;
+          const deltaY = (gestureState.dy / BASE_CANVAS_SIZE) * 100;
 
           const finalX = Math.max(0, Math.min(84, startPos.current.x + deltaX));
           const finalY = Math.max(0, Math.min(84, startPos.current.y + deltaY));
@@ -711,7 +759,7 @@ export default function InteriorScreen({
           </TouchableOpacity>
 
           <Text style={styles.canvasGuideText}>
-            💡 상단 [Magicplan 스튜디오]에서 벽면 길이(m)와 표준 2D 건축 문/창문을 배치하세요!
+            💡 상단 [Magicplan 스튜디오]에서 귀퉁이를 끌어 방 크기를 자유롭게 조절하고 전체 캔버스를 확장해 보세요!
           </Text>
         </View>
 
@@ -761,12 +809,43 @@ export default function InteriorScreen({
               </TouchableOpacity>
             </View>
 
-            {/* Total Area Summary Banner */}
+            {/* Total Area Summary & Feature 2: Workspace Expansion Bar */}
             <View style={styles.magicAreaSummaryBanner}>
-              <Text style={styles.magicAreaSummaryText}>
-                총 평형: <Text style={{ fontWeight: '900', color: '#FF7E82' }}>{houseArea.pyeong}평</Text> ({houseArea.sqMeters} m²)
-              </Text>
-              <Text style={styles.magicAreaSummarySub}>* 방의 벽면 미터 태그(📏)를 누르거나 수치 패널에서 변경하세요</Text>
+              <View style={styles.areaBannerTopRow}>
+                <Text style={styles.magicAreaSummaryText}>
+                  총 평형: <Text style={{ fontWeight: '900', color: '#FF7E82' }}>{houseArea.pyeong}평</Text> ({houseArea.sqMeters} m²)
+                </Text>
+                <Text style={styles.canvasScaleText}>캔버스: {canvasScaleMultiplier}x</Text>
+              </View>
+
+              {/* Feature 2: Expandable Workspace Control Chips */}
+              <View style={styles.workspaceExpandControlRow}>
+                <Text style={styles.expandLabel}>전체 영역 확장:</Text>
+                {[
+                  { label: '1.0x', mult: 1.0 },
+                  { label: '1.5x ↔️', mult: 1.5 },
+                  { label: '2.0x 넓게', mult: 2.0 },
+                  { label: '2.5x 대형', mult: 2.5 },
+                ].map((item) => (
+                  <TouchableOpacity
+                    key={`scale-${item.mult}`}
+                    style={[
+                      styles.workspaceScaleBtn,
+                      canvasScaleMultiplier === item.mult && styles.workspaceScaleBtnActive,
+                    ]}
+                    onPress={() => setCanvasScaleMultiplier(item.mult)}
+                  >
+                    <Text
+                      style={[
+                        styles.workspaceScaleBtnText,
+                        canvasScaleMultiplier === item.mult && styles.workspaceScaleBtnTextActive,
+                      ]}
+                    >
+                      {item.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
 
             {/* Room Add Tool Chips */}
@@ -843,21 +922,46 @@ export default function InteriorScreen({
               </View>
             )}
 
-            {/* MAGICPLAN ARCHITECTURAL GRID CANVAS WITH MESH LINES */}
-            <View style={styles.magicEditorCanvas}>
-              <View style={styles.gridMeshContainer} pointerEvents="none">
-                {[10, 20, 30, 40, 50, 60, 70, 80, 90].map((p) => (
-                  <React.Fragment key={`editor-grid-${p}`}>
-                    <View style={[styles.gridMeshLineH, { top: `${p}%` }]} />
-                    <View style={[styles.gridMeshLineV, { left: `${p}%` }]} />
-                  </React.Fragment>
-                ))}
-              </View>
+            {/* Feature 2: Scrollable Expandable Magicplan Canvas */}
+            <ScrollView
+              horizontal={true}
+              nestedScrollEnabled={true}
+              showsHorizontalScrollIndicator={true}
+              style={{ flex: 1, maxHeight: BASE_CANVAS_SIZE + 10 }}
+            >
+              <ScrollView
+                nestedScrollEnabled={true}
+                showsVerticalScrollIndicator={true}
+              >
+                <View
+                  style={[
+                    styles.magicEditorCanvas,
+                    {
+                      width: activeCanvasSize,
+                      height: activeCanvasSize,
+                    },
+                  ]}
+                >
+                  {/* Feature 2: Genuine Architectural Grid Mesh Lines Overlay */}
+                  <View style={styles.gridMeshContainer} pointerEvents="none">
+                    {[10, 20, 30, 40, 50, 60, 70, 80, 90].map((p) => (
+                      <React.Fragment key={`editor-grid-${p}`}>
+                        <View style={[styles.gridMeshLineH, { top: `${p}%` }]} />
+                        <View style={[styles.gridMeshLineV, { left: `${p}%` }]} />
+                      </React.Fragment>
+                    ))}
+                  </View>
 
-              {magicRooms.map((room) => (
-                <MagicRoomComponent key={room.id} room={room} />
-              ))}
-            </View>
+                  {magicRooms.map((room) => (
+                    <MagicRoomComponent
+                      key={room.id}
+                      room={room}
+                      canvasWidth={activeCanvasSize}
+                    />
+                  ))}
+                </View>
+              </ScrollView>
+            </ScrollView>
 
             <TouchableOpacity
               style={styles.makerConfirmBtn}
@@ -1126,8 +1230,8 @@ const styles = StyleSheet.create({
     color: '#4A90E2',
   },
   canvasContainer: {
-    width: CANVAS_SIZE,
-    height: CANVAS_SIZE,
+    width: BASE_CANVAS_SIZE,
+    height: BASE_CANVAS_SIZE,
     borderRadius: 16,
     overflow: 'hidden',
     position: 'relative',
@@ -1345,7 +1449,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   modalHeaderTitleRow: {
     flexDirection: 'row',
@@ -1361,23 +1465,60 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    marginBottom: 10,
+    marginBottom: 8,
     borderWidth: 1,
     borderColor: '#FFD6D6',
+  },
+  areaBannerTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   magicAreaSummaryText: {
     fontSize: 13,
     fontWeight: '700',
     color: '#1C1C1E',
   },
-  magicAreaSummarySub: {
+  canvasScaleText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#4A90E2',
+  },
+  workspaceExpandControlRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  expandLabel: {
     fontSize: 10,
+    fontWeight: '700',
     color: '#8E8E93',
-    marginTop: 2,
+    marginRight: 6,
+  },
+  workspaceScaleBtn: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginRight: 4,
+    borderWidth: 1,
+    borderColor: '#EBEBEB',
+  },
+  workspaceScaleBtnActive: {
+    backgroundColor: '#FF7E82',
+    borderColor: '#FF7E82',
+  },
+  workspaceScaleBtnText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#1C1C1E',
+  },
+  workspaceScaleBtnTextActive: {
+    color: '#FFFFFF',
   },
   toolBarRow: {
     flexDirection: 'row',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   toolChip: {
     backgroundColor: '#F1F2F4',
@@ -1395,7 +1536,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8F9FA',
     borderRadius: 14,
     padding: 10,
-    marginBottom: 10,
+    marginBottom: 8,
     borderWidth: 1,
     borderColor: '#EBEBEB',
   },
@@ -1465,14 +1606,11 @@ const styles = StyleSheet.create({
     borderColor: '#D1D1D6',
   },
   magicEditorCanvas: {
-    width: CANVAS_SIZE,
-    height: CANVAS_SIZE,
     backgroundColor: '#FAF9F6',
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#EBEBEB',
     position: 'relative',
-    alignSelf: 'center',
     marginBottom: 10,
   },
   magicRoomBox: {
@@ -1487,6 +1625,25 @@ const styles = StyleSheet.create({
   magicRoomBoxSelected: {
     borderColor: '#FF7E82',
     borderWidth: 3,
+  },
+  roomCornerResizeHandle: {
+    position: 'absolute',
+    right: -10,
+    bottom: -10,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#FF7E82',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    zIndex: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 4,
   },
   magicWallTagTop: {
     position: 'absolute',
