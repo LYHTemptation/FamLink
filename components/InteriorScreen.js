@@ -15,12 +15,34 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Home, ShoppingBag, Plus, Trash2, RotateCw, Camera, X, Trophy, Sparkles, Check, Edit3, Grid, Layers, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, CornerDownLeft, Undo2, PenTool, Wand2 } from 'lucide-react-native';
+import {
+  Home,
+  ShoppingBag,
+  Plus,
+  Trash2,
+  RotateCw,
+  Camera,
+  X,
+  Trophy,
+  Sparkles,
+  Check,
+  Edit3,
+  Grid,
+  Layers,
+  ArrowUp,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  Wand2,
+  Maximize2,
+  Minimize2,
+  Sliders,
+} from 'lucide-react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CANVAS_SIZE = SCREEN_WIDTH - 32; // Square canvas size
+const CANVAS_SIZE = SCREEN_WIDTH - 32; // Square canvas size in dp
 
-// Furniture Catalog items
+// Furniture Catalog items for 3D/2D Decoration
 const FURNITURE_CATALOG = [
   { id: 'f1', category: 'living', name: '가죽 패브릭 소파', emoji: '🛋️', cost: 200, desc: '거실의 중심이 되는 안락한 3인용 소파' },
   { id: 'f2', category: 'living', name: '85인치 대형 스마트 TV', emoji: '📺', cost: 300, desc: '온 가족이 함께 영화를 감상하는 스마트 TV' },
@@ -34,9 +56,6 @@ const FURNITURE_CATALOG = [
   { id: 'f10', category: 'deco', name: '플레이스테이션 5 콘솔', emoji: '🎮', cost: 280, desc: '가족게임 대전을 위한 최신 게임기' },
 ];
 
-// Default 2D floor plan blueprint asset
-const LOCAL_FLOOR_PLAN_ASSET = require('../assets/floor_plan.jpg');
-
 export default function InteriorScreen({
   points,
   onDeductPoints,
@@ -47,112 +66,75 @@ export default function InteriorScreen({
 }) {
   const insets = useSafeAreaInsets();
   const [shopModalVisible, setShopModalVisible] = useState(false);
-  const [makerModalVisible, setMakerModalVisible] = useState(false);
+  const [magicplanModalVisible, setMagicplanModalVisible] = useState(false);
 
   const [selectedCategory, setSelectedCategory] = useState('living');
   const [selectedFurnitureId, setSelectedFurnitureId] = useState(null);
 
-  // HYBRID MAKER STATES (Method 1: Magicplan Rooms + Method 2: Walls/Doors + Method 3: Sketch)
-  const [makerActiveTab, setMakerActiveTab] = useState('magicplan'); // 'magicplan', 'walls', 'sketch'
-  const [customRooms, setCustomRooms] = useState([
-    { id: 'r1', name: '거실', emoji: '🛋️', x: 5, y: 5, w: 48, h: 42, color: '#FFF5EB' },
-    { id: 'r2', name: '안방', emoji: '🛏️', x: 58, y: 5, w: 37, h: 42, color: '#EBF5FF' },
-    { id: 'r3', name: '주방', emoji: '🍳', x: 5, y: 53, w: 42, h: 42, color: '#EFFFFA' },
-    { id: 'r4', name: '작은방', emoji: '👦', x: 50, y: 53, w: 45, h: 42, color: '#FDF0FF' },
+  // MAGICPLAN ARCHITECTURAL FLOOR PLAN ENGINE STATES
+  const [magicRooms, setMagicRooms] = useState([
+    {
+      id: 'm1',
+      name: '거실',
+      emoji: '🛋️',
+      x: 5,
+      y: 5,
+      wMeters: 5.2,
+      hMeters: 4.5,
+      color: '#FFF8F0',
+      openings: [{ id: 'op1', type: 'door', emoji: '🚪', wall: 'bottom', offset: 50 }],
+    },
+    {
+      id: 'm2',
+      name: '안방',
+      emoji: '🛏️',
+      x: 58,
+      y: 5,
+      wMeters: 3.8,
+      hMeters: 4.5,
+      color: '#F0F7FF',
+      openings: [{ id: 'op2', type: 'window', emoji: '🪟', wall: 'top', offset: 40 }],
+    },
+    {
+      id: 'm3',
+      name: '주방',
+      emoji: '🍳',
+      x: 5,
+      y: 52,
+      wMeters: 4.2,
+      hMeters: 4.2,
+      color: '#F0FAF7',
+      openings: [],
+    },
+    {
+      id: 'm4',
+      name: '작은방',
+      emoji: '👦',
+      x: 50,
+      y: 52,
+      wMeters: 4.5,
+      hMeters: 4.2,
+      color: '#FAF0FA',
+      openings: [{ id: 'op3', type: 'window', emoji: '🪟', wall: 'right', offset: 50 }],
+    },
   ]);
-  const [customWalls, setCustomWalls] = useState([
-    { id: 'w1', x: 55, y: 5, w: 2, h: 42 },
-    { id: 'w2', x: 5, y: 50, w: 90, h: 2 },
-  ]);
-  const [customOpenings, setCustomOpenings] = useState([
-    { id: 'd1', type: 'door', emoji: '🚪', x: 48, y: 22 },
-    { id: 'd2', type: 'window', emoji: '🪟', x: 25, y: 2 },
-  ]);
 
-  // Selected Element in Maker
-  const [selectedMakerElement, setSelectedMakerElement] = useState(null);
+  const [selectedRoomId, setSelectedRoomId] = useState('m1');
+  const [selectedWallSide, setSelectedWallSide] = useState(null);
 
-  // Numerical Size Inputs (Width % and Height %)
-  const [inputWidth, setInputWidth] = useState('');
-  const [inputHeight, setInputHeight] = useState('');
+  // Dimension Edit Modal States
+  const [dimModalVisible, setDimModalVisible] = useState(false);
+  const [editingWallSide, setEditingWallSide] = useState('width');
+  const [dimInputValue, setDimInputValue] = useState('');
 
-  // Freehand Finger Sketch Drawing States
-  const [sketchStrokes, setSketchStrokes] = useState([]);
-  const [currentStroke, setCurrentStroke] = useState([]);
-  const activeStrokeRef = useRef([]);
+  // Total House Area Calculations
+  const calculateTotalArea = () => {
+    const totalSqMeters = magicRooms.reduce((acc, r) => acc + r.wMeters * r.hMeters, 0);
+    const totalPyeong = totalSqMeters / 3.30578;
+    return { sqMeters: totalSqMeters.toFixed(1), pyeong: totalPyeong.toFixed(1) };
+  };
 
-  // Sync numerical size inputs when selected element changes
-  useEffect(() => {
-    if (selectedMakerElement && selectedMakerElement.type === 'room') {
-      const targetRoom = customRooms.find((r) => r.id === selectedMakerElement.id);
-      if (targetRoom) {
-        setInputWidth(String(Math.round(targetRoom.w)));
-        setInputHeight(String(Math.round(targetRoom.h)));
-      }
-    }
-  }, [selectedMakerElement, customRooms]);
-
-  // Freehand Finger Sketch PanResponder
-  const sketchPanResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => makerActiveTab === 'sketch',
-      onStartShouldSetPanResponderCapture: () => makerActiveTab === 'sketch',
-      onMoveShouldSetPanResponder: () => makerActiveTab === 'sketch',
-      onMoveShouldSetPanResponderCapture: () => makerActiveTab === 'sketch',
-      onPanResponderGrant: (evt) => {
-        const { locationX, locationY } = evt.nativeEvent;
-        const xPercent = Math.max(0, Math.min(100, (locationX / CANVAS_SIZE) * 100));
-        const yPercent = Math.max(0, Math.min(100, (locationY / CANVAS_SIZE) * 100));
-
-        const startPt = { x: xPercent, y: yPercent };
-        activeStrokeRef.current = [startPt];
-        setCurrentStroke([startPt]);
-      },
-      onPanResponderMove: (evt) => {
-        const { locationX, locationY } = evt.nativeEvent;
-        const xPercent = Math.max(0, Math.min(100, (locationX / CANVAS_SIZE) * 100));
-        const yPercent = Math.max(0, Math.min(100, (locationY / CANVAS_SIZE) * 100));
-
-        const newPt = { x: xPercent, y: yPercent };
-        activeStrokeRef.current.push(newPt);
-        setCurrentStroke([...activeStrokeRef.current]);
-      },
-      onPanResponderRelease: () => {
-        const strokePts = [...activeStrokeRef.current];
-        if (strokePts.length > 3) {
-          setSketchStrokes((prev) => [...prev, { id: `stroke-${Date.now()}`, points: strokePts }]);
-
-          const firstPt = strokePts[0];
-          const lastPt = strokePts[strokePts.length - 1];
-          const dist = Math.hypot(lastPt.x - firstPt.x, lastPt.y - firstPt.y);
-
-          if (dist < 15) {
-            const minX = Math.min(...strokePts.map((p) => p.x));
-            const minY = Math.min(...strokePts.map((p) => p.y));
-            const maxX = Math.max(...strokePts.map((p) => p.x));
-            const maxY = Math.max(...strokePts.map((p) => p.y));
-
-            const newSketchedRoom = {
-              id: `sketch-room-${Date.now()}`,
-              name: '손가락 직접방',
-              emoji: '✏️',
-              x: Math.round(minX),
-              y: Math.round(minY),
-              w: Math.max(15, Math.round(maxX - minX)),
-              h: Math.max(15, Math.round(maxY - minY)),
-              color: '#FFF0F5',
-            };
-            setCustomRooms((prev) => [...prev, newSketchedRoom]);
-            Alert.alert('손가락 닫힌 공간 방 감지! 🎨', '손가락으로 쓱 그린 공간이 맞춤 방으로 전환되었습니다.');
-          }
-        }
-        activeStrokeRef.current = [];
-        setCurrentStroke([]);
-      },
-    })
-  ).current;
-
-  // Pick Custom Floor Plan Image from Album
+  // Pick Image Floor Plan Backup
   const pickFloorPlanImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
@@ -168,198 +150,140 @@ export default function InteriorScreen({
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
       const newUri = result.assets[0].uri;
-      if (onUpdateFloorPlan) {
-        onUpdateFloorPlan(newUri);
-      }
+      if (onUpdateFloorPlan) onUpdateFloorPlan(newUri);
     }
   };
 
-  // Move Selected Element in Maker Canvas with Magicplan Magnetic Snap
-  const handleMoveSelectedMakerElement = (dxPercent, dyPercent) => {
-    if (!selectedMakerElement) return;
-
-    if (selectedMakerElement.type === 'room') {
-      setCustomRooms((prev) =>
-        prev.map((r) => {
-          if (r.id === selectedMakerElement.id) {
-            let newX = Math.max(0, Math.min(100 - r.w, r.x + dxPercent));
-            let newY = Math.max(0, Math.min(100 - r.h, r.y + dyPercent));
-
-            // Magicplan Snap Alignment to adjacent rooms
-            prev.forEach((otherRoom) => {
-              if (otherRoom.id !== r.id) {
-                if (Math.abs(newX - (otherRoom.x + otherRoom.w)) < 3) newX = otherRoom.x + otherRoom.w;
-                if (Math.abs((newX + r.w) - otherRoom.x) < 3) newX = otherRoom.x - r.w;
-                if (Math.abs(newY - (otherRoom.y + otherRoom.h)) < 3) newY = otherRoom.y + otherRoom.h;
-                if (Math.abs((newY + r.h) - otherRoom.y) < 3) newY = otherRoom.y - r.h;
-              }
-            });
-
-            return { ...r, x: newX, y: newY };
-          }
-          return r;
-        })
-      );
-    } else if (selectedMakerElement.type === 'wall') {
-      setCustomWalls((prev) =>
-        prev.map((w) => {
-          if (w.id === selectedMakerElement.id) {
-            const newX = Math.max(0, Math.min(95, w.x + dxPercent));
-            const newY = Math.max(0, Math.min(95, w.y + dyPercent));
-            return { ...w, x: newX, y: newY };
-          }
-          return w;
-        })
-      );
-    } else if (selectedMakerElement.type === 'opening') {
-      setCustomOpenings((prev) =>
-        prev.map((op) => {
-          if (op.id === selectedMakerElement.id) {
-            const newX = Math.max(0, Math.min(95, op.x + dxPercent));
-            const newY = Math.max(0, Math.min(95, op.y + dyPercent));
-            return { ...op, x: newX, y: newY };
-          }
-          return op;
-        })
-      );
-    }
-  };
-
-  // Magicplan Wall Length Dimension Prompt
-  const handleEditMagicplanWallDimension = (room, side) => {
-    const currentMeters = side === 'width' ? (room.w / 10).toFixed(1) : (room.h / 10).toFixed(1);
-
-    Alert.prompt(
-      'Magicplan 벽면 길이 수정 📐',
-      `[${room.name}] ${side === 'width' ? '가로' : '세로'} 벽면의실제 치수를 미터(m) 단위로 입력하세요.\n(현재: ${currentMeters}m)`,
-      [
-        { text: '취소', style: 'cancel' },
-        {
-          text: '치수 적용',
-          onPress: (val) => {
-            const metersNum = parseFloat(val);
-            if (isNaN(metersNum) || metersNum <= 0) {
-              Alert.alert('알림', '올바른 숫자를 입력해주세요.');
-              return;
-            }
-
-            const newPercent = Math.max(10, Math.min(85, Math.round(metersNum * 10)));
-            setCustomRooms((prev) =>
-              prev.map((r) =>
-                r.id === room.id
-                  ? side === 'width'
-                    ? { ...r, w: newPercent }
-                    : { ...r, h: newPercent }
-                  : r
-              )
-            );
-            Alert.alert('치수 업데이트 완료 🪄', `${room.name} ${side === 'width' ? '가로' : '세로'} 벽면이 ${metersNum.toFixed(1)}m 로 조정되었습니다.`);
-          },
-        },
-      ],
-      'plain-text',
-      currentMeters
-    );
-  };
-
-  // Apply Numerical Size Input Change
-  const handleApplyNumericSize = () => {
-    if (!selectedMakerElement || selectedMakerElement.type !== 'room') return;
-
-    const wNum = parseInt(inputWidth, 10);
-    const hNum = parseInt(inputHeight, 10);
-
-    if (isNaN(wNum) || isNaN(hNum) || wNum <= 0 || hNum <= 0) {
-      Alert.alert('입력 확인', '올바른 숫자(1 ~ 80)를 입력해주세요.');
-      return;
-    }
-
-    const clampedW = Math.max(10, Math.min(85, wNum));
-    const clampedH = Math.max(10, Math.min(85, hNum));
-
-    setCustomRooms((prev) =>
-      prev.map((r) =>
-        r.id === selectedMakerElement.id ? { ...r, w: clampedW, h: clampedH } : r
-      )
-    );
-    Alert.alert('크기 변경 완료 📐', `가로 ${clampedW}%, 세로 ${clampedH}%로 설정되었습니다.`);
-  };
-
-  // Undo Last Finger Sketch Stroke
-  const handleUndoSketchStroke = () => {
-    if (sketchStrokes.length === 0) return;
-    setSketchStrokes(sketchStrokes.slice(0, -1));
-  };
-
-  // Reset All Finger Sketch Strokes
-  const handleResetSketch = () => {
-    setSketchStrokes([]);
-    setCurrentStroke([]);
-  };
-
-  // Add Room Block in Maker
-  const handleAddRoomBlock = (type) => {
+  // Add Magicplan Room Preset
+  const handleAddMagicRoom = (type) => {
     const PRESETS = {
-      living: { name: '거실 L자형', emoji: '🛋️', w: 48, h: 42, color: '#FFF5EB' },
-      bedroom: { name: '안방', emoji: '🛏️', w: 38, h: 36, color: '#EBF5FF' },
-      kitchen: { name: '주방 ㄷ자형', emoji: '🍳', w: 40, h: 36, color: '#EFFFFA' },
-      bathroom: { name: '욕실', emoji: '🛁', w: 24, h: 22, color: '#F5F5F5' },
-      balcony: { name: '발코니', emoji: '🪴', w: 42, h: 18, color: '#F0F9FF' },
+      living: { name: '거실', emoji: '🛋️', wMeters: 5.4, hMeters: 4.6, color: '#FFF8F0' },
+      bedroom: { name: '침실', emoji: '🛏️', wMeters: 3.8, hMeters: 3.6, color: '#F0F7FF' },
+      kitchen: { name: '주방', emoji: '🍳', wMeters: 4.0, hMeters: 3.6, color: '#F0FAF7' },
+      bathroom: { name: '욕실', emoji: '🛁', wMeters: 2.4, hMeters: 2.2, color: '#F5F5F7' },
+      corridor: { name: '현관/복도', emoji: '🚪', wMeters: 2.0, hMeters: 3.5, color: '#FAF7F0' },
+      balcony: { name: '발코니', emoji: '🪴', wMeters: 4.5, hMeters: 1.8, color: '#F0FAF9' },
     };
 
     const preset = PRESETS[type] || PRESETS.bedroom;
     const newRoom = {
-      id: `room-${Date.now()}`,
+      id: `magic-room-${Date.now()}`,
       name: preset.name,
       emoji: preset.emoji,
       x: 20,
       y: 20,
-      w: preset.w,
-      h: preset.h,
+      wMeters: preset.wMeters,
+      hMeters: preset.hMeters,
       color: preset.color,
+      openings: [],
     };
 
-    setCustomRooms([...customRooms, newRoom]);
-    setSelectedMakerElement({ type: 'room', id: newRoom.id });
+    setMagicRooms([...magicRooms, newRoom]);
+    setSelectedRoomId(newRoom.id);
   };
 
-  // Add Wall Divider in Maker
-  const handleAddWallLine = () => {
-    const newWall = {
-      id: `wall-${Date.now()}`,
-      x: 40,
-      y: 20,
-      w: 2,
-      h: 40,
-    };
-    setCustomWalls([...customWalls, newWall]);
-    setSelectedMakerElement({ type: 'wall', id: newWall.id });
+  // Delete Selected Magicplan Room
+  const handleDeleteMagicRoom = (roomId) => {
+    Alert.alert('방 삭제', '선택한 방을 Magicplan 도면에서 삭제하시겠습니까?', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: () => {
+          setMagicRooms(magicRooms.filter((r) => r.id !== roomId));
+          setSelectedRoomId(null);
+        },
+      },
+    ]);
   };
 
-  // Add Door or Window in Maker
-  const handleAddOpening = (type) => {
+  // Add Door or Window to Selected Magicplan Room Wall
+  const handleAddOpeningToRoom = (type) => {
+    if (!selectedRoomId) {
+      Alert.alert('선택 필요', '문이나 창문을 추가할 방을 먼저 선택해 주세요.');
+      return;
+    }
+
+    const targetRoom = magicRooms.find((r) => r.id === selectedRoomId);
+    if (!targetRoom) return;
+
     const newOpening = {
       id: `op-${Date.now()}`,
       type: type,
       emoji: type === 'door' ? '🚪' : '🪟',
-      x: 40,
-      y: 40,
+      wall: 'bottom',
+      offset: 50,
     };
-    setCustomOpenings([...customOpenings, newOpening]);
-    setSelectedMakerElement({ type: 'opening', id: newOpening.id });
+
+    setMagicRooms((prev) =>
+      prev.map((r) =>
+        r.id === selectedRoomId ? { ...r, openings: [...r.openings, newOpening] } : r
+      )
+    );
+    Alert.alert('배치 완료 🎉', `선택한 ${targetRoom.name} 방에 ${type === 'door' ? '문🚪' : '창문🪟'}이 성공적으로 연결되었습니다.`);
   };
 
-  // Delete Maker Element
-  const handleDeleteMakerElement = () => {
-    if (!selectedMakerElement) return;
-    if (selectedMakerElement.type === 'room') {
-      setCustomRooms(customRooms.filter((r) => r.id !== selectedMakerElement.id));
-    } else if (selectedMakerElement.type === 'wall') {
-      setCustomWalls(customWalls.filter((w) => w.id !== selectedMakerElement.id));
-    } else if (selectedMakerElement.type === 'opening') {
-      setCustomOpenings(customOpenings.filter((o) => o.id !== selectedMakerElement.id));
+  // Move Room by Directional Keys
+  const handleMoveRoom = (dxPercent, dyPercent) => {
+    if (!selectedRoomId) return;
+
+    setMagicRooms((prev) =>
+      prev.map((r) => {
+        if (r.id === selectedRoomId) {
+          let newX = Math.max(0, Math.min(100 - r.wMeters * 10, r.x + dxPercent));
+          let newY = Math.max(0, Math.min(100 - r.hMeters * 10, r.y + dyPercent));
+
+          // Magicplan Magnetic Wall Snap to other rooms
+          prev.forEach((other) => {
+            if (other.id !== r.id) {
+              const otherW = other.wMeters * 10;
+              const otherH = other.hMeters * 10;
+              const rW = r.wMeters * 10;
+              const rH = r.hMeters * 10;
+
+              if (Math.abs(newX - (other.x + otherW)) < 4) newX = other.x + otherW;
+              if (Math.abs((newX + rW) - other.x) < 4) newX = other.x - rW;
+              if (Math.abs(newY - (other.y + otherH)) < 4) newY = other.y + otherH;
+              if (Math.abs((newY + rH) - other.y) < 4) newY = other.y - rH;
+            }
+          });
+
+          return { ...r, x: newX, y: newY };
+        }
+        return r;
+      })
+    );
+  };
+
+  // Open Dimension Input Modal for Selected Room
+  const handleOpenDimModal = (side) => {
+    if (!selectedRoomId) return;
+    const targetRoom = magicRooms.find((r) => r.id === selectedRoomId);
+    if (!targetRoom) return;
+
+    setEditingWallSide(side);
+    setDimInputValue(side === 'width' ? String(targetRoom.wMeters) : String(targetRoom.hMeters));
+    setDimModalVisible(true);
+  };
+
+  // Apply Dimension Change
+  const handleApplyDimensionChange = () => {
+    const num = parseFloat(dimInputValue);
+    if (isNaN(num) || num <= 0.5 || num > 20) {
+      Alert.alert('알림', '올바른 치수(0.5m ~ 20.0m)를 입력해주세요.');
+      return;
     }
-    setSelectedMakerElement(null);
+
+    setMagicRooms((prev) =>
+      prev.map((r) =>
+        r.id === selectedRoomId
+          ? editingWallSide === 'width'
+            ? { ...r, wMeters: num }
+            : { ...r, hMeters: num }
+          : r
+      )
+    );
+    setDimModalVisible(false);
   };
 
   // Buy Furniture Item
@@ -424,7 +348,121 @@ export default function InteriorScreen({
     ]);
   };
 
-  // PanResponder Draggable Item Component (For Placed Furniture)
+  // Magicplan Draggable Room Block Component inside Editor
+  const MagicRoomComponent = ({ room }) => {
+    const isSelected = selectedRoomId === room.id;
+    const [pos, setPos] = useState({ x: room.x, y: room.y });
+    const startPos = useRef({ x: room.x, y: room.y });
+
+    useEffect(() => {
+      setPos({ x: room.x, y: room.y });
+    }, [room.x, room.y]);
+
+    const widthPercent = room.wMeters * 10;
+    const heightPercent = room.hMeters * 10;
+    const roomSqMeters = (room.wMeters * room.hMeters).toFixed(1);
+
+    const panResponder = useRef(
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponderCapture: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponderCapture: () => true,
+        onPanResponderGrant: () => {
+          setSelectedRoomId(room.id);
+          startPos.current = { x: room.x, y: room.y };
+        },
+        onPanResponderMove: (evt, gestureState) => {
+          const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
+          const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
+
+          const newX = Math.max(0, Math.min(100 - widthPercent, startPos.current.x + deltaX));
+          const newY = Math.max(0, Math.min(100 - heightPercent, startPos.current.y + deltaY));
+
+          setPos({ x: newX, y: newY });
+        },
+        onPanResponderRelease: (evt, gestureState) => {
+          const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
+          const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
+
+          let finalX = Math.max(0, Math.min(100 - widthPercent, startPos.current.x + deltaX));
+          let finalY = Math.max(0, Math.min(100 - heightPercent, startPos.current.y + deltaY));
+
+          // Snap alignment to other rooms
+          magicRooms.forEach((other) => {
+            if (other.id !== room.id) {
+              const otherW = other.wMeters * 10;
+              const otherH = other.hMeters * 10;
+
+              if (Math.abs(finalX - (other.x + otherW)) < 4) finalX = other.x + otherW;
+              if (Math.abs((finalX + widthPercent) - other.x) < 4) finalX = other.x - widthPercent;
+              if (Math.abs(finalY - (other.y + otherH)) < 4) finalY = other.y + otherH;
+              if (Math.abs((finalY + heightPercent) - other.y) < 4) finalY = other.y - heightPercent;
+            }
+          });
+
+          setMagicRooms((prev) =>
+            prev.map((r) => (r.id === room.id ? { ...r, x: finalX, y: finalY } : r))
+          );
+        },
+      })
+    ).current;
+
+    return (
+      <View
+        {...panResponder.panHandlers}
+        style={[
+          styles.magicRoomBox,
+          {
+            left: `${pos.x}%`,
+            top: `${pos.y}%`,
+            width: `${widthPercent}%`,
+            height: `${heightPercent}%`,
+            backgroundColor: room.color,
+          },
+          isSelected && styles.magicRoomBoxSelected,
+        ]}
+      >
+        {/* Magicplan Top Wall Meter Tag */}
+        <TouchableOpacity
+          style={styles.magicWallTagTop}
+          onPress={() => handleOpenDimModal('width')}
+        >
+          <Text style={styles.magicWallTagText}>{room.wMeters.toFixed(1)}m</Text>
+        </TouchableOpacity>
+
+        {/* Magicplan Left Wall Meter Tag */}
+        <TouchableOpacity
+          style={styles.magicWallTagLeft}
+          onPress={() => handleOpenDimModal('height')}
+        >
+          <Text style={styles.magicWallTagText}>{room.hMeters.toFixed(1)}m</Text>
+        </TouchableOpacity>
+
+        {/* Room Title & Square Meters Area */}
+        <Text style={styles.magicRoomTitle}>{room.emoji} {room.name}</Text>
+        <Text style={styles.magicRoomAreaText}>{roomSqMeters} m²</Text>
+
+        {/* Openings (Doors / Windows) attached to room */}
+        {room.openings.map((op) => (
+          <Text
+            key={op.id}
+            style={[
+              styles.magicOpeningSymbol,
+              op.wall === 'bottom' && { bottom: -10, left: `${op.offset}%` },
+              op.wall === 'top' && { top: -10, left: `${op.offset}%` },
+              op.wall === 'right' && { right: -10, top: `${op.offset}%` },
+              op.wall === 'left' && { left: -10, top: `${op.offset}%` },
+            ]}
+          >
+            {op.emoji}
+          </Text>
+        ))}
+      </View>
+    );
+  };
+
+  // Draggable Item Component (For Placed Furniture on Main Canvas)
   const DraggableFurniture = ({ item }) => {
     const isSelected = selectedFurnitureId === item.id;
     const [pos, setPos] = useState({ x: item.x, y: item.y });
@@ -504,201 +542,8 @@ export default function InteriorScreen({
     );
   };
 
-  // Draggable Room Block with Magicplan Realtime Wall Dimensions
-  const DraggableMakerRoom = ({ room }) => {
-    const isSelected = selectedMakerElement?.id === room.id;
-    const [pos, setPos] = useState({ x: room.x, y: room.y });
-    const startPos = useRef({ x: room.x, y: room.y });
-
-    useEffect(() => {
-      setPos({ x: room.x, y: room.y });
-    }, [room.x, room.y]);
-
-    const widthMeters = (room.w / 10).toFixed(1);
-    const heightMeters = (room.h / 10).toFixed(1);
-
-    const panResponder = useRef(
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => makerActiveTab !== 'sketch',
-        onStartShouldSetPanResponderCapture: () => makerActiveTab !== 'sketch',
-        onMoveShouldSetPanResponder: () => makerActiveTab !== 'sketch',
-        onMoveShouldSetPanResponderCapture: () => makerActiveTab !== 'sketch',
-        onPanResponderGrant: () => {
-          setSelectedMakerElement({ type: 'room', id: room.id });
-          startPos.current = { x: room.x, y: room.y };
-        },
-        onPanResponderMove: (evt, gestureState) => {
-          const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
-          const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
-
-          const newX = Math.max(0, Math.min(100 - room.w, startPos.current.x + deltaX));
-          const newY = Math.max(0, Math.min(100 - room.h, startPos.current.y + deltaY));
-
-          setPos({ x: newX, y: newY });
-        },
-        onPanResponderRelease: (evt, gestureState) => {
-          const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
-          const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
-
-          const finalX = Math.max(0, Math.min(100 - room.w, startPos.current.x + deltaX));
-          const finalY = Math.max(0, Math.min(100 - room.h, startPos.current.y + deltaY));
-
-          setCustomRooms((prev) =>
-            prev.map((r) => (r.id === room.id ? { ...r, x: finalX, y: finalY } : r))
-          );
-        },
-      })
-    ).current;
-
-    return (
-      <View
-        {...panResponder.panHandlers}
-        style={[
-          styles.makerRoomBlock,
-          {
-            left: `${pos.x}%`,
-            top: `${pos.y}%`,
-            width: `${room.w}%`,
-            height: `${room.h}%`,
-            backgroundColor: room.color,
-          },
-          isSelected && styles.makerElementSelected,
-        ]}
-      >
-        {/* Magicplan Top Wall Dimension Chip */}
-        <TouchableOpacity
-          style={styles.magicplanWallTopChip}
-          onPress={() => handleEditMagicplanWallDimension(room, 'width')}
-        >
-          <Text style={styles.magicplanWallChipText}>{widthMeters}m</Text>
-        </TouchableOpacity>
-
-        {/* Magicplan Left Wall Dimension Chip */}
-        <TouchableOpacity
-          style={styles.magicplanWallLeftChip}
-          onPress={() => handleEditMagicplanWallDimension(room, 'height')}
-        >
-          <Text style={styles.magicplanWallChipText}>{heightMeters}m</Text>
-        </TouchableOpacity>
-
-        <Text style={styles.makerRoomText}>{room.emoji} {room.name}</Text>
-      </View>
-    );
-  };
-
-  // Draggable Wall Line in Hybrid Maker
-  const DraggableMakerWall = ({ wall }) => {
-    const isSelected = selectedMakerElement?.id === wall.id;
-    const [pos, setPos] = useState({ x: wall.x, y: wall.y });
-    const startPos = useRef({ x: wall.x, y: wall.y });
-
-    useEffect(() => {
-      setPos({ x: wall.x, y: wall.y });
-    }, [wall.x, wall.y]);
-
-    const panResponder = useRef(
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => makerActiveTab !== 'sketch',
-        onStartShouldSetPanResponderCapture: () => makerActiveTab !== 'sketch',
-        onMoveShouldSetPanResponder: () => makerActiveTab !== 'sketch',
-        onMoveShouldSetPanResponderCapture: () => makerActiveTab !== 'sketch',
-        onPanResponderGrant: () => {
-          setSelectedMakerElement({ type: 'wall', id: wall.id });
-          startPos.current = { x: wall.x, y: wall.y };
-        },
-        onPanResponderMove: (evt, gestureState) => {
-          const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
-          const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
-
-          const newX = Math.max(0, Math.min(95, startPos.current.x + deltaX));
-          const newY = Math.max(0, Math.min(95, startPos.current.y + deltaY));
-
-          setPos({ x: newX, y: newY });
-        },
-        onPanResponderRelease: (evt, gestureState) => {
-          const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
-          const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
-
-          const finalX = Math.max(0, Math.min(95, startPos.current.x + deltaX));
-          const finalY = Math.max(0, Math.min(95, startPos.current.y + deltaY));
-
-          setCustomWalls((prev) =>
-            prev.map((w) => (w.id === wall.id ? { ...w, x: finalX, y: finalY } : w))
-          );
-        },
-      })
-    ).current;
-
-    return (
-      <View
-        {...panResponder.panHandlers}
-        style={[
-          styles.makerWallLine,
-          { left: `${pos.x}%`, top: `${pos.y}%`, width: `${wall.w}%`, height: `${wall.h}%` },
-          isSelected && styles.makerElementSelected,
-        ]}
-      />
-    );
-  };
-
-  // Draggable Door/Window in Hybrid Maker
-  const DraggableMakerOpening = ({ op }) => {
-    const isSelected = selectedMakerElement?.id === op.id;
-    const [pos, setPos] = useState({ x: op.x, y: op.y });
-    const startPos = useRef({ x: op.x, y: op.y });
-
-    useEffect(() => {
-      setPos({ x: op.x, y: op.y });
-    }, [op.x, op.y]);
-
-    const panResponder = useRef(
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => makerActiveTab !== 'sketch',
-        onStartShouldSetPanResponderCapture: () => makerActiveTab !== 'sketch',
-        onMoveShouldSetPanResponder: () => makerActiveTab !== 'sketch',
-        onMoveShouldSetPanResponderCapture: () => makerActiveTab !== 'sketch',
-        onPanResponderGrant: () => {
-          setSelectedMakerElement({ type: 'opening', id: op.id });
-          startPos.current = { x: op.x, y: op.y };
-        },
-        onPanResponderMove: (evt, gestureState) => {
-          const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
-          const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
-
-          const newX = Math.max(0, Math.min(95, startPos.current.x + deltaX));
-          const newY = Math.max(0, Math.min(95, startPos.current.y + deltaY));
-
-          setPos({ x: newX, y: newY });
-        },
-        onPanResponderRelease: (evt, gestureState) => {
-          const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
-          const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
-
-          const finalX = Math.max(0, Math.min(95, startPos.current.x + deltaX));
-          const finalY = Math.max(0, Math.min(95, startPos.current.y + deltaY));
-
-          setCustomOpenings((prev) =>
-            prev.map((o) => (o.id === op.id ? { ...o, x: finalX, y: finalY } : o))
-          );
-        },
-      })
-    ).current;
-
-    return (
-      <View
-        {...panResponder.panHandlers}
-        style={[
-          styles.makerOpeningText,
-          { left: `${pos.x}%`, top: `${pos.y}%` },
-          isSelected && styles.makerElementSelected,
-        ]}
-      >
-        <Text style={{ fontSize: 18 }}>{op.emoji}</Text>
-      </View>
-    );
-  };
-
   const filteredCatalog = FURNITURE_CATALOG.filter((f) => f.category === selectedCategory);
+  const houseArea = calculateTotalArea();
 
   return (
     <View style={styles.container}>
@@ -708,7 +553,7 @@ export default function InteriorScreen({
           <View style={styles.headerTitleRow}>
             <View style={styles.headerTextGroup}>
               <Text style={styles.headerTitle}>가족 드림하우스 🏠</Text>
-              <Text style={styles.headerSub}>포인트로 가구를 사고 평면도를 꾸며보세요!</Text>
+              <Text style={styles.headerSub}>Magicplan 도면에 포인트를 모아 가구를 꾸며보세요!</Text>
             </View>
 
             <TouchableOpacity
@@ -734,14 +579,20 @@ export default function InteriorScreen({
         {/* Floor Plan & Furniture Canvas Box */}
         <View style={styles.canvasCard}>
           <View style={styles.canvasHeader}>
-            <Text style={styles.canvasTitle}>우리 집 평면도 인테리어</Text>
+            <View style={styles.canvasTitleGroup}>
+              <Text style={styles.canvasTitle}>Magicplan 우리 집 평면도</Text>
+              <Text style={styles.canvasAreaSubtitle}>
+                전용면적: {houseArea.sqMeters} m² ({houseArea.pyeong} 평)
+              </Text>
+            </View>
+
             <View style={styles.canvasBtnRow}>
               <TouchableOpacity
                 style={[styles.changePlanBtn, { backgroundColor: '#FFEBEB', marginRight: 6 }]}
-                onPress={() => setMakerModalVisible(true)}
+                onPress={() => setMagicplanModalVisible(true)}
               >
                 <Wand2 size={13} color="#FF7E82" style={{ marginRight: 4 }} />
-                <Text style={[styles.changePlanBtnText, { color: '#FF7E82' }]}>Magicplan 그리기</Text>
+                <Text style={[styles.changePlanBtnText, { color: '#FF7E82' }]}>Magicplan 스튜디오</Text>
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.changePlanBtn} onPress={pickFloorPlanImage}>
@@ -751,13 +602,13 @@ export default function InteriorScreen({
             </View>
           </View>
 
-          {/* Interactive Canvas */}
+          {/* Interactive Main Canvas */}
           <TouchableOpacity
             activeOpacity={1}
             onPress={() => setSelectedFurnitureId(null)}
             style={styles.canvasContainer}
           >
-            {/* Render Floor Plan Image OR Render Custom Drawn Hybrid Rooms */}
+            {/* Render Floor Plan Image OR Render Custom Drawn Magicplan Rooms */}
             {floorPlanUrl ? (
               <Image
                 source={{ uri: floorPlanUrl }}
@@ -766,8 +617,11 @@ export default function InteriorScreen({
               />
             ) : (
               <View style={styles.drawnCanvasWrapper}>
-                {/* Render Custom Hybrid Drawn Rooms */}
-                {customRooms.map((r) => (
+                {/* Grid Lines Overlay */}
+                <View style={styles.gridOverlayBackground} />
+
+                {/* Render Magicplan Rooms */}
+                {magicRooms.map((r) => (
                   <View
                     key={r.id}
                     style={[
@@ -775,43 +629,31 @@ export default function InteriorScreen({
                       {
                         left: `${r.x}%`,
                         top: `${r.y}%`,
-                        width: `${r.w}%`,
-                        height: `${r.h}%`,
+                        width: `${r.wMeters * 10}%`,
+                        height: `${r.hMeters * 10}%`,
                         backgroundColor: r.color,
                       },
                     ]}
                   >
                     <Text style={styles.renderedRoomText}>{r.emoji} {r.name}</Text>
+                    <Text style={styles.renderedRoomArea}>{(r.wMeters * r.hMeters).toFixed(1)} m²</Text>
+
+                    {/* Openings */}
+                    {r.openings.map((op) => (
+                      <Text
+                        key={op.id}
+                        style={[
+                          styles.renderedOpeningText,
+                          op.wall === 'bottom' && { bottom: -8, left: `${op.offset}%` },
+                          op.wall === 'top' && { top: -8, left: `${op.offset}%` },
+                          op.wall === 'right' && { right: -8, top: `${op.offset}%` },
+                          op.wall === 'left' && { left: -8, top: `${op.offset}%` },
+                        ]}
+                      >
+                        {op.emoji}
+                      </Text>
+                    ))}
                   </View>
-                ))}
-
-                {/* Render Custom Drawn Walls */}
-                {customWalls.map((w) => (
-                  <View
-                    key={w.id}
-                    style={[
-                      styles.renderedWallLine,
-                      {
-                        left: `${w.x}%`,
-                        top: `${w.y}%`,
-                        width: `${w.w}%`,
-                        height: `${w.h}%`,
-                      },
-                    ]}
-                  />
-                ))}
-
-                {/* Render Custom Doors/Windows */}
-                {customOpenings.map((op) => (
-                  <Text
-                    key={op.id}
-                    style={[
-                      styles.renderedOpeningText,
-                      { left: `${op.x}%`, top: `${op.y}%` },
-                    ]}
-                  >
-                    {op.emoji}
-                  </Text>
                 ))}
               </View>
             )}
@@ -823,7 +665,7 @@ export default function InteriorScreen({
           </TouchableOpacity>
 
           <Text style={styles.canvasGuideText}>
-            💡 가구를 손가락으로 드래그하여 배치하고, 가구를 터치하면 회전/철거 컨트롤이 나타납니다.
+            💡 상단 [Magicplan 스튜디오]에서 벽면 길이(m)와 문/창문을 자유롭게 디자인하세요!
           </Text>
         </View>
 
@@ -854,223 +696,173 @@ export default function InteriorScreen({
         </View>
       </ScrollView>
 
-      {/* Magicplan Style Floor Plan Maker Modal */}
+      {/* MAGICPLAN STUDIO ENGINE MODAL */}
       <Modal
         animationType="slide"
         transparent={true}
-        visible={makerModalVisible}
-        onRequestClose={() => setMakerModalVisible(false)}
+        visible={magicplanModalVisible}
+        onRequestClose={() => setMagicplanModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalViewLarge}>
             <View style={styles.modalHeaderRow}>
               <View style={styles.modalHeaderTitleRow}>
-                <Wand2 size={20} color="#FF7E82" style={{ marginRight: 6 }} />
-                <Text style={styles.modalHeader}>Magicplan 매직 평면도 에디터 🪄</Text>
+                <Wand2 size={22} color="#FF7E82" style={{ marginRight: 6 }} />
+                <Text style={styles.modalHeader}>Magicplan 스튜디오 🪄</Text>
               </View>
-              <TouchableOpacity onPress={() => setMakerModalVisible(false)}>
-                <X size={20} color="#8E8E93" />
+              <TouchableOpacity onPress={() => setMagicplanModalVisible(false)}>
+                <X size={22} color="#8E8E93" />
               </TouchableOpacity>
             </View>
 
-            {/* Maker Tool Tabs */}
-            <View style={styles.categoryTabRow}>
-              <TouchableOpacity
-                style={[styles.categoryTab, makerActiveTab === 'magicplan' && styles.categoryTabActive]}
-                onPress={() => setMakerActiveTab('magicplan')}
-              >
-                <Text style={[styles.categoryTabText, makerActiveTab === 'magicplan' && styles.categoryTabTextActive]}>
-                  1. Magicplan 방 🪄
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.categoryTab, makerActiveTab === 'walls' && styles.categoryTabActive]}
-                onPress={() => setMakerActiveTab('walls')}
-              >
-                <Text style={[styles.categoryTabText, makerActiveTab === 'walls' && styles.categoryTabTextActive]}>
-                  2. 벽/문 🧱
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.categoryTab, makerActiveTab === 'sketch' && styles.categoryTabActive]}
-                onPress={() => setMakerActiveTab('sketch')}
-              >
-                <Text style={[styles.categoryTabText, makerActiveTab === 'sketch' && styles.categoryTabTextActive]}>
-                  3. 자유 스케치 ✏️
-                </Text>
-              </TouchableOpacity>
+            {/* Total Area Summary Banner */}
+            <View style={styles.magicAreaSummaryBanner}>
+              <Text style={styles.magicAreaSummaryText}>
+                총 평형: <Text style={{ fontWeight: '900', color: '#FF7E82' }}>{houseArea.pyeong}평</Text> ({houseArea.sqMeters} m²)
+              </Text>
+              <Text style={styles.magicAreaSummarySub}>* 방 조각을 누르고 수치를 설정하여 실시간 도면을 완성하세요</Text>
             </View>
 
-            {/* Tool Bar Controls */}
-            {makerActiveTab === 'magicplan' ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.toolBarRow}>
-                <TouchableOpacity style={styles.toolChip} onPress={() => handleAddRoomBlock('living')}>
-                  <Text style={styles.toolChipText}>+ 거실 L자형 🛋️</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.toolChip} onPress={() => handleAddRoomBlock('bedroom')}>
-                  <Text style={styles.toolChipText}>+ 안방 🛏️</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.toolChip} onPress={() => handleAddRoomBlock('kitchen')}>
-                  <Text style={styles.toolChipText}>+ 주방 ㄷ자형 🍳</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.toolChip} onPress={() => handleAddRoomBlock('bathroom')}>
-                  <Text style={styles.toolChipText}>+ 욕실 🛁</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.toolChip} onPress={() => handleAddRoomBlock('balcony')}>
-                  <Text style={styles.toolChipText}>+ 발코니 🪴</Text>
-                </TouchableOpacity>
-              </ScrollView>
-            ) : makerActiveTab === 'walls' ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.toolBarRow}>
-                <TouchableOpacity style={styles.toolChip} onPress={handleAddWallLine}>
-                  <Text style={styles.toolChipText}>+ 벽선 🧱</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.toolChip} onPress={() => handleAddOpening('door')}>
-                  <Text style={styles.toolChipText}>+ 문 🚪</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.toolChip} onPress={() => handleAddOpening('window')}>
-                  <Text style={styles.toolChipText}>+ 창문 🪟</Text>
-                </TouchableOpacity>
-              </ScrollView>
-            ) : (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.toolBarRow}>
-                <TouchableOpacity style={styles.toolChip} onPress={handleUndoSketchStroke}>
-                  <Text style={styles.toolChipText}>↩️ 획 취소</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.toolChip, styles.toolChipDelete]} onPress={handleResetSketch}>
-                  <Text style={[styles.toolChipText, { color: '#FFFFFF' }]}>🧹 스케치 전체 리셋</Text>
-                </TouchableOpacity>
-              </ScrollView>
-            )}
+            {/* Room Add Tool Chips */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.toolBarRow}>
+              <TouchableOpacity style={styles.toolChip} onPress={() => handleAddMagicRoom('living')}>
+                <Text style={styles.toolChipText}>+ 거실 🛋️</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.toolChip} onPress={() => handleAddMagicRoom('bedroom')}>
+                <Text style={styles.toolChipText}>+ 침실 🛏️</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.toolChip} onPress={() => handleAddMagicRoom('kitchen')}>
+                <Text style={styles.toolChipText}>+ 주방 🍳</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.toolChip} onPress={() => handleAddMagicRoom('bathroom')}>
+                <Text style={styles.toolChipText}>+ 욕실 🛁</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.toolChip} onPress={() => handleAddMagicRoom('corridor')}>
+                <Text style={styles.toolChipText}>+ 현관/복도 🚪</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.toolChip} onPress={() => handleAddMagicRoom('balcony')}>
+                <Text style={styles.toolChipText}>+ 발코니 🪴</Text>
+              </TouchableOpacity>
+            </ScrollView>
 
-            {/* Numerical Size Input Row for Selected Room */}
-            {selectedMakerElement?.type === 'room' && (
-              <View style={styles.numericSizeRow}>
-                <Text style={styles.numericLabel}>Magicplan 수치 입력:</Text>
-                <Text style={styles.inputSubLabel}>가로%</Text>
-                <TextInput
-                  style={styles.numericInput}
-                  keyboardType="numeric"
-                  value={inputWidth}
-                  onChangeText={setInputWidth}
-                  placeholder="48"
-                />
-                <Text style={styles.inputSubLabel}>세로%</Text>
-                <TextInput
-                  style={styles.numericInput}
-                  keyboardType="numeric"
-                  value={inputHeight}
-                  onChangeText={setInputHeight}
-                  placeholder="42"
-                />
-                <TouchableOpacity style={styles.numericApplyBtn} onPress={handleApplyNumericSize}>
-                  <Text style={styles.numericApplyBtnText}>적용</Text>
-                </TouchableOpacity>
-              </View>
-            )}
+            {/* Selected Room Control Panel */}
+            {selectedRoomId && (
+              <View style={styles.selectedRoomControlPanel}>
+                <View style={styles.roomControlHeader}>
+                  <Text style={styles.selectedRoomTitleText}>
+                    선택된 방: {magicRooms.find((r) => r.id === selectedRoomId)?.emoji} {magicRooms.find((r) => r.id === selectedRoomId)?.name}
+                  </Text>
+                  <TouchableOpacity onPress={() => handleDeleteMagicRoom(selectedRoomId)}>
+                    <Text style={{ fontSize: 11, color: '#E74C3C', fontWeight: '800' }}>[방 삭제 🗑️]</Text>
+                  </TouchableOpacity>
+                </View>
 
-            {/* Directional Arrow Movement Pad & Controls Toolbar */}
-            {selectedMakerElement && makerActiveTab !== 'sketch' && (
-              <View style={styles.directionalPadContainer}>
-                <Text style={styles.directionalPadTitle}>Magicplan 미세 이동 & 스냅:</Text>
-                <View style={styles.directionalPadBtnRow}>
-                  <TouchableOpacity style={styles.arrowBtn} onPress={() => handleMoveSelectedMakerElement(0, -4)}>
-                    <ArrowUp size={14} color="#1C1C1E" />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.arrowBtn} onPress={() => handleMoveSelectedMakerElement(0, 4)}>
-                    <ArrowDown size={14} color="#1C1C1E" />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.arrowBtn} onPress={() => handleMoveSelectedMakerElement(-4, 0)}>
-                    <ArrowLeft size={14} color="#1C1C1E" />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.arrowBtn} onPress={() => handleMoveSelectedMakerElement(4, 0)}>
-                    <ArrowRight size={14} color="#1C1C1E" />
+                {/* Wall Length Quick Action Buttons & Openings */}
+                <View style={styles.roomActionBtnGroup}>
+                  <TouchableOpacity style={styles.dimActionBtn} onPress={() => handleOpenDimModal('width')}>
+                    <Sliders size={12} color="#1C1C1E" style={{ marginRight: 4 }} />
+                    <Text style={styles.dimActionBtnText}>가로 벽 길이 변경</Text>
                   </TouchableOpacity>
 
-                  <TouchableOpacity style={[styles.arrowBtn, styles.deleteElemBtn]} onPress={handleDeleteMakerElement}>
-                    <Trash2 size={14} color="#FFFFFF" />
+                  <TouchableOpacity style={styles.dimActionBtn} onPress={() => handleOpenDimModal('height')}>
+                    <Sliders size={12} color="#1C1C1E" style={{ marginRight: 4 }} />
+                    <Text style={styles.dimActionBtnText}>세로 벽 길이 변경</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.openingAddBtn} onPress={() => handleAddOpeningToRoom('door')}>
+                    <Text style={styles.openingAddBtnText}>+ 문 🚪 추가</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.openingAddBtn} onPress={() => handleAddOpeningToRoom('window')}>
+                    <Text style={styles.openingAddBtnText}>+ 창문 🪟 추가</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Arrow Directional Pad */}
+                <View style={styles.roomMovePadRow}>
+                  <Text style={styles.movePadLabel}>방 미세 이동 (자석 스냅):</Text>
+                  <TouchableOpacity style={styles.padBtn} onPress={() => handleMoveRoom(0, -4)}>
+                    <ArrowUp size={12} color="#1C1C1E" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.padBtn} onPress={() => handleMoveRoom(0, 4)}>
+                    <ArrowDown size={12} color="#1C1C1E" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.padBtn} onPress={() => handleMoveRoom(-4, 0)}>
+                    <ArrowLeft size={12} color="#1C1C1E" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.padBtn} onPress={() => handleMoveRoom(4, 0)}>
+                    <ArrowRight size={12} color="#1C1C1E" />
                   </TouchableOpacity>
                 </View>
               </View>
             )}
 
-            {/* Maker Editor Canvas with Magicplan Dimension Labels */}
-            <View
-              {...sketchPanResponder.panHandlers}
-              style={styles.makerEditorCanvas}
-            >
-              {/* Draggable Room Blocks with Realtime Wall Meters */}
-              {customRooms.map((room) => (
-                <DraggableMakerRoom key={room.id} room={room} />
-              ))}
+            {/* MAGICPLAN ARCHITECTURAL GRID CANVAS */}
+            <View style={styles.magicEditorCanvas}>
+              <View style={styles.gridOverlayBackground} />
 
-              {/* Draggable Wall Lines */}
-              {customWalls.map((wall) => (
-                <DraggableMakerWall key={wall.id} wall={wall} />
+              {magicRooms.map((room) => (
+                <MagicRoomComponent key={room.id} room={room} />
               ))}
-
-              {/* Draggable Openings */}
-              {customOpenings.map((op) => (
-                <DraggableMakerOpening key={op.id} op={op} />
-              ))}
-
-              {/* Freehand Finger Drawn Strokes Overlay */}
-              {sketchStrokes.map((stroke) => (
-                <View key={stroke.id} style={StyleSheet.absoluteFill} pointerEvents="none">
-                  {stroke.points.map((pt, index) => {
-                    if (index === 0) return null;
-                    const prevPt = stroke.points[index - 1];
-                    return (
-                      <View
-                        key={`sketch-seg-${index}`}
-                        style={[
-                          styles.freehandStrokeLine,
-                          {
-                            left: `${Math.min(prevPt.x, pt.x)}%`,
-                            top: `${Math.min(prevPt.y, pt.y)}%`,
-                            width: `${Math.max(1.5, Math.abs(pt.x - prevPt.x))}%`,
-                            height: `${Math.max(1.5, Math.abs(pt.y - prevPt.y))}%`,
-                          },
-                        ]}
-                      />
-                    );
-                  })}
-                </View>
-              ))}
-
-              {/* Current Active Freehand Touch Stroke */}
-              {currentStroke.map((pt, index) => {
-                if (index === 0) return null;
-                const prevPt = currentStroke[index - 1];
-                return (
-                  <View
-                    key={`active-seg-${index}`}
-                    style={[
-                      styles.freehandActiveStrokeLine,
-                      {
-                        left: `${Math.min(prevPt.x, pt.x)}%`,
-                        top: `${Math.min(prevPt.y, pt.y)}%`,
-                        width: `${Math.max(2, Math.abs(pt.x - prevPt.x))}%`,
-                        height: `${Math.max(2, Math.abs(pt.y - prevPt.y))}%`,
-                      },
-                    ]}
-                  />
-                );
-              })}
             </View>
 
             <TouchableOpacity
               style={styles.makerConfirmBtn}
               onPress={() => {
                 if (onUpdateFloorPlan) onUpdateFloorPlan(null);
-                setMakerModalVisible(false);
-                Alert.alert('Magicplan 평면도 저장 완료! 🪄', 'Magicplan 스타일의 실시간 치수 평면도가 성공적으로 반영되었습니다.');
+                setMagicplanModalVisible(false);
+                Alert.alert('Magicplan 도면 저장 완료! 🪄', `전용면적 ${houseArea.sqMeters}m² (${houseArea.pyeong}평) 도면이 성공적으로 반영되었습니다.`);
               }}
             >
-              <Text style={styles.makerConfirmBtnText}>이 평면도로 저장 & 적용하기</Text>
+              <Text style={styles.makerConfirmBtnText}>이 Magicplan 도면으로 완성 및 저장</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* DIMENSION KEYPAD EDIT MODAL */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={dimModalVisible}
+        onRequestClose={() => setDimModalVisible(false)}
+      >
+        <View style={styles.modalOverlayCenter}>
+          <View style={styles.dimModalBox}>
+            <Text style={styles.dimModalTitle}>
+              Magicplan 정밀 치수 입력 📐
+            </Text>
+            <Text style={styles.dimModalSub}>
+              {editingWallSide === 'width' ? '가로 벽면' : '세로 벽면'}의 실제 미터(m) 길이를 입력하세요.
+            </Text>
+
+            <View style={styles.dimInputRow}>
+              <TextInput
+                style={styles.dimTextInput}
+                keyboardType="numeric"
+                value={dimInputValue}
+                onChangeText={setDimInputValue}
+                placeholder="4.5"
+                autoFocus={true}
+              />
+              <Text style={styles.dimUnitText}>m (미터)</Text>
+            </View>
+
+            <View style={styles.dimModalBtnRow}>
+              <TouchableOpacity
+                style={[styles.dimModalBtn, { backgroundColor: '#F1F2F4' }]}
+                onPress={() => setDimModalVisible(false)}
+              >
+                <Text style={[styles.dimModalBtnText, { color: '#8E8E93' }]}>취소</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.dimModalBtn, { backgroundColor: '#FF7E82' }]}
+                onPress={handleApplyDimensionChange}
+              >
+                <Text style={[styles.dimModalBtnText, { color: '#FFFFFF' }]}>치수 적용</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -1250,13 +1042,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
-  canvasBtnRow: {
-    flexDirection: 'row',
+  canvasTitleGroup: {
+    flex: 1,
   },
   canvasTitle: {
     fontSize: 15,
     fontWeight: '800',
     color: '#1C1C1E',
+  },
+  canvasAreaSubtitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FF7E82',
+    marginTop: 2,
+  },
+  canvasBtnRow: {
+    flexDirection: 'row',
   },
   changePlanBtn: {
     flexDirection: 'row',
@@ -1289,9 +1090,15 @@ const styles = StyleSheet.create({
     position: 'relative',
     backgroundColor: '#FAF9F6',
   },
+  gridOverlayBackground: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.15,
+    borderWidth: 1,
+    borderColor: '#D1D1D6',
+  },
   renderedRoomBox: {
     position: 'absolute',
-    borderRadius: 8,
+    borderRadius: 6,
     borderWidth: 2,
     borderColor: '#1C1C1E',
     justifyContent: 'center',
@@ -1303,14 +1110,14 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#1C1C1E',
   },
-  renderedWallLine: {
-    position: 'absolute',
-    backgroundColor: '#1C1C1E',
-    borderRadius: 2,
+  renderedRoomArea: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#8E8E93',
   },
   renderedOpeningText: {
     position: 'absolute',
-    fontSize: 16,
+    fontSize: 14,
   },
   furnitureWrapper: {
     position: 'absolute',
@@ -1401,6 +1208,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
+  modalOverlayCenter: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
   modalView: {
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 24,
@@ -1412,14 +1226,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    padding: 20,
-    maxHeight: '94%',
+    padding: 18,
+    maxHeight: '95%',
   },
   modalHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   modalHeaderTitleRow: {
     flexDirection: 'row',
@@ -1427,12 +1241,31 @@ const styles = StyleSheet.create({
   },
   modalHeader: {
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: '900',
     color: '#1C1C1E',
+  },
+  magicAreaSummaryBanner: {
+    backgroundColor: '#FFF5F5',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#FFD6D6',
+  },
+  magicAreaSummaryText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1C1C1E',
+  },
+  magicAreaSummarySub: {
+    fontSize: 10,
+    color: '#8E8E93',
+    marginTop: 2,
   },
   toolBarRow: {
     flexDirection: 'row',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   toolChip: {
     backgroundColor: '#F1F2F4',
@@ -1441,98 +1274,85 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     marginRight: 8,
   },
-  toolChipDelete: {
-    backgroundColor: '#E74C3C',
-  },
   toolChipText: {
     fontSize: 12,
     fontWeight: '700',
     color: '#1C1C1E',
   },
-  numericSizeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  selectedRoomControlPanel: {
     backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    marginBottom: 8,
+    borderRadius: 14,
+    padding: 10,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: '#EBEBEB',
   },
-  numericLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#1C1C1E',
-    marginRight: 4,
-  },
-  inputSubLabel: {
-    fontSize: 10,
-    color: '#8E8E93',
-    marginHorizontal: 2,
-  },
-  numericInput: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#D1D1D6',
-    width: 36,
-    height: 28,
-    textAlign: 'center',
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#1C1C1E',
-    padding: 0,
-  },
-  numericApplyBtn: {
-    backgroundColor: '#FF7E82',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    marginLeft: 6,
-  },
-  numericApplyBtnText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  directionalPadContainer: {
+  roomControlHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#FFF9E6',
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    alignItems: 'center',
     marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#FFEAA7',
   },
-  directionalPadTitle: {
+  selectedRoomTitleText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#1C1C1E',
+  },
+  roomActionBtnGroup: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 6,
+  },
+  dimActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EBF5FF',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    marginRight: 6,
+    marginBottom: 6,
+  },
+  dimActionBtnText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#D4AC0D',
+    color: '#4A90E2',
   },
-  directionalPadBtnRow: {
+  openingAddBtn: {
+    backgroundColor: '#F1F2F4',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    marginRight: 6,
+    marginBottom: 6,
+  },
+  openingAddBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1C1C1E',
+  },
+  roomMovePadRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  arrowBtn: {
+  movePadLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#8E8E93',
+    marginRight: 6,
+  },
+  padBtn: {
     backgroundColor: '#FFFFFF',
     width: 26,
     height: 26,
     borderRadius: 13,
     justifyContent: 'center',
     alignItems: 'center',
-    marginHorizontal: 2,
+    marginHorizontal: 3,
     borderWidth: 1,
-    borderColor: '#EBEBEB',
+    borderColor: '#D1D1D6',
   },
-  deleteElemBtn: {
-    backgroundColor: '#E74C3C',
-    borderColor: '#E74C3C',
-  },
-  makerEditorCanvas: {
+  magicEditorCanvas: {
     width: CANVAS_SIZE,
     height: CANVAS_SIZE,
     backgroundColor: '#FAF9F6',
@@ -1543,61 +1363,54 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginBottom: 10,
   },
-  makerRoomBlock: {
+  magicRoomBox: {
     position: 'absolute',
-    borderRadius: 8,
+    borderRadius: 6,
     borderWidth: 2,
     borderColor: '#1C1C1E',
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 4,
   },
-  magicplanWallTopChip: {
+  magicRoomBoxSelected: {
+    borderColor: '#FF7E82',
+    borderWidth: 3,
+  },
+  magicWallTagTop: {
     position: 'absolute',
-    top: -10,
+    top: -11,
     backgroundColor: '#1C1C1E',
     paddingHorizontal: 5,
     paddingVertical: 1,
     borderRadius: 6,
   },
-  magicplanWallLeftChip: {
+  magicWallTagLeft: {
     position: 'absolute',
-    left: -18,
+    left: -19,
     backgroundColor: '#1C1C1E',
     paddingHorizontal: 4,
     paddingVertical: 1,
     borderRadius: 6,
   },
-  magicplanWallChipText: {
+  magicWallTagText: {
     color: '#FFFFFF',
     fontSize: 9,
     fontWeight: '800',
   },
-  makerWallLine: {
-    position: 'absolute',
-    backgroundColor: '#1C1C1E',
-    borderRadius: 2,
-  },
-  makerOpeningText: {
-    position: 'absolute',
-  },
-  makerElementSelected: {
-    borderWidth: 3,
-    borderColor: '#FF7E82',
-  },
-  makerRoomText: {
+  magicRoomTitle: {
     fontSize: 12,
     fontWeight: '800',
     color: '#1C1C1E',
   },
-  freehandStrokeLine: {
-    position: 'absolute',
-    backgroundColor: '#1C1C1E',
-    borderRadius: 2,
+  magicRoomAreaText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#8E8E93',
+    marginTop: 1,
   },
-  freehandActiveStrokeLine: {
+  magicOpeningSymbol: {
     position: 'absolute',
-    backgroundColor: '#FF7E82',
-    borderRadius: 2,
+    fontSize: 15,
   },
   makerConfirmBtn: {
     backgroundColor: '#FF7E82',
@@ -1608,6 +1421,65 @@ const styles = StyleSheet.create({
   makerConfirmBtnText: {
     color: '#FFFFFF',
     fontSize: 14,
+    fontWeight: '800',
+  },
+  dimModalBox: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    width: '85%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  dimModalTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1C1C1E',
+    marginBottom: 4,
+  },
+  dimModalSub: {
+    fontSize: 12,
+    color: '#8E8E93',
+    marginBottom: 14,
+  },
+  dimInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#D1D1D6',
+    marginBottom: 16,
+  },
+  dimTextInput: {
+    flex: 1,
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#1C1C1E',
+    padding: 0,
+  },
+  dimUnitText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#8E8E93',
+  },
+  dimModalBtnRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  dimModalBtn: {
+    flex: 0.48,
+    paddingVertical: 10,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  dimModalBtnText: {
+    fontSize: 13,
     fontWeight: '800',
   },
   categoryTabRow: {
