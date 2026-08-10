@@ -6,6 +6,7 @@ import {
   Image,
   TouchableOpacity,
   ScrollView,
+  TextInput,
   Modal,
   Alert,
   PanResponder,
@@ -14,7 +15,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Home, ShoppingBag, Plus, Trash2, RotateCw, Camera, X, Trophy, Sparkles, Check, Edit3, Grid, Layers, ArrowUp, ArrowDown, ArrowLeft, ArrowRight } from 'lucide-react-native';
+import { Home, ShoppingBag, Plus, Trash2, RotateCw, Camera, X, Trophy, Sparkles, Check, Edit3, Grid, Layers, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, CornerDownLeft, Undo2 } from 'lucide-react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CANVAS_SIZE = SCREEN_WIDTH - 32; // Square canvas size
@@ -51,8 +52,8 @@ export default function InteriorScreen({
   const [selectedCategory, setSelectedCategory] = useState('living');
   const [selectedFurnitureId, setSelectedFurnitureId] = useState(null);
 
-  // HYBRID MAKER STATES (Method 1: Room Blocks + Method 2: Walls & Doors Drawing)
-  const [makerActiveTab, setMakerActiveTab] = useState('rooms'); // 'rooms', 'walls', 'doors'
+  // HYBRID MAKER STATES (Method 1: Room Blocks + Method 2: Walls/Doors + Method 3: Node CAD)
+  const [makerActiveTab, setMakerActiveTab] = useState('rooms'); // 'rooms', 'walls', 'cad'
   const [customRooms, setCustomRooms] = useState([
     { id: 'r1', name: '거실', emoji: '🛋️', x: 5, y: 5, w: 48, h: 42, color: '#FFF5EB' },
     { id: 'r2', name: '안방', emoji: '🛏️', x: 58, y: 5, w: 37, h: 42, color: '#EBF5FF' },
@@ -67,7 +68,28 @@ export default function InteriorScreen({
     { id: 'd1', type: 'door', emoji: '🚪', x: 48, y: 22 },
     { id: 'd2', type: 'window', emoji: '🪟', x: 25, y: 2 },
   ]);
+
+  // Selected Element in Maker
   const [selectedMakerElement, setSelectedMakerElement] = useState(null);
+
+  // Numerical Size Inputs (Width % and Height %)
+  const [inputWidth, setInputWidth] = useState('');
+  const [inputHeight, setInputHeight] = useState('');
+
+  // CAD Node Drawing Mode States
+  const [cadNodes, setCadNodes] = useState([]);
+  const [cadLines, setCadLines] = useState([]);
+
+  // Sync numerical size inputs when selected element changes
+  useEffect(() => {
+    if (selectedMakerElement && selectedMakerElement.type === 'room') {
+      const targetRoom = customRooms.find((r) => r.id === selectedMakerElement.id);
+      if (targetRoom) {
+        setInputWidth(String(Math.round(targetRoom.w)));
+        setInputHeight(String(Math.round(targetRoom.h)));
+      }
+    }
+  }, [selectedMakerElement, customRooms]);
 
   // Pick Custom Floor Plan Image from Album
   const pickFloorPlanImage = async () => {
@@ -131,6 +153,99 @@ export default function InteriorScreen({
     }
   };
 
+  // Apply Numerical Size Input Change
+  const handleApplyNumericSize = () => {
+    if (!selectedMakerElement || selectedMakerElement.type !== 'room') return;
+
+    const wNum = parseInt(inputWidth, 10);
+    const hNum = parseInt(inputHeight, 10);
+
+    if (isNaN(wNum) || isNaN(hNum) || wNum <= 0 || hNum <= 0) {
+      Alert.alert('입력 확인', '올바른 숫자(1 ~ 80)를 입력해주세요.');
+      return;
+    }
+
+    const clampedW = Math.max(10, Math.min(85, wNum));
+    const clampedH = Math.max(10, Math.min(85, hNum));
+
+    setCustomRooms((prev) =>
+      prev.map((r) =>
+        r.id === selectedMakerElement.id ? { ...r, w: clampedW, h: clampedH } : r
+      )
+    );
+    Alert.alert('크기 변경 완료 📐', `가로 ${clampedW}%, 세로 ${clampedH}%로 설정되었습니다.`);
+  };
+
+  // Add Node on Canvas Touch in CAD Mode
+  const handleCADCanvasTouch = (event) => {
+    if (makerActiveTab !== 'cad') return;
+
+    const { locationX, locationY } = event.nativeEvent;
+    const xPercent = Math.max(0, Math.min(95, (locationX / CANVAS_SIZE) * 100));
+    const yPercent = Math.max(0, Math.min(95, (locationY / CANVAS_SIZE) * 100));
+
+    const newNode = { x: Math.round(xPercent), y: Math.round(yPercent) };
+
+    // Check if touching near first node to close polygon room
+    if (cadNodes.length >= 3) {
+      const firstNode = cadNodes[0];
+      const dist = Math.hypot(newNode.x - firstNode.x, newNode.y - firstNode.y);
+
+      if (dist < 10) {
+        // Close polygon loop into custom room block!
+        const minX = Math.min(...cadNodes.map((n) => n.x));
+        const minY = Math.min(...cadNodes.map((n) => n.y));
+        const maxX = Math.max(...cadNodes.map((n) => n.x));
+        const maxY = Math.max(...cadNodes.map((n) => n.y));
+
+        const newCustomRoom = {
+          id: `cad-room-${Date.now()}`,
+          name: 'CAD 맞춤방',
+          emoji: '📐',
+          x: minX,
+          y: minY,
+          w: Math.max(15, maxX - minX),
+          h: Math.max(15, maxY - minY),
+          color: '#EBF5FF',
+        };
+
+        setCustomRooms([...customRooms, newCustomRoom]);
+        setCadNodes([]);
+        setCadLines([]);
+        Alert.alert('공간 다각형 방 자동 완성! 🎉', '노드가 성공적으로 연결되어 맞춤 방이 생성되었습니다.');
+        return;
+      }
+    }
+
+    // Add wall line if at least 1 previous node exists
+    if (cadNodes.length > 0) {
+      const lastNode = cadNodes[cadNodes.length - 1];
+      const newLine = {
+        id: `cad-line-${Date.now()}`,
+        x1: lastNode.x,
+        y1: lastNode.y,
+        x2: newNode.x,
+        y2: newNode.y,
+      };
+      setCadLines([...cadLines, newLine]);
+    }
+
+    setCadNodes([...cadNodes, newNode]);
+  };
+
+  // Undo Last CAD Node
+  const handleUndoCADNode = () => {
+    if (cadNodes.length === 0) return;
+    setCadNodes(cadNodes.slice(0, -1));
+    setCadLines(cadLines.slice(0, -1));
+  };
+
+  // Reset All CAD Nodes
+  const handleResetCAD = () => {
+    setCadNodes([]);
+    setCadLines([]);
+  };
+
   // Add Room Block in Maker
   const handleAddRoomBlock = (type) => {
     const PRESETS = {
@@ -181,21 +296,6 @@ export default function InteriorScreen({
     };
     setCustomOpenings([...customOpenings, newOpening]);
     setSelectedMakerElement({ type: 'opening', id: newOpening.id });
-  };
-
-  // Resize Selected Room Block
-  const handleResizeRoom = (deltaSize) => {
-    if (!selectedMakerElement || selectedMakerElement.type !== 'room') return;
-    setCustomRooms((prev) =>
-      prev.map((r) => {
-        if (r.id === selectedMakerElement.id) {
-          const newW = Math.max(15, Math.min(80, r.w + deltaSize));
-          const newH = Math.max(15, Math.min(80, r.h + deltaSize));
-          return { ...r, w: newW, h: newH };
-        }
-        return r;
-      })
-    );
   };
 
   // Delete Maker Element
@@ -719,7 +819,16 @@ export default function InteriorScreen({
                 onPress={() => setMakerActiveTab('walls')}
               >
                 <Text style={[styles.categoryTabText, makerActiveTab === 'walls' && styles.categoryTabTextActive]}>
-                  2. 벽선/문/창문 🧱
+                  2. 벽/문 🧱
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.categoryTab, makerActiveTab === 'cad' && styles.categoryTabActive]}
+                onPress={() => setMakerActiveTab('cad')}
+              >
+                <Text style={[styles.categoryTabText, makerActiveTab === 'cad' && styles.categoryTabTextActive]}>
+                  3. 노드 CAD 📐
                 </Text>
               </TouchableOpacity>
             </View>
@@ -743,7 +852,7 @@ export default function InteriorScreen({
                   <Text style={styles.toolChipText}>+ 발코니 🪴</Text>
                 </TouchableOpacity>
               </ScrollView>
-            ) : (
+            ) : makerActiveTab === 'walls' ? (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.toolBarRow}>
                 <TouchableOpacity style={styles.toolChip} onPress={handleAddWallLine}>
                   <Text style={styles.toolChipText}>+ 벽선 🧱</Text>
@@ -755,36 +864,60 @@ export default function InteriorScreen({
                   <Text style={styles.toolChipText}>+ 창문 🪟</Text>
                 </TouchableOpacity>
               </ScrollView>
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.toolBarRow}>
+                <TouchableOpacity style={styles.toolChip} onPress={handleUndoCADNode}>
+                  <Text style={styles.toolChipText}>↩️ 점 취소</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.toolChip, styles.toolChipDelete]} onPress={handleResetCAD}>
+                  <Text style={[styles.toolChipText, { color: '#FFFFFF' }]}>🧹 CAD 리셋</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            )}
+
+            {/* Numerical Size Input Row for Selected Room */}
+            {selectedMakerElement?.type === 'room' && (
+              <View style={styles.numericSizeRow}>
+                <Text style={styles.numericLabel}>수치 직접 입력 크기:</Text>
+                <Text style={styles.inputSubLabel}>가로%</Text>
+                <TextInput
+                  style={styles.numericInput}
+                  keyboardType="numeric"
+                  value={inputWidth}
+                  onChangeText={setInputWidth}
+                  placeholder="45"
+                />
+                <Text style={styles.inputSubLabel}>세로%</Text>
+                <TextInput
+                  style={styles.numericInput}
+                  keyboardType="numeric"
+                  value={inputHeight}
+                  onChangeText={setInputHeight}
+                  placeholder="40"
+                />
+                <TouchableOpacity style={styles.numericApplyBtn} onPress={handleApplyNumericSize}>
+                  <Text style={styles.numericApplyBtnText}>적용</Text>
+                </TouchableOpacity>
+              </View>
             )}
 
             {/* Directional Arrow Movement Pad & Controls Toolbar */}
             {selectedMakerElement && (
               <View style={styles.directionalPadContainer}>
-                <Text style={styles.directionalPadTitle}>선택 항목 이동 & 크기 조절:</Text>
+                <Text style={styles.directionalPadTitle}>선택 항목 미세 이동:</Text>
                 <View style={styles.directionalPadBtnRow}>
-                  <TouchableOpacity style={styles.arrowBtn} onPress={() => handleMoveSelectedMakerElement(0, -5)}>
+                  <TouchableOpacity style={styles.arrowBtn} onPress={() => handleMoveSelectedMakerElement(0, -4)}>
                     <ArrowUp size={14} color="#1C1C1E" />
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.arrowBtn} onPress={() => handleMoveSelectedMakerElement(0, 5)}>
+                  <TouchableOpacity style={styles.arrowBtn} onPress={() => handleMoveSelectedMakerElement(0, 4)}>
                     <ArrowDown size={14} color="#1C1C1E" />
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.arrowBtn} onPress={() => handleMoveSelectedMakerElement(-5, 0)}>
+                  <TouchableOpacity style={styles.arrowBtn} onPress={() => handleMoveSelectedMakerElement(-4, 0)}>
                     <ArrowLeft size={14} color="#1C1C1E" />
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.arrowBtn} onPress={() => handleMoveSelectedMakerElement(5, 0)}>
+                  <TouchableOpacity style={styles.arrowBtn} onPress={() => handleMoveSelectedMakerElement(4, 0)}>
                     <ArrowRight size={14} color="#1C1C1E" />
                   </TouchableOpacity>
-
-                  {selectedMakerElement.type === 'room' && (
-                    <>
-                      <TouchableOpacity style={[styles.arrowBtn, { backgroundColor: '#EBF5FF' }]} onPress={() => handleResizeRoom(5)}>
-                        <Text style={styles.sizeBtnText}>➕</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={[styles.arrowBtn, { backgroundColor: '#EBF5FF' }]} onPress={() => handleResizeRoom(-5)}>
-                        <Text style={styles.sizeBtnText}>➖</Text>
-                      </TouchableOpacity>
-                    </>
-                  )}
 
                   <TouchableOpacity style={[styles.arrowBtn, styles.deleteElemBtn]} onPress={handleDeleteMakerElement}>
                     <Trash2 size={14} color="#FFFFFF" />
@@ -793,8 +926,12 @@ export default function InteriorScreen({
               </View>
             )}
 
-            {/* Maker Editor Canvas with Interactive Draggable & Tappable Elements */}
-            <View style={styles.makerEditorCanvas}>
+            {/* Maker Editor Canvas with Interactive Draggable & CAD Touch Mode */}
+            <TouchableOpacity
+              activeOpacity={1}
+              onPress={handleCADCanvasTouch}
+              style={styles.makerEditorCanvas}
+            >
               {/* Draggable Room Blocks */}
               {customRooms.map((room) => (
                 <DraggableMakerRoom key={room.id} room={room} />
@@ -809,14 +946,43 @@ export default function InteriorScreen({
               {customOpenings.map((op) => (
                 <DraggableMakerOpening key={op.id} op={op} />
               ))}
-            </View>
+
+              {/* CAD Mode Drawn Nodes & Lines Overlay */}
+              {cadLines.map((line) => (
+                <View
+                  key={line.id}
+                  style={[
+                    styles.cadWallLine,
+                    {
+                      left: `${Math.min(line.x1, line.x2)}%`,
+                      top: `${Math.min(line.y1, line.y2)}%`,
+                      width: `${Math.max(2, Math.abs(line.x2 - line.x1))}%`,
+                      height: `${Math.max(2, Math.abs(line.y2 - line.y1))}%`,
+                    },
+                  ]}
+                />
+              ))}
+
+              {cadNodes.map((node, index) => (
+                <View
+                  key={`node-${index}`}
+                  style={[
+                    styles.cadNodeDot,
+                    { left: `${node.x}%`, top: `${node.y}%` },
+                    index === 0 && styles.cadFirstNodeDot,
+                  ]}
+                >
+                  <Text style={styles.cadNodeText}>P{index + 1}</Text>
+                </View>
+              ))}
+            </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.makerConfirmBtn}
               onPress={() => {
-                if (onUpdateFloorPlan) onUpdateFloorPlan(null); // Use custom drawn hybrid layout
+                if (onUpdateFloorPlan) onUpdateFloorPlan(null);
                 setMakerModalVisible(false);
-                Alert.alert('하이브리드 평면도 완성! 🎉', '손가락으로 배치한 나만의 우리 집 평면도가 성공적으로 반영되었습니다.');
+                Alert.alert('하이브리드 CAD 평면도 완성! 🎉', '수치 입력과 CAD 노드로 완성된 평면도가 성공적으로 반영되었습니다.');
               }}
             >
               <Text style={styles.makerConfirmBtnText}>이 평면도로 저장 & 적용하기</Text>
@@ -1163,13 +1329,13 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 20,
-    maxHeight: '92%',
+    maxHeight: '94%',
   },
   modalHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 12,
   },
   modalHeaderTitleRow: {
     flexDirection: 'row',
@@ -1199,15 +1365,62 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1C1C1E',
   },
+  numericSizeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#EBEBEB',
+  },
+  numericLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    marginRight: 4,
+  },
+  inputSubLabel: {
+    fontSize: 10,
+    color: '#8E8E93',
+    marginHorizontal: 2,
+  },
+  numericInput: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#D1D1D6',
+    width: 36,
+    height: 28,
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    padding: 0,
+  },
+  numericApplyBtn: {
+    backgroundColor: '#FF7E82',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginLeft: 6,
+  },
+  numericApplyBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '700',
+  },
   directionalPadContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#FFF9E6',
     borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginBottom: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginBottom: 8,
     borderWidth: 1,
     borderColor: '#FFEAA7',
   },
@@ -1222,17 +1435,14 @@ const styles = StyleSheet.create({
   },
   arrowBtn: {
     backgroundColor: '#FFFFFF',
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     justifyContent: 'center',
     alignItems: 'center',
-    marginHorizontal: 3,
+    marginHorizontal: 2,
     borderWidth: 1,
     borderColor: '#EBEBEB',
-  },
-  sizeBtnText: {
-    fontSize: 12,
   },
   deleteElemBtn: {
     backgroundColor: '#E74C3C',
@@ -1247,7 +1457,7 @@ const styles = StyleSheet.create({
     borderColor: '#EBEBEB',
     position: 'relative',
     alignSelf: 'center',
-    marginBottom: 14,
+    marginBottom: 10,
   },
   makerRoomBlock: {
     position: 'absolute',
@@ -1274,9 +1484,35 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#1C1C1E',
   },
+  cadWallLine: {
+    position: 'absolute',
+    backgroundColor: '#FF7E82',
+    borderRadius: 2,
+  },
+  cadNodeDot: {
+    position: 'absolute',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#4A90E2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: -10,
+    marginTop: -10,
+  },
+  cadFirstNodeDot: {
+    backgroundColor: '#2ECC71',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  cadNodeText: {
+    color: '#FFFFFF',
+    fontSize: 8,
+    fontWeight: '800',
+  },
   makerConfirmBtn: {
     backgroundColor: '#FF7E82',
-    paddingVertical: 14,
+    paddingVertical: 12,
     borderRadius: 14,
     alignItems: 'center',
   },
@@ -1290,11 +1526,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#F1F2F4',
     borderRadius: 10,
     padding: 3,
-    marginBottom: 14,
+    marginBottom: 10,
   },
   categoryTab: {
     flex: 1,
-    paddingVertical: 8,
+    paddingVertical: 7,
     alignItems: 'center',
     borderRadius: 8,
   },
@@ -1307,7 +1543,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   categoryTabText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: '#8E8E93',
   },
