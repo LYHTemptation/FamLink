@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Home, ShoppingBag, Plus, Trash2, RotateCw, Camera, X, Trophy, Sparkles, Check, Edit3, Grid, Layers, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, CornerDownLeft, Undo2 } from 'lucide-react-native';
+import { Home, ShoppingBag, Plus, Trash2, RotateCw, Camera, X, Trophy, Sparkles, Check, Edit3, Grid, Layers, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, CornerDownLeft, Undo2, PenTool } from 'lucide-react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CANVAS_SIZE = SCREEN_WIDTH - 32; // Square canvas size
@@ -52,8 +52,8 @@ export default function InteriorScreen({
   const [selectedCategory, setSelectedCategory] = useState('living');
   const [selectedFurnitureId, setSelectedFurnitureId] = useState(null);
 
-  // HYBRID MAKER STATES (Method 1: Room Blocks + Method 2: Walls/Doors + Method 3: Node CAD)
-  const [makerActiveTab, setMakerActiveTab] = useState('rooms'); // 'rooms', 'walls', 'cad'
+  // HYBRID MAKER STATES (Method 1: Room Blocks + Method 2: Walls/Doors + Method 3: Freehand Finger Sketch)
+  const [makerActiveTab, setMakerActiveTab] = useState('rooms'); // 'rooms', 'walls', 'sketch'
   const [customRooms, setCustomRooms] = useState([
     { id: 'r1', name: '거실', emoji: '🛋️', x: 5, y: 5, w: 48, h: 42, color: '#FFF5EB' },
     { id: 'r2', name: '안방', emoji: '🛏️', x: 58, y: 5, w: 37, h: 42, color: '#EBF5FF' },
@@ -76,9 +76,10 @@ export default function InteriorScreen({
   const [inputWidth, setInputWidth] = useState('');
   const [inputHeight, setInputHeight] = useState('');
 
-  // CAD Node Drawing Mode States
-  const [cadNodes, setCadNodes] = useState([]);
-  const [cadLines, setCadLines] = useState([]);
+  // Freehand Finger Sketch Drawing States
+  const [sketchStrokes, setSketchStrokes] = useState([]);
+  const [currentStroke, setCurrentStroke] = useState([]);
+  const activeStrokeRef = useRef([]);
 
   // Sync numerical size inputs when selected element changes
   useEffect(() => {
@@ -90,6 +91,68 @@ export default function InteriorScreen({
       }
     }
   }, [selectedMakerElement, customRooms]);
+
+  // Freehand Finger Sketch PanResponder
+  const sketchPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => makerActiveTab === 'sketch',
+      onStartShouldSetPanResponderCapture: () => makerActiveTab === 'sketch',
+      onMoveShouldSetPanResponder: () => makerActiveTab === 'sketch',
+      onMoveShouldSetPanResponderCapture: () => makerActiveTab === 'sketch',
+      onPanResponderGrant: (evt) => {
+        const { locationX, locationY } = evt.nativeEvent;
+        const xPercent = Math.max(0, Math.min(100, (locationX / CANVAS_SIZE) * 100));
+        const yPercent = Math.max(0, Math.min(100, (locationY / CANVAS_SIZE) * 100));
+
+        const startPt = { x: xPercent, y: yPercent };
+        activeStrokeRef.current = [startPt];
+        setCurrentStroke([startPt]);
+      },
+      onPanResponderMove: (evt) => {
+        const { locationX, locationY } = evt.nativeEvent;
+        const xPercent = Math.max(0, Math.min(100, (locationX / CANVAS_SIZE) * 100));
+        const yPercent = Math.max(0, Math.min(100, (locationY / CANVAS_SIZE) * 100));
+
+        const newPt = { x: xPercent, y: yPercent };
+        activeStrokeRef.current.push(newPt);
+        setCurrentStroke([...activeStrokeRef.current]);
+      },
+      onPanResponderRelease: () => {
+        const strokePts = [...activeStrokeRef.current];
+        if (strokePts.length > 3) {
+          // Add completed stroke to sketchStrokes list
+          setSketchStrokes((prev) => [...prev, { id: `stroke-${Date.now()}`, points: strokePts }]);
+
+          // Auto-detect closed loop to form custom room block
+          const firstPt = strokePts[0];
+          const lastPt = strokePts[strokePts.length - 1];
+          const dist = Math.hypot(lastPt.x - firstPt.x, lastPt.y - firstPt.y);
+
+          if (dist < 15) {
+            const minX = Math.min(...strokePts.map((p) => p.x));
+            const minY = Math.min(...strokePts.map((p) => p.y));
+            const maxX = Math.max(...strokePts.map((p) => p.x));
+            const maxY = Math.max(...strokePts.map((p) => p.y));
+
+            const newSketchedRoom = {
+              id: `sketch-room-${Date.now()}`,
+              name: '손가락 직접방',
+              emoji: '✏️',
+              x: Math.round(minX),
+              y: Math.round(minY),
+              w: Math.max(15, Math.round(maxX - minX)),
+              h: Math.max(15, Math.round(maxY - minY)),
+              color: '#FFF0F5',
+            };
+            setCustomRooms((prev) => [...prev, newSketchedRoom]);
+            Alert.alert('손가락 닫힌 공간 방 감지! 🎨', '손가락으로 쓱 그린 공간이 맞춤 방으로 전환되었습니다.');
+          }
+        }
+        activeStrokeRef.current = [];
+        setCurrentStroke([]);
+      },
+    })
+  ).current;
 
   // Pick Custom Floor Plan Image from Album
   const pickFloorPlanImage = async () => {
@@ -176,74 +239,16 @@ export default function InteriorScreen({
     Alert.alert('크기 변경 완료 📐', `가로 ${clampedW}%, 세로 ${clampedH}%로 설정되었습니다.`);
   };
 
-  // Add Node on Canvas Touch in CAD Mode
-  const handleCADCanvasTouch = (event) => {
-    if (makerActiveTab !== 'cad') return;
-
-    const { locationX, locationY } = event.nativeEvent;
-    const xPercent = Math.max(0, Math.min(95, (locationX / CANVAS_SIZE) * 100));
-    const yPercent = Math.max(0, Math.min(95, (locationY / CANVAS_SIZE) * 100));
-
-    const newNode = { x: Math.round(xPercent), y: Math.round(yPercent) };
-
-    // Check if touching near first node to close polygon room
-    if (cadNodes.length >= 3) {
-      const firstNode = cadNodes[0];
-      const dist = Math.hypot(newNode.x - firstNode.x, newNode.y - firstNode.y);
-
-      if (dist < 10) {
-        // Close polygon loop into custom room block!
-        const minX = Math.min(...cadNodes.map((n) => n.x));
-        const minY = Math.min(...cadNodes.map((n) => n.y));
-        const maxX = Math.max(...cadNodes.map((n) => n.x));
-        const maxY = Math.max(...cadNodes.map((n) => n.y));
-
-        const newCustomRoom = {
-          id: `cad-room-${Date.now()}`,
-          name: 'CAD 맞춤방',
-          emoji: '📐',
-          x: minX,
-          y: minY,
-          w: Math.max(15, maxX - minX),
-          h: Math.max(15, maxY - minY),
-          color: '#EBF5FF',
-        };
-
-        setCustomRooms([...customRooms, newCustomRoom]);
-        setCadNodes([]);
-        setCadLines([]);
-        Alert.alert('공간 다각형 방 자동 완성! 🎉', '노드가 성공적으로 연결되어 맞춤 방이 생성되었습니다.');
-        return;
-      }
-    }
-
-    // Add wall line if at least 1 previous node exists
-    if (cadNodes.length > 0) {
-      const lastNode = cadNodes[cadNodes.length - 1];
-      const newLine = {
-        id: `cad-line-${Date.now()}`,
-        x1: lastNode.x,
-        y1: lastNode.y,
-        x2: newNode.x,
-        y2: newNode.y,
-      };
-      setCadLines([...cadLines, newLine]);
-    }
-
-    setCadNodes([...cadNodes, newNode]);
+  // Undo Last Finger Sketch Stroke
+  const handleUndoSketchStroke = () => {
+    if (sketchStrokes.length === 0) return;
+    setSketchStrokes(sketchStrokes.slice(0, -1));
   };
 
-  // Undo Last CAD Node
-  const handleUndoCADNode = () => {
-    if (cadNodes.length === 0) return;
-    setCadNodes(cadNodes.slice(0, -1));
-    setCadLines(cadLines.slice(0, -1));
-  };
-
-  // Reset All CAD Nodes
-  const handleResetCAD = () => {
-    setCadNodes([]);
-    setCadLines([]);
+  // Reset All Finger Sketch Strokes
+  const handleResetSketch = () => {
+    setSketchStrokes([]);
+    setCurrentStroke([]);
   };
 
   // Add Room Block in Maker
@@ -465,10 +470,10 @@ export default function InteriorScreen({
 
     const panResponder = useRef(
       PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onStartShouldSetPanResponderCapture: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponderCapture: () => true,
+        onStartShouldSetPanResponder: () => makerActiveTab !== 'sketch',
+        onStartShouldSetPanResponderCapture: () => makerActiveTab !== 'sketch',
+        onMoveShouldSetPanResponder: () => makerActiveTab !== 'sketch',
+        onMoveShouldSetPanResponderCapture: () => makerActiveTab !== 'sketch',
         onPanResponderGrant: () => {
           setSelectedMakerElement({ type: 'room', id: room.id });
           startPos.current = { x: room.x, y: room.y };
@@ -528,10 +533,10 @@ export default function InteriorScreen({
 
     const panResponder = useRef(
       PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onStartShouldSetPanResponderCapture: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponderCapture: () => true,
+        onStartShouldSetPanResponder: () => makerActiveTab !== 'sketch',
+        onStartShouldSetPanResponderCapture: () => makerActiveTab !== 'sketch',
+        onMoveShouldSetPanResponder: () => makerActiveTab !== 'sketch',
+        onMoveShouldSetPanResponderCapture: () => makerActiveTab !== 'sketch',
         onPanResponderGrant: () => {
           setSelectedMakerElement({ type: 'wall', id: wall.id });
           startPos.current = { x: wall.x, y: wall.y };
@@ -583,10 +588,10 @@ export default function InteriorScreen({
 
     const panResponder = useRef(
       PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onStartShouldSetPanResponderCapture: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponderCapture: () => true,
+        onStartShouldSetPanResponder: () => makerActiveTab !== 'sketch',
+        onStartShouldSetPanResponderCapture: () => makerActiveTab !== 'sketch',
+        onMoveShouldSetPanResponder: () => makerActiveTab !== 'sketch',
+        onMoveShouldSetPanResponderCapture: () => makerActiveTab !== 'sketch',
         onPanResponderGrant: () => {
           setSelectedMakerElement({ type: 'opening', id: op.id });
           startPos.current = { x: op.x, y: op.y };
@@ -824,11 +829,11 @@ export default function InteriorScreen({
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.categoryTab, makerActiveTab === 'cad' && styles.categoryTabActive]}
-                onPress={() => setMakerActiveTab('cad')}
+                style={[styles.categoryTab, makerActiveTab === 'sketch' && styles.categoryTabActive]}
+                onPress={() => setMakerActiveTab('sketch')}
               >
-                <Text style={[styles.categoryTabText, makerActiveTab === 'cad' && styles.categoryTabTextActive]}>
-                  3. 노드 CAD 📐
+                <Text style={[styles.categoryTabText, makerActiveTab === 'sketch' && styles.categoryTabTextActive]}>
+                  3. 손가락 자유 드로잉 ✏️
                 </Text>
               </TouchableOpacity>
             </View>
@@ -866,11 +871,11 @@ export default function InteriorScreen({
               </ScrollView>
             ) : (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.toolBarRow}>
-                <TouchableOpacity style={styles.toolChip} onPress={handleUndoCADNode}>
-                  <Text style={styles.toolChipText}>↩️ 점 취소</Text>
+                <TouchableOpacity style={styles.toolChip} onPress={handleUndoSketchStroke}>
+                  <Text style={styles.toolChipText}>↩️ 획 취소</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.toolChip, styles.toolChipDelete]} onPress={handleResetCAD}>
-                  <Text style={[styles.toolChipText, { color: '#FFFFFF' }]}>🧹 CAD 리셋</Text>
+                <TouchableOpacity style={[styles.toolChip, styles.toolChipDelete]} onPress={handleResetSketch}>
+                  <Text style={[styles.toolChipText, { color: '#FFFFFF' }]}>🧹 스케치 전체 리셋</Text>
                 </TouchableOpacity>
               </ScrollView>
             )}
@@ -902,7 +907,7 @@ export default function InteriorScreen({
             )}
 
             {/* Directional Arrow Movement Pad & Controls Toolbar */}
-            {selectedMakerElement && (
+            {selectedMakerElement && makerActiveTab !== 'sketch' && (
               <View style={styles.directionalPadContainer}>
                 <Text style={styles.directionalPadTitle}>선택 항목 미세 이동:</Text>
                 <View style={styles.directionalPadBtnRow}>
@@ -926,10 +931,9 @@ export default function InteriorScreen({
               </View>
             )}
 
-            {/* Maker Editor Canvas with Interactive Draggable & CAD Touch Mode */}
-            <TouchableOpacity
-              activeOpacity={1}
-              onPress={handleCADCanvasTouch}
+            {/* Maker Editor Canvas with Interactive Draggable & Freehand Sketch Modes */}
+            <View
+              {...sketchPanResponder.panHandlers}
               style={styles.makerEditorCanvas}
             >
               {/* Draggable Room Blocks */}
@@ -947,42 +951,57 @@ export default function InteriorScreen({
                 <DraggableMakerOpening key={op.id} op={op} />
               ))}
 
-              {/* CAD Mode Drawn Nodes & Lines Overlay */}
-              {cadLines.map((line) => (
-                <View
-                  key={line.id}
-                  style={[
-                    styles.cadWallLine,
-                    {
-                      left: `${Math.min(line.x1, line.x2)}%`,
-                      top: `${Math.min(line.y1, line.y2)}%`,
-                      width: `${Math.max(2, Math.abs(line.x2 - line.x1))}%`,
-                      height: `${Math.max(2, Math.abs(line.y2 - line.y1))}%`,
-                    },
-                  ]}
-                />
-              ))}
-
-              {cadNodes.map((node, index) => (
-                <View
-                  key={`node-${index}`}
-                  style={[
-                    styles.cadNodeDot,
-                    { left: `${node.x}%`, top: `${node.y}%` },
-                    index === 0 && styles.cadFirstNodeDot,
-                  ]}
-                >
-                  <Text style={styles.cadNodeText}>P{index + 1}</Text>
+              {/* Freehand Finger Drawn Strokes Overlay */}
+              {sketchStrokes.map((stroke) => (
+                <View key={stroke.id} style={StyleSheet.absoluteFill} pointerEvents="none">
+                  {stroke.points.map((pt, index) => {
+                    if (index === 0) return null;
+                    const prevPt = stroke.points[index - 1];
+                    return (
+                      <View
+                        key={`sketch-seg-${index}`}
+                        style={[
+                          styles.freehandStrokeLine,
+                          {
+                            left: `${Math.min(prevPt.x, pt.x)}%`,
+                            top: `${Math.min(prevPt.y, pt.y)}%`,
+                            width: `${Math.max(1.5, Math.abs(pt.x - prevPt.x))}%`,
+                            height: `${Math.max(1.5, Math.abs(pt.y - prevPt.y))}%`,
+                          },
+                        ]}
+                      />
+                    );
+                  })}
                 </View>
               ))}
-            </TouchableOpacity>
+
+              {/* Current Active Freehand Touch Stroke */}
+              {currentStroke.map((pt, index) => {
+                if (index === 0) return null;
+                const prevPt = currentStroke[index - 1];
+                return (
+                  <View
+                    key={`active-seg-${index}`}
+                    style={[
+                      styles.freehandActiveStrokeLine,
+                      {
+                        left: `${Math.min(prevPt.x, pt.x)}%`,
+                        top: `${Math.min(prevPt.y, pt.y)}%`,
+                        width: `${Math.max(2, Math.abs(pt.x - prevPt.x))}%`,
+                        height: `${Math.max(2, Math.abs(pt.y - prevPt.y))}%`,
+                      },
+                    ]}
+                  />
+                );
+              })}
+            </View>
 
             <TouchableOpacity
               style={styles.makerConfirmBtn}
               onPress={() => {
                 if (onUpdateFloorPlan) onUpdateFloorPlan(null);
                 setMakerModalVisible(false);
-                Alert.alert('하이브리드 CAD 평면도 완성! 🎉', '수치 입력과 CAD 노드로 완성된 평면도가 성공적으로 반영되었습니다.');
+                Alert.alert('하이브리드 자유 스케치 평면도 완성! 🎉', '손가락 자유 드로잉으로 작성된 평면도가 성공적으로 반영되었습니다.');
               }}
             >
               <Text style={styles.makerConfirmBtnText}>이 평면도로 저장 & 적용하기</Text>
@@ -1484,31 +1503,15 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#1C1C1E',
   },
-  cadWallLine: {
+  freehandStrokeLine: {
+    position: 'absolute',
+    backgroundColor: '#1C1C1E',
+    borderRadius: 2,
+  },
+  freehandActiveStrokeLine: {
     position: 'absolute',
     backgroundColor: '#FF7E82',
     borderRadius: 2,
-  },
-  cadNodeDot: {
-    position: 'absolute',
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#4A90E2',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: -10,
-    marginTop: -10,
-  },
-  cadFirstNodeDot: {
-    backgroundColor: '#2ECC71',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  cadNodeText: {
-    color: '#FFFFFF',
-    fontSize: 8,
-    fontWeight: '800',
   },
   makerConfirmBtn: {
     backgroundColor: '#FF7E82',
