@@ -498,9 +498,11 @@ export default function App() {
     const responsesMap = {};
     if (data) {
       data.forEach(resp => {
-        const key = resp.profiles?.role || resp.profile_id;
-        if (key) {
-          responsesMap[key] = resp.text;
+        if (resp.profile_id) {
+          responsesMap[resp.profile_id] = resp.text;
+        }
+        if (resp.profiles?.role) {
+          responsesMap[resp.profiles.role] = resp.text;
         }
       });
     }
@@ -1064,9 +1066,13 @@ export default function App() {
           });
         if (error) throw error;
 
+        const myId = session?.user?.id || profile?.id;
+        const myRole = profile?.role || currentUser;
+
         const updatedResponses = {
           ...smallTalk.responses,
-          [currentUser]: answerText,
+          ...(myId ? { [myId]: answerText } : {}),
+          ...(myRole ? { [myRole]: answerText } : {}),
         };
         const totalMembers = familyMembersList.length || 4;
         const complete = Object.keys(updatedResponses).length === totalMembers;

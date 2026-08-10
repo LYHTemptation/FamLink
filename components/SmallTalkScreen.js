@@ -57,8 +57,30 @@ export default function SmallTalkScreen({
 
   const { topic, responses, pointsAwarded } = smallTalkState;
 
-  const hasAnswered = responses && responses[currentUser];
-  const answeredCount = responses ? Object.keys(responses).length : 0;
+  const myId = currentUserProfile?.id;
+  const myRole = currentUserProfile?.role || currentUser;
+  const hasAnswered = Boolean(
+    responses && (
+      (myId && responses[myId]) ||
+      (myRole && responses[myRole]) ||
+      responses[currentUser]
+    )
+  );
+
+  // Calculate unique answered count
+  let answeredCount = 0;
+  if (responses) {
+    if (familyMembers && Array.isArray(familyMembers) && familyMembers.length > 0) {
+      answeredCount = familyMembers.filter(m => {
+        const idKey = m.id;
+        const roleK = m.role || m;
+        return (idKey && responses[idKey]) || (roleK && responses[roleK]);
+      }).length;
+    } else {
+      answeredCount = Object.keys(responses).length;
+    }
+  }
+
   const totalCount = familyMembers && Array.isArray(familyMembers) ? familyMembers.length : 4;
   const isMissionComplete = answeredCount === totalCount;
 
@@ -234,7 +256,9 @@ export default function SmallTalkScreen({
             const isDbProfile = typeof item === 'object' && 'role' in item;
             const roleKey = isDbProfile ? item.role : item;
             const memberInfo = getMemberInfo(roleKey);
-            const responseText = responses[roleKey];
+            const responseText = isDbProfile
+              ? (responses && (responses[item.id] || responses[item.role]))
+              : (responses && responses[roleKey]);
             const isAnswered = !!responseText;
 
             const memberName = isDbProfile ? item.name : memberInfo.name;
