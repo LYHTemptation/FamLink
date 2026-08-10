@@ -44,6 +44,11 @@ import {
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BASE_CANVAS_SIZE = SCREEN_WIDTH - 32; // Standard base canvas size in dp
 
+// Architectural Grid Line Positions (Every 5% across canvas)
+const GRID_POSITIONS = [
+  5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95
+];
+
 // Furniture Catalog items for 3D/2D Decoration
 const FURNITURE_CATALOG = [
   { id: 'f1', category: 'living', name: '가죽 패브릭 소파', emoji: '🛋️', cost: 200, desc: '거실의 중심이 되는 안락한 3인용 소파' },
@@ -87,7 +92,7 @@ export default function InteriorScreen({
       y: 5,
       wMeters: 5.2,
       hMeters: 4.5,
-      color: '#FFF8F0',
+      color: 'rgba(255, 248, 240, 0.9)',
       openings: [{ id: 'op1', type: 'door', wall: 'bottom', offset: 50 }],
     },
     {
@@ -98,7 +103,7 @@ export default function InteriorScreen({
       y: 5,
       wMeters: 3.8,
       hMeters: 4.5,
-      color: '#F0F7FF',
+      color: 'rgba(240, 247, 255, 0.9)',
       openings: [{ id: 'op2', type: 'window', wall: 'top', offset: 40 }],
     },
     {
@@ -109,7 +114,7 @@ export default function InteriorScreen({
       y: 52,
       wMeters: 4.2,
       hMeters: 4.2,
-      color: '#F0FAF7',
+      color: 'rgba(240, 250, 247, 0.9)',
       openings: [],
     },
     {
@@ -120,7 +125,7 @@ export default function InteriorScreen({
       y: 52,
       wMeters: 4.5,
       hMeters: 4.2,
-      color: '#FAF0FA',
+      color: 'rgba(250, 240, 250, 0.9)',
       openings: [{ id: 'op3', type: 'window', wall: 'right', offset: 50 }],
     },
   ]);
@@ -163,12 +168,12 @@ export default function InteriorScreen({
   // Add Magicplan Room Preset
   const handleAddMagicRoom = (type) => {
     const PRESETS = {
-      living: { name: '거실', emoji: '🛋️', wMeters: 5.4, hMeters: 4.6, color: '#FFF8F0' },
-      bedroom: { name: '침실', emoji: '🛏️', wMeters: 3.8, hMeters: 3.6, color: '#F0F7FF' },
-      kitchen: { name: '주방', emoji: '🍳', wMeters: 4.0, hMeters: 3.6, color: '#F0FAF7' },
-      bathroom: { name: '욕실', emoji: '🛁', wMeters: 2.4, hMeters: 2.2, color: '#F5F5F7' },
-      corridor: { name: '현관/복도', emoji: '🚪', wMeters: 2.0, hMeters: 3.5, color: '#FAF7F0' },
-      balcony: { name: '발코니', emoji: '🪴', wMeters: 4.5, hMeters: 1.8, color: '#F0FAF9' },
+      living: { name: '거실', emoji: '🛋️', wMeters: 5.4, hMeters: 4.6, color: 'rgba(255, 248, 240, 0.9)' },
+      bedroom: { name: '침실', emoji: '🛏️', wMeters: 3.8, hMeters: 3.6, color: 'rgba(240, 247, 255, 0.9)' },
+      kitchen: { name: '주방', emoji: '🍳', wMeters: 4.0, hMeters: 3.6, color: 'rgba(240, 250, 247, 0.9)' },
+      bathroom: { name: '욕실', emoji: '🛁', wMeters: 2.4, hMeters: 2.2, color: 'rgba(245, 245, 247, 0.9)' },
+      corridor: { name: '현관/복도', emoji: '🚪', wMeters: 2.0, hMeters: 3.5, color: 'rgba(250, 247, 240, 0.9)' },
+      balcony: { name: '발코니', emoji: '🪴', wMeters: 4.5, hMeters: 1.8, color: 'rgba(240, 250, 249, 0.9)' },
     };
 
     const preset = PRESETS[type] || PRESETS.bedroom;
@@ -360,6 +365,33 @@ export default function InteriorScreen({
       },
     ]);
   };
+
+  // High-Visibility Architectural Blueprint Grid Mesh Lines Component
+  const RenderHighContrastGridMesh = () => (
+    <View style={styles.gridMeshContainer} pointerEvents="none">
+      {GRID_POSITIONS.map((p) => {
+        const isMajor = p % 25 === 0;
+        return (
+          <React.Fragment key={`grid-line-${p}`}>
+            <View
+              style={[
+                styles.gridMeshLineH,
+                { top: `${p}%` },
+                isMajor && styles.gridMeshLineMajor,
+              ]}
+            />
+            <View
+              style={[
+                styles.gridMeshLineV,
+                { left: `${p}%` },
+                isMajor && styles.gridMeshLineMajor,
+              ]}
+            />
+          </React.Fragment>
+        );
+      })}
+    </View>
+  );
 
   // Standard Architectural 2D Door & Window Blueprint Symbol Component
   const RenderArchitecturalOpeningSymbol = ({ type, wall, offset }) => {
@@ -710,15 +742,8 @@ export default function InteriorScreen({
               />
             ) : (
               <View style={styles.drawnCanvasWrapper}>
-                {/* Architectural Grid Mesh Lines Overlay */}
-                <View style={styles.gridMeshContainer} pointerEvents="none">
-                  {[10, 20, 30, 40, 50, 60, 70, 80, 90].map((p) => (
-                    <React.Fragment key={`grid-${p}`}>
-                      <View style={[styles.gridMeshLineH, { top: `${p}%` }]} />
-                      <View style={[styles.gridMeshLineV, { left: `${p}%` }]} />
-                    </React.Fragment>
-                  ))}
-                </View>
+                {/* High-Contrast Architectural Grid Mesh Overlay */}
+                <RenderHighContrastGridMesh />
 
                 {/* Render Magicplan Rooms */}
                 {magicRooms.map((r) => (
@@ -809,7 +834,7 @@ export default function InteriorScreen({
               </TouchableOpacity>
             </View>
 
-            {/* Total Area Summary & Feature 2: Workspace Expansion Bar */}
+            {/* Total Area Summary & Workspace Expansion Bar */}
             <View style={styles.magicAreaSummaryBanner}>
               <View style={styles.areaBannerTopRow}>
                 <Text style={styles.magicAreaSummaryText}>
@@ -818,7 +843,7 @@ export default function InteriorScreen({
                 <Text style={styles.canvasScaleText}>캔버스: {canvasScaleMultiplier}x</Text>
               </View>
 
-              {/* Feature 2: Expandable Workspace Control Chips */}
+              {/* Expandable Workspace Control Chips */}
               <View style={styles.workspaceExpandControlRow}>
                 <Text style={styles.expandLabel}>전체 영역 확장:</Text>
                 {[
@@ -922,7 +947,7 @@ export default function InteriorScreen({
               </View>
             )}
 
-            {/* Feature 2: Scrollable Expandable Magicplan Canvas */}
+            {/* Scrollable Expandable Magicplan Canvas with High-Contrast Grid */}
             <ScrollView
               horizontal={true}
               nestedScrollEnabled={true}
@@ -942,15 +967,8 @@ export default function InteriorScreen({
                     },
                   ]}
                 >
-                  {/* Feature 2: Genuine Architectural Grid Mesh Lines Overlay */}
-                  <View style={styles.gridMeshContainer} pointerEvents="none">
-                    {[10, 20, 30, 40, 50, 60, 70, 80, 90].map((p) => (
-                      <React.Fragment key={`editor-grid-${p}`}>
-                        <View style={[styles.gridMeshLineH, { top: `${p}%` }]} />
-                        <View style={[styles.gridMeshLineV, { left: `${p}%` }]} />
-                      </React.Fragment>
-                    ))}
-                  </View>
+                  {/* High-Contrast Architectural Grid Mesh Overlay */}
+                  <RenderHighContrastGridMesh />
 
                   {magicRooms.map((room) => (
                     <MagicRoomComponent
@@ -1255,14 +1273,19 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 1,
-    backgroundColor: '#E5E5EA',
+    backgroundColor: '#CBD5E1',
   },
   gridMeshLineV: {
     position: 'absolute',
     top: 0,
     bottom: 0,
     width: 1,
-    backgroundColor: '#E5E5EA',
+    backgroundColor: '#CBD5E1',
+  },
+  gridMeshLineMajor: {
+    backgroundColor: '#94A3B8',
+    height: 1.5,
+    width: 1.5,
   },
   renderedRoomBox: {
     position: 'absolute',
@@ -1606,10 +1629,10 @@ const styles = StyleSheet.create({
     borderColor: '#D1D1D6',
   },
   magicEditorCanvas: {
-    backgroundColor: '#FAF9F6',
+    backgroundColor: '#F8FAFC',
     borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
+    borderWidth: 1.5,
+    borderColor: '#94A3B8',
     position: 'relative',
     marginBottom: 10,
   },
