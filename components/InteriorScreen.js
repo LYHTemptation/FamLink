@@ -82,7 +82,7 @@ export default function InteriorScreen({
       wMeters: 5.2,
       hMeters: 4.5,
       color: '#FFF8F0',
-      openings: [{ id: 'op1', type: 'door', emoji: '🚪', wall: 'bottom', offset: 50 }],
+      openings: [{ id: 'op1', type: 'door', wall: 'bottom', offset: 50 }],
     },
     {
       id: 'm2',
@@ -93,7 +93,7 @@ export default function InteriorScreen({
       wMeters: 3.8,
       hMeters: 4.5,
       color: '#F0F7FF',
-      openings: [{ id: 'op2', type: 'window', emoji: '🪟', wall: 'top', offset: 40 }],
+      openings: [{ id: 'op2', type: 'window', wall: 'top', offset: 40 }],
     },
     {
       id: 'm3',
@@ -115,11 +115,12 @@ export default function InteriorScreen({
       wMeters: 4.5,
       hMeters: 4.2,
       color: '#FAF0FA',
-      openings: [{ id: 'op3', type: 'window', emoji: '🪟', wall: 'right', offset: 50 }],
+      openings: [{ id: 'op3', type: 'window', wall: 'right', offset: 50 }],
     },
   ]);
 
   const [selectedRoomId, setSelectedRoomId] = useState('m1');
+  const [editingRoomId, setEditingRoomId] = useState('m1');
 
   // Dimension Edit Modal States
   const [dimModalVisible, setDimModalVisible] = useState(false);
@@ -209,7 +210,6 @@ export default function InteriorScreen({
     const newOpening = {
       id: `op-${Date.now()}`,
       type: type,
-      emoji: type === 'door' ? '🚪' : '🪟',
       wall: 'bottom',
       offset: 50,
     };
@@ -219,7 +219,7 @@ export default function InteriorScreen({
         r.id === selectedRoomId ? { ...r, openings: [...r.openings, newOpening] } : r
       )
     );
-    Alert.alert('배치 완료 🎉', `선택한 ${targetRoom.name} 방에 ${type === 'door' ? '문🚪' : '창문🪟'}이 성공적으로 연결되었습니다.`);
+    Alert.alert('배치 완료 🎉', `선택한 ${targetRoom.name} 방에 ${type === 'door' ? '표준 여닫이 문🚪' : '표준 2D 창문🪟'}이 성공적으로 결합되었습니다.`);
   };
 
   // Move Room by Directional Keys
@@ -262,6 +262,7 @@ export default function InteriorScreen({
     if (!targetRoom) return;
 
     setSelectedRoomId(roomId);
+    setEditingRoomId(roomId);
     setEditingWallSide(side);
     setDimInputValue(side === 'width' ? String(targetRoom.wMeters) : String(targetRoom.hMeters));
     setDimModalVisible(true);
@@ -271,13 +272,14 @@ export default function InteriorScreen({
   const handleApplyDimensionChange = () => {
     const num = parseFloat(dimInputValue);
     if (isNaN(num) || num <= 0.5 || num > 20) {
-      Alert.alert('알림', '올바른 치수(0.5m ~ 20.0m)를 입력해주세요.');
+      Alert.alert('알림', '올바른 미터 수치(0.5 ~ 20.0)를 입력해주세요.');
       return;
     }
 
+    const targetId = editingRoomId || selectedRoomId;
     setMagicRooms((prev) =>
       prev.map((r) =>
-        r.id === selectedRoomId
+        r.id === targetId
           ? editingWallSide === 'width'
             ? { ...r, wMeters: num }
             : { ...r, hMeters: num }
@@ -350,6 +352,50 @@ export default function InteriorScreen({
     ]);
   };
 
+  // Standard Architectural 2D Door & Window Blueprint Symbol Component
+  const RenderArchitecturalOpeningSymbol = ({ type, wall, offset }) => {
+    const isHorizontal = wall === 'top' || wall === 'bottom';
+
+    if (type === 'door') {
+      return (
+        <View
+          style={[
+            styles.archOpeningBox,
+            wall === 'bottom' && { bottom: -7, left: `${offset}%` },
+            wall === 'top' && { top: -7, left: `${offset}%` },
+            wall === 'right' && { right: -7, top: `${offset}%` },
+            wall === 'left' && { left: -7, top: `${offset}%` },
+          ]}
+        >
+          {/* Architectural 2D Door Swing Arc Symbol */}
+          <View style={[styles.archDoorSymbolContainer, !isHorizontal && { transform: [{ rotate: '90deg' }] }]}>
+            <View style={styles.archDoorGap} />
+            <View style={styles.archDoorLeafLine} />
+            <View style={styles.archDoorArcQuarter} />
+          </View>
+        </View>
+      );
+    }
+
+    return (
+      <View
+        style={[
+          styles.archOpeningBox,
+          wall === 'bottom' && { bottom: -5, left: `${offset}%` },
+          wall === 'top' && { top: -5, left: `${offset}%` },
+          wall === 'right' && { right: -5, top: `${offset}%` },
+          wall === 'left' && { left: -5, top: `${offset}%` },
+        ]}
+      >
+        {/* Architectural 2D Window Double Glass Pane Symbol */}
+        <View style={[styles.archWindowSymbolContainer, !isHorizontal && { transform: [{ rotate: '90deg' }] }]}>
+          <View style={styles.archWindowPaneLine} />
+          <View style={styles.archWindowPaneLine} />
+        </View>
+      </View>
+    );
+  };
+
   // Magicplan Draggable Room Block Component inside Editor
   const MagicRoomComponent = ({ room }) => {
     const isSelected = selectedRoomId === room.id;
@@ -385,7 +431,6 @@ export default function InteriorScreen({
           const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
           const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
 
-          // If tap without dragging, treat as selection
           if (Math.abs(gestureState.dx) < 3 && Math.abs(gestureState.dy) < 3) {
             setSelectedRoomId(room.id);
             return;
@@ -451,20 +496,14 @@ export default function InteriorScreen({
         <Text style={styles.magicRoomTitle}>{room.emoji} {room.name}</Text>
         <Text style={styles.magicRoomAreaText}>{roomSqMeters} m²</Text>
 
-        {/* Openings (Doors / Windows) attached to room */}
+        {/* Architectural 2D Doors & Windows Symbols */}
         {room.openings.map((op) => (
-          <Text
+          <RenderArchitecturalOpeningSymbol
             key={op.id}
-            style={[
-              styles.magicOpeningSymbol,
-              op.wall === 'bottom' && { bottom: -10, left: `${op.offset}%` },
-              op.wall === 'top' && { top: -10, left: `${op.offset}%` },
-              op.wall === 'right' && { right: -10, top: `${op.offset}%` },
-              op.wall === 'left' && { left: -10, top: `${op.offset}%` },
-            ]}
-          >
-            {op.emoji}
-          </Text>
+            type={op.type}
+            wall={op.wall}
+            offset={op.offset}
+          />
         ))}
       </View>
     );
@@ -623,7 +662,7 @@ export default function InteriorScreen({
               />
             ) : (
               <View style={styles.drawnCanvasWrapper}>
-                {/* Feature 2: Genuine Architectural Grid Mesh Lines Overlay */}
+                {/* Architectural Grid Mesh Lines Overlay */}
                 <View style={styles.gridMeshContainer} pointerEvents="none">
                   {[10, 20, 30, 40, 50, 60, 70, 80, 90].map((p) => (
                     <React.Fragment key={`grid-${p}`}>
@@ -651,20 +690,14 @@ export default function InteriorScreen({
                     <Text style={styles.renderedRoomText}>{r.emoji} {r.name}</Text>
                     <Text style={styles.renderedRoomArea}>{(r.wMeters * r.hMeters).toFixed(1)} m²</Text>
 
-                    {/* Openings */}
+                    {/* Architectural 2D Doors & Windows Symbols */}
                     {r.openings.map((op) => (
-                      <Text
+                      <RenderArchitecturalOpeningSymbol
                         key={op.id}
-                        style={[
-                          styles.renderedOpeningText,
-                          op.wall === 'bottom' && { bottom: -8, left: `${op.offset}%` },
-                          op.wall === 'top' && { top: -8, left: `${op.offset}%` },
-                          op.wall === 'right' && { right: -8, top: `${op.offset}%` },
-                          op.wall === 'left' && { left: -8, top: `${op.offset}%` },
-                        ]}
-                      >
-                        {op.emoji}
-                      </Text>
+                        type={op.type}
+                        wall={op.wall}
+                        offset={op.offset}
+                      />
                     ))}
                   </View>
                 ))}
@@ -678,7 +711,7 @@ export default function InteriorScreen({
           </TouchableOpacity>
 
           <Text style={styles.canvasGuideText}>
-            💡 상단 [Magicplan 스튜디오]에서 벽면 길이(m)와 문/창문을 자유롭게 디자인하세요!
+            💡 상단 [Magicplan 스튜디오]에서 벽면 길이(m)와 표준 2D 건축 문/창문을 배치하세요!
           </Text>
         </View>
 
@@ -733,7 +766,7 @@ export default function InteriorScreen({
               <Text style={styles.magicAreaSummaryText}>
                 총 평형: <Text style={{ fontWeight: '900', color: '#FF7E82' }}>{houseArea.pyeong}평</Text> ({houseArea.sqMeters} m²)
               </Text>
-              <Text style={styles.magicAreaSummarySub}>* 방을 터치하여 벽면 미터 태그(📏)를 누르거나 수치 패널에서 변경하세요</Text>
+              <Text style={styles.magicAreaSummarySub}>* 방의 벽면 미터 태그(📏)를 누르거나 수치 패널에서 변경하세요</Text>
             </View>
 
             {/* Room Add Tool Chips */}
@@ -783,11 +816,11 @@ export default function InteriorScreen({
                   </TouchableOpacity>
 
                   <TouchableOpacity style={styles.openingAddBtn} onPress={() => handleAddOpeningToRoom('door')}>
-                    <Text style={styles.openingAddBtnText}>+ 문 🚪 추가</Text>
+                    <Text style={styles.openingAddBtnText}>+ 표준 2D 문🚪 추가</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity style={styles.openingAddBtn} onPress={() => handleAddOpeningToRoom('window')}>
-                    <Text style={styles.openingAddBtnText}>+ 창문 🪟 추가</Text>
+                    <Text style={styles.openingAddBtnText}>+ 표준 2D 창문🪟 추가</Text>
                   </TouchableOpacity>
                 </View>
 
@@ -812,7 +845,6 @@ export default function InteriorScreen({
 
             {/* MAGICPLAN ARCHITECTURAL GRID CANVAS WITH MESH LINES */}
             <View style={styles.magicEditorCanvas}>
-              {/* Feature 2: Genuine Architectural Grid Mesh Lines */}
               <View style={styles.gridMeshContainer} pointerEvents="none">
                 {[10, 20, 30, 40, 50, 60, 70, 80, 90].map((p) => (
                   <React.Fragment key={`editor-grid-${p}`}>
@@ -841,7 +873,7 @@ export default function InteriorScreen({
         </View>
       </Modal>
 
-      {/* Feature 3: DIMENSION KEYPAD EDIT MODAL */}
+      {/* DIMENSION KEYPAD EDIT MODAL */}
       <Modal
         animationType="fade"
         transparent={true}
@@ -1147,9 +1179,57 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#8E8E93',
   },
-  renderedOpeningText: {
+  archOpeningBox: {
     position: 'absolute',
-    fontSize: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  archDoorSymbolContainer: {
+    width: 24,
+    height: 14,
+    position: 'relative',
+  },
+  archDoorGap: {
+    width: '100%',
+    height: 3,
+    backgroundColor: '#FFFFFF',
+    position: 'absolute',
+    top: 5,
+  },
+  archDoorLeafLine: {
+    width: 2,
+    height: 12,
+    backgroundColor: '#1C1C1E',
+    position: 'absolute',
+    left: 2,
+    top: 1,
+  },
+  archDoorArcQuarter: {
+    width: 12,
+    height: 12,
+    borderTopRightRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#1C1C1E',
+    borderBottomWidth: 0,
+    borderLeftWidth: 0,
+    position: 'absolute',
+    left: 2,
+    top: 1,
+  },
+  archWindowSymbolContainer: {
+    width: 24,
+    height: 8,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#1C1C1E',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingVertical: 1,
+  },
+  archWindowPaneLine: {
+    width: '90%',
+    height: 1,
+    backgroundColor: '#4A90E2',
   },
   furnitureWrapper: {
     position: 'absolute',
@@ -1441,10 +1521,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#8E8E93',
     marginTop: 1,
-  },
-  magicOpeningSymbol: {
-    position: 'absolute',
-    fontSize: 15,
   },
   makerConfirmBtn: {
     backgroundColor: '#FF7E82',
