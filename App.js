@@ -1211,6 +1211,7 @@ export default function App() {
           <SmallTalkScreen
             smallTalkState={smallTalk}
             currentUser={currentUser}
+            currentUserProfile={profile}
             points={points}
             onAddResponse={handleAddResponse}
             onRedeemReward={handleRedeemReward}

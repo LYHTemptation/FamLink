@@ -16,6 +16,7 @@ import { Award, Check, MessageSquare, ShoppingBag, Trophy, Lock, Plus, X, Ticket
 export default function SmallTalkScreen({
   smallTalkState,
   currentUser,
+  currentUserProfile,
   points,
   onAddResponse,
   onRedeemReward,
