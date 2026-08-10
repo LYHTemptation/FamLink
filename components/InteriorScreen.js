@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Home, ShoppingBag, Plus, Trash2, RotateCw, Camera, X, Trophy, Sparkles, Check } from 'lucide-react-native';
+import { Home, ShoppingBag, Plus, Trash2, RotateCw, Camera, X, Trophy, Sparkles, Check, Edit3, Grid, Layers } from 'lucide-react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CANVAS_SIZE = SCREEN_WIDTH - 32; // Square canvas size
@@ -46,8 +46,28 @@ export default function InteriorScreen({
 }) {
   const insets = useSafeAreaInsets();
   const [shopModalVisible, setShopModalVisible] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState('living'); // living, kitchen, bedroom, deco
+  const [makerModalVisible, setMakerModalVisible] = useState(false);
+
+  const [selectedCategory, setSelectedCategory] = useState('living');
   const [selectedFurnitureId, setSelectedFurnitureId] = useState(null);
+
+  // HYBRID MAKER STATES (Method 1: Room Blocks + Method 2: Walls & Doors Drawing)
+  const [makerActiveTab, setMakerActiveTab] = useState('rooms'); // 'rooms', 'walls', 'doors'
+  const [customRooms, setCustomRooms] = useState([
+    { id: 'r1', name: '거실', emoji: '🛋️', x: 5, y: 5, w: 50, h: 45, color: '#FFF5EB' },
+    { id: 'r2', name: '안방', emoji: '🛏️', x: 58, y: 5, w: 37, h: 45, color: '#EBF5FF' },
+    { id: 'r3', name: '주방', emoji: '🍳', x: 5, y: 53, w: 42, h: 42, color: '#EFFFFA' },
+    { id: 'r4', name: '작은방', emoji: '👦', x: 50, y: 53, w: 45, h: 42, color: '#FDF0FF' },
+  ]);
+  const [customWalls, setCustomWalls] = useState([
+    { id: 'w1', x: 55, y: 5, w: 2, h: 45 },
+    { id: 'w2', x: 5, y: 51, w: 90, h: 2 },
+  ]);
+  const [customOpenings, setCustomOpenings] = useState([
+    { id: 'd1', type: 'door', emoji: '🚪', x: 48, y: 22 },
+    { id: 'd2', type: 'window', emoji: '🪟', x: 25, y: 3 },
+  ]);
+  const [selectedMakerElement, setSelectedMakerElement] = useState(null);
 
   // Pick Custom Floor Plan Image from Album
   const pickFloorPlanImage = async () => {
@@ -71,6 +91,69 @@ export default function InteriorScreen({
     }
   };
 
+  // Add Room Block in Maker
+  const handleAddRoomBlock = (type) => {
+    const PRESETS = {
+      living: { name: '거실', emoji: '🛋️', w: 45, h: 40, color: '#FFF5EB' },
+      bedroom: { name: '침실', emoji: '🛏️', w: 35, h: 35, color: '#EBF5FF' },
+      kitchen: { name: '주방', emoji: '🍳', w: 38, h: 35, color: '#EFFFFA' },
+      bathroom: { name: '욕실', emoji: '🛁', w: 25, h: 25, color: '#F5F5F5' },
+      balcony: { name: '발코니', emoji: '🪴', w: 40, h: 20, color: '#F0F9FF' },
+    };
+
+    const preset = PRESETS[type] || PRESETS.bedroom;
+    const newRoom = {
+      id: `room-${Date.now()}`,
+      name: preset.name,
+      emoji: preset.emoji,
+      x: 20,
+      y: 20,
+      w: preset.w,
+      h: preset.h,
+      color: preset.color,
+    };
+
+    setCustomRooms([...customRooms, newRoom]);
+    setSelectedMakerElement({ type: 'room', id: newRoom.id });
+  };
+
+  // Add Wall Divider in Maker
+  const handleAddWallLine = () => {
+    const newWall = {
+      id: `wall-${Date.now()}`,
+      x: 40,
+      y: 20,
+      w: 2,
+      h: 40,
+    };
+    setCustomWalls([...customWalls, newWall]);
+  };
+
+  // Add Door or Window in Maker
+  const handleAddOpening = (type) => {
+    const newOpening = {
+      id: `op-${Date.now()}`,
+      type: type,
+      emoji: type === 'door' ? '🚪' : '🪟',
+      x: 40,
+      y: 40,
+    };
+    setCustomOpenings([...customOpenings, newOpening]);
+  };
+
+  // Delete Maker Element
+  const handleDeleteMakerElement = () => {
+    if (!selectedMakerElement) return;
+    if (selectedMakerElement.type === 'room') {
+      setCustomRooms(customRooms.filter((r) => r.id !== selectedMakerElement.id));
+    } else if (selectedMakerElement.type === 'wall') {
+      setCustomWalls(customWalls.filter((w) => w.id !== selectedMakerElement.id));
+    } else if (selectedMakerElement.type === 'opening') {
+      setCustomOpenings(customOpenings.filter((o) => o.id !== selectedMakerElement.id));
+    }
+    setSelectedMakerElement(null);
+  };
+
   // Buy Furniture Item
   const handleBuyFurniture = (item) => {
     if (points < item.cost) {
@@ -88,14 +171,13 @@ export default function InteriorScreen({
           onPress: () => {
             if (onDeductPoints) onDeductPoints(item.cost);
 
-            // Add new furniture at center of canvas
             const newItem = {
               id: `placed-${Date.now()}`,
               catalogId: item.id,
               name: item.name,
               emoji: item.emoji,
-              x: 42, // percent
-              y: 42, // percent
+              x: 42,
+              y: 42,
               rotation: 0,
             };
 
@@ -146,7 +228,6 @@ export default function InteriorScreen({
           setSelectedFurnitureId(item.id);
         },
         onPanResponderMove: (evt, gestureState) => {
-          // Convert dx, dy to percentage of CANVAS_SIZE
           const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
           const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
 
@@ -185,7 +266,6 @@ export default function InteriorScreen({
       >
         <Text style={styles.furnitureEmoji}>{item.emoji}</Text>
 
-        {/* Selected Controls Overlay */}
         {isSelected && (
           <View style={styles.furnitureControlOverlay}>
             <TouchableOpacity
@@ -244,10 +324,20 @@ export default function InteriorScreen({
         <View style={styles.canvasCard}>
           <View style={styles.canvasHeader}>
             <Text style={styles.canvasTitle}>우리 집 평면도 인테리어</Text>
-            <TouchableOpacity style={styles.changePlanBtn} onPress={pickFloorPlanImage}>
-              <Camera size={14} color="#FF7E82" style={{ marginRight: 4 }} />
-              <Text style={styles.changePlanBtnText}>도면 변경</Text>
-            </TouchableOpacity>
+            <View style={styles.canvasBtnRow}>
+              <TouchableOpacity
+                style={[styles.changePlanBtn, { backgroundColor: '#FFEBEB', marginRight: 6 }]}
+                onPress={() => setMakerModalVisible(true)}
+              >
+                <Edit3 size={13} color="#FF7E82" style={{ marginRight: 4 }} />
+                <Text style={[styles.changePlanBtnText, { color: '#FF7E82' }]}>직접 그리기</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.changePlanBtn} onPress={pickFloorPlanImage}>
+                <Camera size={13} color="#4A90E2" style={{ marginRight: 4 }} />
+                <Text style={styles.changePlanBtnText}>사진 업로드</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Interactive Canvas */}
@@ -256,11 +346,64 @@ export default function InteriorScreen({
             onPress={() => setSelectedFurnitureId(null)}
             style={styles.canvasContainer}
           >
-            <Image
-              source={floorPlanUrl ? { uri: floorPlanUrl } : LOCAL_FLOOR_PLAN_ASSET}
-              style={styles.floorPlanImage}
-              resizeMode="contain"
-            />
+            {/* Render Floor Plan Image OR Render Custom Drawn Hybrid Rooms */}
+            {floorPlanUrl ? (
+              <Image
+                source={{ uri: floorPlanUrl }}
+                style={styles.floorPlanImage}
+                resizeMode="contain"
+              />
+            ) : (
+              <View style={styles.drawnCanvasWrapper}>
+                {/* Render Custom Hybrid Drawn Rooms */}
+                {customRooms.map((r) => (
+                  <View
+                    key={r.id}
+                    style={[
+                      styles.renderedRoomBox,
+                      {
+                        left: `${r.x}%`,
+                        top: `${r.y}%`,
+                        width: `${r.w}%`,
+                        height: `${r.h}%`,
+                        backgroundColor: r.color,
+                      },
+                    ]}
+                  >
+                    <Text style={styles.renderedRoomText}>{r.emoji} {r.name}</Text>
+                  </View>
+                ))}
+
+                {/* Render Custom Drawn Walls */}
+                {customWalls.map((w) => (
+                  <View
+                    key={w.id}
+                    style={[
+                      styles.renderedWallLine,
+                      {
+                        left: `${w.x}%`,
+                        top: `${w.y}%`,
+                        width: `${w.w}%`,
+                        height: `${w.h}%`,
+                      },
+                    ]}
+                  />
+                ))}
+
+                {/* Render Custom Doors/Windows */}
+                {customOpenings.map((op) => (
+                  <Text
+                    key={op.id}
+                    style={[
+                      styles.renderedOpeningText,
+                      { left: `${op.x}%`, top: `${op.y}%` },
+                    ]}
+                  >
+                    {op.emoji}
+                  </Text>
+                ))}
+              </View>
+            )}
 
             {/* Placed Furniture Items Overlay */}
             {(placedFurniture || []).map((item) => (
@@ -299,6 +442,151 @@ export default function InteriorScreen({
           )}
         </View>
       </ScrollView>
+
+      {/* Hybrid Floor Plan Maker Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={makerModalVisible}
+        onRequestClose={() => setMakerModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalViewLarge}>
+            <View style={styles.modalHeaderRow}>
+              <View style={styles.modalHeaderTitleRow}>
+                <Edit3 size={20} color="#FF7E82" style={{ marginRight: 6 }} />
+                <Text style={styles.modalHeader}>하이브리드 평면도 메이커</Text>
+              </View>
+              <TouchableOpacity onPress={() => setMakerModalVisible(false)}>
+                <X size={20} color="#8E8E93" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Maker Tool Tabs */}
+            <View style={styles.categoryTabRow}>
+              <TouchableOpacity
+                style={[styles.categoryTab, makerActiveTab === 'rooms' && styles.categoryTabActive]}
+                onPress={() => setMakerActiveTab('rooms')}
+              >
+                <Text style={[styles.categoryTabText, makerActiveTab === 'rooms' && styles.categoryTabTextActive]}>
+                  1. 룸 블록 🏠
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.categoryTab, makerActiveTab === 'walls' && styles.categoryTabActive]}
+                onPress={() => setMakerActiveTab('walls')}
+              >
+                <Text style={[styles.categoryTabText, makerActiveTab === 'walls' && styles.categoryTabTextActive]}>
+                  2. 벽선/문/창문 🧱
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Tool Bar Controls */}
+            {makerActiveTab === 'rooms' ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.toolBarRow}>
+                <TouchableOpacity style={styles.toolChip} onPress={() => handleAddRoomBlock('living')}>
+                  <Text style={styles.toolChipText}>+ 거실 🛋️</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.toolChip} onPress={() => handleAddRoomBlock('bedroom')}>
+                  <Text style={styles.toolChipText}>+ 침실 🛏️</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.toolChip} onPress={() => handleAddRoomBlock('kitchen')}>
+                  <Text style={styles.toolChipText}>+ 주방 🍳</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.toolChip} onPress={() => handleAddRoomBlock('bathroom')}>
+                  <Text style={styles.toolChipText}>+ 욕실 🛁</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.toolChip} onPress={() => handleAddRoomBlock('balcony')}>
+                  <Text style={styles.toolChipText}>+ 발코니 🪴</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.toolBarRow}>
+                <TouchableOpacity style={styles.toolChip} onPress={handleAddWallLine}>
+                  <Text style={styles.toolChipText}>+ 벽선 🧱</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.toolChip} onPress={() => handleAddOpening('door')}>
+                  <Text style={styles.toolChipText}>+ 문 🚪</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.toolChip} onPress={() => handleAddOpening('window')}>
+                  <Text style={styles.toolChipText}>+ 창문 🪟</Text>
+                </TouchableOpacity>
+                {selectedMakerElement && (
+                  <TouchableOpacity style={[styles.toolChip, styles.toolChipDelete]} onPress={handleDeleteMakerElement}>
+                    <Text style={[styles.toolChipText, { color: '#FFFFFF' }]}>선택 삭제 🗑️</Text>
+                  </TouchableOpacity>
+                )}
+              </ScrollView>
+            )}
+
+            {/* Maker Editor Canvas */}
+            <View style={styles.makerEditorCanvas}>
+              {/* Room Blocks */}
+              {customRooms.map((r) => (
+                <TouchableOpacity
+                  key={r.id}
+                  activeOpacity={0.8}
+                  style={[
+                    styles.makerRoomBlock,
+                    {
+                      left: `${r.x}%`,
+                      top: `${r.y}%`,
+                      width: `${r.w}%`,
+                      height: `${r.h}%`,
+                      backgroundColor: r.color,
+                    },
+                    selectedMakerElement?.id === r.id && styles.makerElementSelected,
+                  ]}
+                  onPress={() => setSelectedMakerElement({ type: 'room', id: r.id })}
+                >
+                  <Text style={styles.makerRoomText}>{r.emoji} {r.name}</Text>
+                </TouchableOpacity>
+              ))}
+
+              {/* Walls */}
+              {customWalls.map((w) => (
+                <TouchableOpacity
+                  key={w.id}
+                  style={[
+                    styles.makerWallLine,
+                    { left: `${w.x}%`, top: `${w.y}%`, width: `${w.w}%`, height: `${w.h}%` },
+                    selectedMakerElement?.id === w.id && styles.makerElementSelected,
+                  ]}
+                  onPress={() => setSelectedMakerElement({ type: 'wall', id: w.id })}
+                />
+              ))}
+
+              {/* Openings */}
+              {customOpenings.map((op) => (
+                <TouchableOpacity
+                  key={op.id}
+                  style={[
+                    styles.makerOpeningText,
+                    { left: `${op.x}%`, top: `${op.y}%` },
+                    selectedMakerElement?.id === op.id && styles.makerElementSelected,
+                  ]}
+                  onPress={() => setSelectedMakerElement({ type: 'opening', id: op.id })}
+                >
+                  <Text style={{ fontSize: 18 }}>{op.emoji}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TouchableOpacity
+              style={styles.makerConfirmBtn}
+              onPress={() => {
+                if (onUpdateFloorPlan) onUpdateFloorPlan(null); // Use custom drawn hybrid layout
+                setMakerModalVisible(false);
+                Alert.alert('하이브리드 평면도 완성! 🎉', '직접 제작한 나만의 우리 집 평면도가 성공적으로 반영되었습니다.');
+              }}
+            >
+              <Text style={styles.makerConfirmBtnText}>이 평면도로 저장 & 적용하기</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Furniture Shop Modal */}
       <Modal
@@ -475,6 +763,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
+  canvasBtnRow: {
+    flexDirection: 'row',
+  },
   canvasTitle: {
     fontSize: 15,
     fontWeight: '800',
@@ -483,15 +774,15 @@ const styles = StyleSheet.create({
   changePlanBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFEBEB',
-    paddingHorizontal: 10,
+    backgroundColor: '#EBF5FF',
+    paddingHorizontal: 9,
     paddingVertical: 5,
     borderRadius: 14,
   },
   changePlanBtnText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#FF7E82',
+    color: '#4A90E2',
   },
   canvasContainer: {
     width: CANVAS_SIZE,
@@ -499,11 +790,40 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     position: 'relative',
-    backgroundColor: '#EAEAEA',
+    backgroundColor: '#FAF9F6',
   },
   floorPlanImage: {
     width: '100%',
     height: '100%',
+  },
+  drawnCanvasWrapper: {
+    width: '100%',
+    height: '100%',
+    position: 'relative',
+    backgroundColor: '#FAF9F6',
+  },
+  renderedRoomBox: {
+    position: 'absolute',
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#1C1C1E',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 4,
+  },
+  renderedRoomText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#1C1C1E',
+  },
+  renderedWallLine: {
+    position: 'absolute',
+    backgroundColor: '#1C1C1E',
+    borderRadius: 2,
+  },
+  renderedOpeningText: {
+    position: 'absolute',
+    fontSize: 16,
   },
   furnitureWrapper: {
     position: 'absolute',
@@ -601,6 +921,13 @@ const styles = StyleSheet.create({
     padding: 20,
     maxHeight: '80%',
   },
+  modalViewLarge: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    maxHeight: '90%',
+  },
   modalHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -615,6 +942,72 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
     color: '#1C1C1E',
+  },
+  toolBarRow: {
+    flexDirection: 'row',
+    marginBottom: 10,
+  },
+  toolChip: {
+    backgroundColor: '#F1F2F4',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 14,
+    marginRight: 8,
+  },
+  toolChipDelete: {
+    backgroundColor: '#E74C3C',
+  },
+  toolChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1C1C1E',
+  },
+  makerEditorCanvas: {
+    width: CANVAS_SIZE,
+    height: CANVAS_SIZE,
+    backgroundColor: '#FAF9F6',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#EBEBEB',
+    position: 'relative',
+    alignSelf: 'center',
+    marginBottom: 14,
+  },
+  makerRoomBlock: {
+    position: 'absolute',
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#1C1C1E',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  makerWallLine: {
+    position: 'absolute',
+    backgroundColor: '#1C1C1E',
+    borderRadius: 2,
+  },
+  makerOpeningText: {
+    position: 'absolute',
+  },
+  makerElementSelected: {
+    borderWidth: 3,
+    borderColor: '#FF7E82',
+  },
+  makerRoomText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#1C1C1E',
+  },
+  makerConfirmBtn: {
+    backgroundColor: '#FF7E82',
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+  },
+  makerConfirmBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
   },
   categoryTabRow: {
     flexDirection: 'row',
