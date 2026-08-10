@@ -120,7 +120,6 @@ export default function InteriorScreen({
   ]);
 
   const [selectedRoomId, setSelectedRoomId] = useState('m1');
-  const [selectedWallSide, setSelectedWallSide] = useState(null);
 
   // Dimension Edit Modal States
   const [dimModalVisible, setDimModalVisible] = useState(false);
@@ -256,11 +255,13 @@ export default function InteriorScreen({
   };
 
   // Open Dimension Input Modal for Selected Room
-  const handleOpenDimModal = (side) => {
-    if (!selectedRoomId) return;
-    const targetRoom = magicRooms.find((r) => r.id === selectedRoomId);
+  const handleOpenDimModal = (side, targetRoomId = null) => {
+    const roomId = targetRoomId || selectedRoomId;
+    if (!roomId) return;
+    const targetRoom = magicRooms.find((r) => r.id === roomId);
     if (!targetRoom) return;
 
+    setSelectedRoomId(roomId);
     setEditingWallSide(side);
     setDimInputValue(side === 'width' ? String(targetRoom.wMeters) : String(targetRoom.hMeters));
     setDimModalVisible(true);
@@ -284,6 +285,7 @@ export default function InteriorScreen({
       )
     );
     setDimModalVisible(false);
+    Alert.alert('치수 변경 완료 📐', `벽면 길이가 ${num.toFixed(1)}m 로 정밀하게 조정되었습니다.`);
   };
 
   // Buy Furniture Item
@@ -365,9 +367,7 @@ export default function InteriorScreen({
     const panResponder = useRef(
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
-        onStartShouldSetPanResponderCapture: () => true,
         onMoveShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponderCapture: () => true,
         onPanResponderGrant: () => {
           setSelectedRoomId(room.id);
           startPos.current = { x: room.x, y: room.y };
@@ -384,6 +384,12 @@ export default function InteriorScreen({
         onPanResponderRelease: (evt, gestureState) => {
           const deltaX = (gestureState.dx / CANVAS_SIZE) * 100;
           const deltaY = (gestureState.dy / CANVAS_SIZE) * 100;
+
+          // If tap without dragging, treat as selection
+          if (Math.abs(gestureState.dx) < 3 && Math.abs(gestureState.dy) < 3) {
+            setSelectedRoomId(room.id);
+            return;
+          }
 
           let finalX = Math.max(0, Math.min(100 - widthPercent, startPos.current.x + deltaX));
           let finalY = Math.max(0, Math.min(100 - heightPercent, startPos.current.y + deltaY));
@@ -423,20 +429,22 @@ export default function InteriorScreen({
           isSelected && styles.magicRoomBoxSelected,
         ]}
       >
-        {/* Magicplan Top Wall Meter Tag */}
+        {/* Magicplan Top Wall Meter Tag (Interactive Button) */}
         <TouchableOpacity
           style={styles.magicWallTagTop}
-          onPress={() => handleOpenDimModal('width')}
+          activeOpacity={0.7}
+          onPress={() => handleOpenDimModal('width', room.id)}
         >
-          <Text style={styles.magicWallTagText}>{room.wMeters.toFixed(1)}m</Text>
+          <Text style={styles.magicWallTagText}>📏 {room.wMeters.toFixed(1)}m</Text>
         </TouchableOpacity>
 
-        {/* Magicplan Left Wall Meter Tag */}
+        {/* Magicplan Left Wall Meter Tag (Interactive Button) */}
         <TouchableOpacity
           style={styles.magicWallTagLeft}
-          onPress={() => handleOpenDimModal('height')}
+          activeOpacity={0.7}
+          onPress={() => handleOpenDimModal('height', room.id)}
         >
-          <Text style={styles.magicWallTagText}>{room.hMeters.toFixed(1)}m</Text>
+          <Text style={styles.magicWallTagText}>📏 {room.hMeters.toFixed(1)}m</Text>
         </TouchableOpacity>
 
         {/* Room Title & Square Meters Area */}
@@ -475,9 +483,7 @@ export default function InteriorScreen({
     const panResponder = useRef(
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
-        onStartShouldSetPanResponderCapture: () => true,
         onMoveShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponderCapture: () => true,
         onPanResponderGrant: () => {
           setSelectedFurnitureId(item.id);
           startPos.current = { x: item.x, y: item.y };
@@ -617,8 +623,15 @@ export default function InteriorScreen({
               />
             ) : (
               <View style={styles.drawnCanvasWrapper}>
-                {/* Grid Lines Overlay */}
-                <View style={styles.gridOverlayBackground} />
+                {/* Feature 2: Genuine Architectural Grid Mesh Lines Overlay */}
+                <View style={styles.gridMeshContainer} pointerEvents="none">
+                  {[10, 20, 30, 40, 50, 60, 70, 80, 90].map((p) => (
+                    <React.Fragment key={`grid-${p}`}>
+                      <View style={[styles.gridMeshLineH, { top: `${p}%` }]} />
+                      <View style={[styles.gridMeshLineV, { left: `${p}%` }]} />
+                    </React.Fragment>
+                  ))}
+                </View>
 
                 {/* Render Magicplan Rooms */}
                 {magicRooms.map((r) => (
@@ -720,7 +733,7 @@ export default function InteriorScreen({
               <Text style={styles.magicAreaSummaryText}>
                 총 평형: <Text style={{ fontWeight: '900', color: '#FF7E82' }}>{houseArea.pyeong}평</Text> ({houseArea.sqMeters} m²)
               </Text>
-              <Text style={styles.magicAreaSummarySub}>* 방 조각을 누르고 수치를 설정하여 실시간 도면을 완성하세요</Text>
+              <Text style={styles.magicAreaSummarySub}>* 방을 터치하여 벽면 미터 태그(📏)를 누르거나 수치 패널에서 변경하세요</Text>
             </View>
 
             {/* Room Add Tool Chips */}
@@ -761,12 +774,12 @@ export default function InteriorScreen({
                 <View style={styles.roomActionBtnGroup}>
                   <TouchableOpacity style={styles.dimActionBtn} onPress={() => handleOpenDimModal('width')}>
                     <Sliders size={12} color="#1C1C1E" style={{ marginRight: 4 }} />
-                    <Text style={styles.dimActionBtnText}>가로 벽 길이 변경</Text>
+                    <Text style={styles.dimActionBtnText}>📐 가로 치수 입력</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity style={styles.dimActionBtn} onPress={() => handleOpenDimModal('height')}>
                     <Sliders size={12} color="#1C1C1E" style={{ marginRight: 4 }} />
-                    <Text style={styles.dimActionBtnText}>세로 벽 길이 변경</Text>
+                    <Text style={styles.dimActionBtnText}>📐 세로 치수 입력</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity style={styles.openingAddBtn} onPress={() => handleAddOpeningToRoom('door')}>
@@ -797,9 +810,17 @@ export default function InteriorScreen({
               </View>
             )}
 
-            {/* MAGICPLAN ARCHITECTURAL GRID CANVAS */}
+            {/* MAGICPLAN ARCHITECTURAL GRID CANVAS WITH MESH LINES */}
             <View style={styles.magicEditorCanvas}>
-              <View style={styles.gridOverlayBackground} />
+              {/* Feature 2: Genuine Architectural Grid Mesh Lines */}
+              <View style={styles.gridMeshContainer} pointerEvents="none">
+                {[10, 20, 30, 40, 50, 60, 70, 80, 90].map((p) => (
+                  <React.Fragment key={`editor-grid-${p}`}>
+                    <View style={[styles.gridMeshLineH, { top: `${p}%` }]} />
+                    <View style={[styles.gridMeshLineV, { left: `${p}%` }]} />
+                  </React.Fragment>
+                ))}
+              </View>
 
               {magicRooms.map((room) => (
                 <MagicRoomComponent key={room.id} room={room} />
@@ -820,7 +841,7 @@ export default function InteriorScreen({
         </View>
       </Modal>
 
-      {/* DIMENSION KEYPAD EDIT MODAL */}
+      {/* Feature 3: DIMENSION KEYPAD EDIT MODAL */}
       <Modal
         animationType="fade"
         transparent={true}
@@ -1090,11 +1111,22 @@ const styles = StyleSheet.create({
     position: 'relative',
     backgroundColor: '#FAF9F6',
   },
-  gridOverlayBackground: {
+  gridMeshContainer: {
     ...StyleSheet.absoluteFillObject,
-    opacity: 0.15,
-    borderWidth: 1,
-    borderColor: '#D1D1D6',
+  },
+  gridMeshLineH: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: '#E5E5EA',
+  },
+  gridMeshLineV: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 1,
+    backgroundColor: '#E5E5EA',
   },
   renderedRoomBox: {
     position: 'absolute',
@@ -1380,21 +1412,23 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -11,
     backgroundColor: '#1C1C1E',
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    zIndex: 10,
   },
   magicWallTagLeft: {
     position: 'absolute',
-    left: -19,
+    left: -22,
     backgroundColor: '#1C1C1E',
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 8,
+    zIndex: 10,
   },
   magicWallTagText: {
     color: '#FFFFFF',
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '800',
   },
   magicRoomTitle: {
