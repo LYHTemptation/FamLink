@@ -151,9 +151,35 @@ BEGIN
   BEGIN alter publication supabase_realtime add table rewards; EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN alter publication supabase_realtime add table user_coupons; EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN alter publication supabase_realtime add table shopping_items; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN alter publication supabase_realtime add table placed_furniture; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN alter publication supabase_realtime add table house_layouts; EXCEPTION WHEN OTHERS THEN NULL; END;
 END $$;
 
 -- 13. Supabase Storage 사진 업로드용 버킷 (family-photos) 생성
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('family-photos', 'family-photos', true)
 ON CONFLICT (id) DO NOTHING;
+
+-- 14. 가족 인테리어 및 가구 배치 테이블 (placed_furniture)
+CREATE TABLE IF NOT EXISTS placed_furniture (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id UUID REFERENCES families(id) ON DELETE CASCADE NOT NULL,
+  catalog_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  emoji TEXT NOT NULL,
+  x DOUBLE PRECISION DEFAULT 40.0 NOT NULL,
+  y DOUBLE PRECISION DEFAULT 40.0 NOT NULL,
+  rotation INTEGER DEFAULT 0 NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 15. 가족 평면도 도면 테이블 (house_layouts)
+CREATE TABLE IF NOT EXISTS house_layouts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id UUID REFERENCES families(id) ON DELETE CASCADE NOT NULL,
+  image_url TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE placed_furniture DISABLE ROW LEVEL SECURITY;
+ALTER TABLE house_layouts DISABLE ROW LEVEL SECURITY;

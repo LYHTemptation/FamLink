@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { MessageSquare, Calendar, Award, Users, Trophy, LogOut, ShoppingCart, Image as ImageIcon } from 'lucide-react-native';
+import { MessageSquare, Calendar, Award, Users, Trophy, LogOut, ShoppingCart, Image as ImageIcon, Home } from 'lucide-react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 // Import Screens & Libs
@@ -24,6 +24,7 @@ import SmallTalkScreen from './components/SmallTalkScreen';
 import FamilyScreen from './components/FamilyScreen';
 import ShoppingListScreen from './components/ShoppingListScreen';
 import PhotoAlbumScreen from './components/PhotoAlbumScreen';
+import InteriorScreen from './components/InteriorScreen';
 import AuthScreen from './screens/AuthScreen';
 import { supabase, isSupabaseReady } from './lib/supabase';
 import { getTopicForToday } from './utils/topics';
@@ -137,6 +138,8 @@ export default function App() {
   const [userCoupons, setUserCoupons] = useState([]);
   const [shoppingItems, setShoppingItems] = useState([]);
   const [customRooms, setCustomRooms] = useState([]);
+  const [placedFurniture, setPlacedFurniture] = useState([]);
+  const [floorPlanUrl, setFloorPlanUrl] = useState(null);
 
   const [smallTalk, setSmallTalk] = useState({
     topic: getTopicForToday(),
@@ -391,8 +394,41 @@ export default function App() {
       fetchRealRewards(familyId),
       fetchRealUserCoupons(familyId),
       fetchRealShoppingItems(familyId),
+      fetchRealPlacedFurniture(familyId),
+      fetchRealFloorPlan(familyId),
     ]);
     setAppLoading(false);
+  };
+
+  const fetchRealPlacedFurniture = async (familyId) => {
+    const { data } = await supabase
+      .from('placed_furniture')
+      .select('*')
+      .eq('family_id', familyId);
+    if (data) {
+      const formatted = data.map(f => ({
+        id: f.id,
+        catalogId: f.catalog_id,
+        name: f.name,
+        emoji: f.emoji,
+        x: f.x,
+        y: f.y,
+        rotation: f.rotation,
+      }));
+      setPlacedFurniture(formatted);
+    }
+  };
+
+  const fetchRealFloorPlan = async (familyId) => {
+    const { data } = await supabase
+      .from('house_layouts')
+      .select('image_url')
+      .eq('family_id', familyId)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    if (data && data.length > 0) {
+      setFloorPlanUrl(data[0].image_url);
+    }
   };
 
   const fetchRealProfiles = async (familyId) => {
@@ -1149,6 +1185,43 @@ export default function App() {
     }
   };
 
+  const handleUpdatePlacedFurniture = async (updatedList) => {
+    setPlacedFurniture(updatedList);
+    if (isSupabaseReady && profile?.family_id) {
+      try {
+        await supabase.from('placed_furniture').delete().eq('family_id', profile.family_id);
+        if (updatedList.length > 0) {
+          const insertData = updatedList.map(item => ({
+            family_id: profile.family_id,
+            catalog_id: item.catalogId || item.id,
+            name: item.name,
+            emoji: item.emoji,
+            x: item.x,
+            y: item.y,
+            rotation: item.rotation,
+          }));
+          await supabase.from('placed_furniture').insert(insertData);
+        }
+      } catch (e) {
+        console.log('Error updating placed furniture:', e);
+      }
+    }
+  };
+
+  const handleUpdateFloorPlan = async (newUrl) => {
+    setFloorPlanUrl(newUrl);
+    if (isSupabaseReady && profile?.family_id) {
+      try {
+        await supabase.from('house_layouts').insert({
+          family_id: profile.family_id,
+          image_url: newUrl,
+        });
+      } catch (e) {
+        console.log('Error updating floor plan URL:', e);
+      }
+    }
+  };
+
   const handleResetData = () => {
     Alert.alert(
       '데이터 초기화',
@@ -1236,8 +1309,19 @@ export default function App() {
       case 'album':
         return (
           <PhotoAlbumScreen
-            messages={messages}
+            currentUser={currentUser}
             familyMembers={familyMembersList}
+          />
+        );
+      case 'interior':
+        return (
+          <InteriorScreen
+            points={points}
+            onDeductPoints={(cost) => handleUpdatePoints(Math.max(0, points - cost))}
+            placedFurniture={placedFurniture}
+            onUpdatePlacedFurniture={handleUpdatePlacedFurniture}
+            floorPlanUrl={floorPlanUrl}
+            onUpdateFloorPlan={handleUpdateFloorPlan}
           />
         );
       case 'family':
@@ -1370,6 +1454,14 @@ export default function App() {
             >
               <ImageIcon size={19} color={currentScreen === 'album' ? '#FF7E82' : '#8E8E93'} />
               <Text style={[styles.tabLabel, currentScreen === 'album' && styles.tabLabelActive]}>앨범</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.tabItem, currentScreen === 'interior' && styles.tabItemActive]}
+              onPress={() => setCurrentScreen('interior')}
+            >
+              <Home size={19} color={currentScreen === 'interior' ? '#FF7E82' : '#8E8E93'} />
+              <Text style={[styles.tabLabel, currentScreen === 'interior' && styles.tabLabelActive]}>인테리어</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
