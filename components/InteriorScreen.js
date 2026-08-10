@@ -33,8 +33,8 @@ const FURNITURE_CATALOG = [
   { id: 'f10', category: 'deco', name: '플레이스테이션 5 콘솔', emoji: '🎮', cost: 280, desc: '가족게임 대전을 위한 최신 게임기' },
 ];
 
-// Default floor plan template (2D layout)
-const DEFAULT_FLOOR_PLAN = 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=800&q=80';
+// Default 2D floor plan blueprint asset
+const LOCAL_FLOOR_PLAN_ASSET = require('../assets/floor_plan.jpg');
 
 export default function InteriorScreen({
   points,
@@ -257,9 +257,9 @@ export default function InteriorScreen({
             style={styles.canvasContainer}
           >
             <Image
-              source={{ uri: floorPlanUrl || DEFAULT_FLOOR_PLAN }}
+              source={floorPlanUrl ? { uri: floorPlanUrl } : LOCAL_FLOOR_PLAN_ASSET}
               style={styles.floorPlanImage}
-              resizeMode="cover"
+              resizeMode="contain"
             />
 
             {/* Placed Furniture Items Overlay */}
