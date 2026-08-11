@@ -183,3 +183,29 @@ CREATE TABLE IF NOT EXISTS house_layouts (
 
 ALTER TABLE placed_furniture DISABLE ROW LEVEL SECURITY;
 ALTER TABLE house_layouts DISABLE ROW LEVEL SECURITY;
+
+-- 16. 반려몽 캐릭터 테이블 (petmong_characters)
+CREATE TABLE IF NOT EXISTS petmong_characters (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  family_id UUID REFERENCES families(id) ON DELETE CASCADE NOT NULL,
+  name TEXT NOT NULL,
+  emoji TEXT,
+  image_url TEXT,
+  personality TEXT NOT NULL,
+  level INTEGER DEFAULT 1 NOT NULL,
+  exp INTEGER DEFAULT 0 NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE petmong_characters DISABLE ROW LEVEL SECURITY;
+
+-- 17. 반려몽 활동 및 상호작용 기록 (petmong_activities)
+CREATE TABLE IF NOT EXISTS petmong_activities (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id UUID REFERENCES families(id) ON DELETE CASCADE NOT NULL,
+  actor_id UUID REFERENCES petmong_characters(id) ON DELETE CASCADE NOT NULL,
+  target_id UUID REFERENCES petmong_characters(id) ON DELETE CASCADE,
+  action_type TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE petmong_activities DISABLE ROW LEVEL SECURITY;

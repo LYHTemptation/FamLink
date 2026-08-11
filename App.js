@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { MessageSquare, Calendar, Award, Users, Trophy, LogOut, ShoppingCart, Image as ImageIcon, Home } from 'lucide-react-native';
+import { MessageSquare, Calendar, Award, Users, Trophy, LogOut, ShoppingCart, Image as ImageIcon, Heart } from 'lucide-react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 // Import Screens & Libs
@@ -140,6 +140,7 @@ export default function App() {
   const [customRooms, setCustomRooms] = useState([]);
   const [placedFurniture, setPlacedFurniture] = useState([]);
   const [floorPlanUrl, setFloorPlanUrl] = useState(null);
+  const [petmongCharacters, setPetmongCharacters] = useState([]);
 
   const [smallTalk, setSmallTalk] = useState({
     topic: getTopicForToday(),
@@ -396,6 +397,7 @@ export default function App() {
       fetchRealShoppingItems(familyId),
       fetchRealPlacedFurniture(familyId),
       fetchRealFloorPlan(familyId),
+      fetchRealPetmongCharacters(familyId),
     ]);
     setAppLoading(false);
   };
@@ -428,6 +430,16 @@ export default function App() {
       .limit(1);
     if (data && data.length > 0) {
       setFloorPlanUrl(data[0].image_url);
+    }
+  };
+
+  const fetchRealPetmongCharacters = async (familyId) => {
+    const { data } = await supabase
+      .from('petmong_characters')
+      .select('*')
+      .eq('family_id', familyId);
+    if (data) {
+      setPetmongCharacters(data);
     }
   };
 
@@ -1322,6 +1334,11 @@ export default function App() {
             onUpdatePlacedFurniture={handleUpdatePlacedFurniture}
             floorPlanUrl={floorPlanUrl}
             onUpdateFloorPlan={handleUpdateFloorPlan}
+            currentUser={currentUser}
+            currentUserProfile={profile}
+            familyId={profile.family_id}
+            petmongCharacters={petmongCharacters}
+            setPetmongCharacters={setPetmongCharacters}
           />
         );
       case 'family':
@@ -1460,8 +1477,8 @@ export default function App() {
               style={[styles.tabItem, currentScreen === 'interior' && styles.tabItemActive]}
               onPress={() => setCurrentScreen('interior')}
             >
-              <Home size={19} color={currentScreen === 'interior' ? '#FF7E82' : '#8E8E93'} />
-              <Text style={[styles.tabLabel, currentScreen === 'interior' && styles.tabLabelActive]}>인테리어</Text>
+              <Heart size={19} color={currentScreen === 'interior' ? '#FF7E82' : '#8E8E93'} />
+              <Text style={[styles.tabLabel, currentScreen === 'interior' && styles.tabLabelActive]}>반려몽</Text>
             </TouchableOpacity>
 
             <TouchableOpacity

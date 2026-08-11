@@ -3,152 +3,209 @@ import {
   StyleSheet,
   Text,
   View,
-  Image,
   TouchableOpacity,
   ScrollView,
-  TextInput,
   Modal,
   Alert,
   PanResponder,
   Dimensions,
+  Animated,
+  TextInput,
   Platform,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
+import { supabase } from '../lib/supabase';
 import {
-  Home,
   ShoppingBag,
-  Plus,
   Trash2,
   RotateCw,
-  Camera,
   X,
   Trophy,
   Sparkles,
-  Check,
-  Edit3,
-  Grid,
-  Layers,
-  ArrowUp,
-  ArrowDown,
-  ArrowLeft,
-  ArrowRight,
-  Wand2,
-  Maximize2,
-  Minimize2,
-  Sliders,
-  Move,
-  Scaling,
+  Heart,
+  Gift,
+  Smile,
+  List,
+  ChevronRight,
+  Camera,
+  MessageCircle,
+  Plus,
 } from 'lucide-react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const BASE_CANVAS_SIZE = SCREEN_WIDTH - 32; // Standard base canvas size in dp
+const BASE_CANVAS_SIZE = SCREEN_WIDTH - 32;
 
-// Architectural Grid Line Positions (Every 5% across canvas)
-const GRID_POSITIONS = [
-  5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95
-];
-
-// Furniture Catalog items for 3D/2D Decoration
+// Cute Room Furniture Catalog (FamLink Palette Style)
 const FURNITURE_CATALOG = [
-  { id: 'f1', category: 'living', name: '가죽 패브릭 소파', emoji: '🛋️', cost: 200, desc: '거실의 중심이 되는 안락한 3인용 소파' },
-  { id: 'f2', category: 'living', name: '85인치 대형 스마트 TV', emoji: '📺', cost: 300, desc: '온 가족이 함께 영화를 감상하는 스마트 TV' },
-  { id: 'f3', category: 'living', name: '거실 공기청정기', emoji: '🌀', cost: 150, desc: '깨끗한 공기를 책임지는 살균 청정기' },
-  { id: 'f4', category: 'kitchen', name: '6인용 대리석 식탁', emoji: '🍽️', cost: 220, desc: '다 함께 식사를 즐길 수 있는 식탁' },
-  { id: 'f5', category: 'kitchen', name: '비스포크 대형 냉장고', emoji: '🧊', cost: 350, desc: '맛있는 음식으로 가득 채울 대형 냉장고' },
-  { id: 'f6', category: 'bedroom', name: '호텔식 퀸사이즈 침대', emoji: '🛏️', cost: 250, desc: '꿀잠을 보장하는 안락한 침대' },
-  { id: 'f7', category: 'bedroom', name: '원목 스탠드 무드등', emoji: '💡', cost: 80, desc: '은은한 분위기를 만들어주는 무드 조명' },
-  { id: 'f8', category: 'deco', name: '대형 아레카야자 화분', emoji: '🪴', cost: 90, desc: '집안 분위기를 화사하게 만들어주는 식물' },
-  { id: 'f9', category: 'deco', name: '가족 귀요미 반려견 집', emoji: '🏠', cost: 120, desc: '귀여운 반려동물을 위한 아늑한 보금자리' },
-  { id: 'f10', category: 'deco', name: '플레이스테이션 5 콘솔', emoji: '🎮', cost: 280, desc: '가족게임 대전을 위한 최신 게임기' },
+  { id: 'f1', category: 'living', name: '폭신폭신 구름 러그', emoji: '☁️', cost: 100, desc: '발이 편안해지는 부드러운 구름 모양 러그' },
+  { id: 'f2', category: 'living', name: '아늑한 미니 소파', emoji: '🛋️', cost: 200, desc: '반려몽이 낮잠 자기 좋은 작은 소파' },
+  { id: 'f3', category: 'living', name: '레트로 TV', emoji: '📺', cost: 250, desc: '재미있는 영상이 나오는 귀여운 TV' },
+  { id: 'f4', category: 'deco', name: '따뜻한 별빛 무드등', emoji: '🌟', cost: 120, desc: '방 안을 은은하게 비춰주는 조명' },
+  { id: 'f5', category: 'deco', name: '초록초록 화분', emoji: '🪴', cost: 80, desc: '상쾌한 기분을 주는 작은 식물' },
+  { id: 'f6', category: 'deco', name: '장난감 곰인형', emoji: '🧸', cost: 150, desc: '반려몽의 영원한 단짝 친구' },
+  { id: 'f7', category: 'living', name: '맛있는 간식 바구니', emoji: '🧺', cost: 90, desc: '언제든 꺼내 먹을 수 있는 간식들' },
+  { id: 'f8', category: 'deco', name: '미니 오디오', emoji: '📻', cost: 180, desc: '신나는 음악이 흘러나오는 오디오' },
 ];
+
+const EMOJI_OPTIONS = ['🐶', '🐱', '🐰', '🐼', '🦊', '🐻', '🐹', '🐥'];
+const PERSONALITY_OPTIONS = ['다정한', '장난꾸러기', '잠꾸러기', '애교쟁이', '호기심많은'];
+
+// Draggable Item Component (FamLink Unified Design)
+const DraggableFurniture = React.memo(({ item, isSelected, canvasWidth, onSelect, onMove, onRotate, onDelete }) => {
+  const [pos, setPos] = useState({ x: item.x, y: item.y });
+  const startPos = useRef({ x: item.x, y: item.y });
+
+  useEffect(() => {
+    setPos({ x: item.x, y: item.y });
+  }, [item.x, item.y]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        onSelect(item.id);
+        startPos.current = { x: item.x, y: item.y };
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        const deltaX = (gestureState.dx / canvasWidth) * 100;
+        const deltaY = (gestureState.dy / canvasWidth) * 100;
+
+        const newX = Math.max(0, Math.min(84, startPos.current.x + deltaX));
+        const newY = Math.max(0, Math.min(84, startPos.current.y + deltaY));
+
+        setPos({ x: newX, y: newY });
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        if (Math.abs(gestureState.dx) < 3 && Math.abs(gestureState.dy) < 3) {
+          onSelect(item.id);
+          return;
+        }
+
+        const deltaX = (gestureState.dx / canvasWidth) * 100;
+        const deltaY = (gestureState.dy / canvasWidth) * 100;
+
+        const finalX = Math.max(0, Math.min(84, startPos.current.x + deltaX));
+        const finalY = Math.max(0, Math.min(84, startPos.current.y + deltaY));
+
+        onMove(item.id, finalX, finalY);
+      },
+    })
+  ).current;
+
+  return (
+    <View
+      {...panResponder.panHandlers}
+      style={[
+        styles.furnitureWrapper,
+        {
+          left: `${pos.x}%`,
+          top: `${pos.y}%`,
+          transform: [{ rotate: `${item.rotation}deg` }],
+        },
+        isSelected && styles.furnitureWrapperSelected,
+      ]}
+    >
+      <Text style={styles.furnitureEmoji}>{item.emoji}</Text>
+
+      {isSelected && (
+        <View style={styles.furnitureControlOverlay}>
+          <TouchableOpacity style={styles.controlBtn} onPress={() => onRotate(item)}>
+            <RotateCw size={12} color="#FFFFFF" />
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.controlBtn, styles.controlBtnDelete]} onPress={() => onDelete(item)}>
+            <Trash2 size={12} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+});
 
 export default function InteriorScreen({
   points,
   onDeductPoints,
   placedFurniture,
   onUpdatePlacedFurniture,
-  floorPlanUrl,
-  onUpdateFloorPlan,
+  currentUser,
+  currentUserProfile,
+  familyId,
+  petmongCharacters = [],
+  setPetmongCharacters,
 }) {
   const insets = useSafeAreaInsets();
+  
+  // UI States
   const [shopModalVisible, setShopModalVisible] = useState(false);
-  const [magicplanModalVisible, setMagicplanModalVisible] = useState(false);
-
   const [selectedCategory, setSelectedCategory] = useState('living');
   const [selectedFurnitureId, setSelectedFurnitureId] = useState(null);
-
-  // DYNAMIC CANVAS WORKSPACE SIZE MULTIPLIER (1.0x, 1.5x, 2.0x, 2.5x)
-  const [canvasScaleMultiplier, setCanvasScaleMultiplier] = useState(1.0);
-  const activeCanvasSize = BASE_CANVAS_SIZE * canvasScaleMultiplier;
-
-  // MAGICPLAN ARCHITECTURAL FLOOR PLAN ENGINE STATES
-  const [magicRooms, setMagicRooms] = useState([
-    {
-      id: 'm1',
-      name: '거실',
-      emoji: '🛋️',
-      x: 5,
-      y: 5,
-      wMeters: 5.2,
-      hMeters: 4.5,
-      color: 'rgba(255, 248, 240, 0.9)',
-      openings: [{ id: 'op1', type: 'door', wall: 'bottom', offset: 50 }],
-    },
-    {
-      id: 'm2',
-      name: '안방',
-      emoji: '🛏️',
-      x: 58,
-      y: 5,
-      wMeters: 3.8,
-      hMeters: 4.5,
-      color: 'rgba(240, 247, 255, 0.9)',
-      openings: [{ id: 'op2', type: 'window', wall: 'top', offset: 40 }],
-    },
-    {
-      id: 'm3',
-      name: '주방',
-      emoji: '🍳',
-      x: 5,
-      y: 52,
-      wMeters: 4.2,
-      hMeters: 4.2,
-      color: 'rgba(240, 250, 247, 0.9)',
-      openings: [],
-    },
-    {
-      id: 'm4',
-      name: '작은방',
-      emoji: '👦',
-      x: 50,
-      y: 52,
-      wMeters: 4.5,
-      hMeters: 4.2,
-      color: 'rgba(250, 240, 250, 0.9)',
-      openings: [{ id: 'op3', type: 'window', wall: 'right', offset: 50 }],
-    },
+  
+  // Petmong States (Linked with Supabase)
+  const [myCharacter, setMyCharacter] = useState(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [familyCharacters, setFamilyCharacters] = useState([]);
+  const [activities, setActivities] = useState([
+    { id: 'act1', text: '엄마 냥이님이 아빠 멍뭉이님에게 다정하게 인사했습니다! 👋', time: '10분 전' },
+    { id: 'act2', text: '동생 삐약이님이 새 러그 위에서 낮잠을 잤습니다. 💤', time: '1시간 전' },
   ]);
+  
+  // Creation Modal State
+  const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newEmoji, setNewEmoji] = useState('🐶');
+  const [newPersonality, setNewPersonality] = useState('다정한');
 
-  const [selectedRoomId, setSelectedRoomId] = useState('m1');
-  const [editingRoomId, setEditingRoomId] = useState('m1');
+  // Interaction Modal State
+  const [interactionModalVisible, setInteractionModalVisible] = useState(false);
+  const [selectedTargetChar, setSelectedTargetChar] = useState(null);
+  
+  // Activity Log Modal State
+  const [activityLogVisible, setActivityLogVisible] = useState(false);
 
-  // Dimension Edit Modal States
-  const [dimModalVisible, setDimModalVisible] = useState(false);
-  const [editingWallSide, setEditingWallSide] = useState('width');
-  const [dimInputValue, setDimInputValue] = useState('');
+  // Main Character Float Animation
+  const floatAnim = useRef(new Animated.Value(0)).current;
 
-  // Total House Area Calculations
-  const calculateTotalArea = () => {
-    const totalSqMeters = magicRooms.reduce((acc, r) => acc + r.wMeters * r.hMeters, 0);
-    const totalPyeong = totalSqMeters / 3.30578;
-    return { sqMeters: totalSqMeters.toFixed(1), pyeong: totalPyeong.toFixed(1) };
-  };
+  useEffect(() => {
+    if (familyId && currentUserProfile?.id) {
+      const mine = petmongCharacters.find(c => c.user_id === currentUserProfile.id);
+      const others = petmongCharacters.filter(c => c.user_id !== currentUserProfile.id).map((c, idx) => ({
+        ...c,
+        x: 15 + (idx * 22) % 60,
+        y: 25 + (idx * 18) % 40
+      }));
+      
+      if (mine) {
+        setMyCharacter(mine);
+        setCreateModalVisible(false);
+      } else {
+        setCreateModalVisible(true);
+      }
+      
+      setFamilyCharacters(others);
+    }
+  }, [familyId, currentUserProfile, petmongCharacters]);
 
-  // Pick Image Floor Plan Backup
-  const pickFloorPlanImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim, { toValue: -8, duration: 1500, useNativeDriver: true }),
+        Animated.timing(floatAnim, { toValue: 0, duration: 1500, useNativeDriver: true }),
+      ])
+    ).start();
+  }, [floatAnim]);
+
+  // Handle AI Character Creation
+  const handlePickImageAndCreate = async () => {
+    if (!newName.trim()) {
+      Alert.alert('알림', '반려몽의 이름을 지어주세요!');
+      return;
+    }
+
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (permissionResult.granted === false) {
       Alert.alert('권한 필요', '사진첩 접근 권한이 필요합니다.');
       return;
     }
@@ -156,155 +213,87 @@ export default function InteriorScreen({
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
-      quality: 0.8,
+      aspect: [1, 1],
+      quality: 0.5,
+      base64: true,
     });
 
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      const newUri = result.assets[0].uri;
-      if (onUpdateFloorPlan) onUpdateFloorPlan(newUri);
-    }
-  };
+    if (!result.canceled && result.assets[0].base64) {
+      setIsGenerating(true);
+      
+      try {
+        const { data, error } = await supabase.functions.invoke('generate-petmong', {
+          body: { imageBase64: result.assets[0].base64 }
+        });
 
-  // Add Magicplan Room Preset
-  const handleAddMagicRoom = (type) => {
-    const PRESETS = {
-      living: { name: '거실', emoji: '🛋️', wMeters: 5.4, hMeters: 4.6, color: 'rgba(255, 248, 240, 0.9)' },
-      bedroom: { name: '침실', emoji: '🛏️', wMeters: 3.8, hMeters: 3.6, color: 'rgba(240, 247, 255, 0.9)' },
-      kitchen: { name: '주방', emoji: '🍳', wMeters: 4.0, hMeters: 3.6, color: 'rgba(240, 250, 247, 0.9)' },
-      bathroom: { name: '욕실', emoji: '🛁', wMeters: 2.4, hMeters: 2.2, color: 'rgba(245, 245, 247, 0.9)' },
-      corridor: { name: '현관/복도', emoji: '🚪', wMeters: 2.0, hMeters: 3.5, color: 'rgba(250, 247, 240, 0.9)' },
-      balcony: { name: '발코니', emoji: '🪴', wMeters: 4.5, hMeters: 1.8, color: 'rgba(240, 250, 249, 0.9)' },
-    };
-
-    const preset = PRESETS[type] || PRESETS.bedroom;
-
-    // Calculate intelligent placement offset to avoid overlap
-    const offset = (magicRooms.length % 5) * 12;
-    const newRoom = {
-      id: `magic-room-${Date.now()}`,
-      name: preset.name,
-      emoji: preset.emoji,
-      x: 10 + offset,
-      y: 10 + offset,
-      wMeters: preset.wMeters,
-      hMeters: preset.hMeters,
-      color: preset.color,
-      openings: [],
-    };
-
-    setMagicRooms([...magicRooms, newRoom]);
-    setSelectedRoomId(newRoom.id);
-  };
-
-  // Delete Selected Magicplan Room
-  const handleDeleteMagicRoom = (roomId) => {
-    Alert.alert('방 삭제', '선택한 방을 Magicplan 도면에서 삭제하시겠습니까?', [
-      { text: '취소', style: 'cancel' },
-      {
-        text: '삭제',
-        style: 'destructive',
-        onPress: () => {
-          setMagicRooms(magicRooms.filter((r) => r.id !== roomId));
-          setSelectedRoomId(null);
-        },
-      },
-    ]);
-  };
-
-  // Add Door or Window to Selected Magicplan Room Wall
-  const handleAddOpeningToRoom = (type) => {
-    if (!selectedRoomId) {
-      Alert.alert('선택 필요', '문이나 창문을 추가할 방을 먼저 선택해 주세요.');
-      return;
-    }
-
-    const targetRoom = magicRooms.find((r) => r.id === selectedRoomId);
-    if (!targetRoom) return;
-
-    const newOpening = {
-      id: `op-${Date.now()}`,
-      type: type,
-      wall: 'bottom',
-      offset: 50,
-    };
-
-    setMagicRooms((prev) =>
-      prev.map((r) =>
-        r.id === selectedRoomId ? { ...r, openings: [...r.openings, newOpening] } : r
-      )
-    );
-    Alert.alert('배치 완료 🎉', `선택한 ${targetRoom.name} 방에 ${type === 'door' ? '표준 여닫이 문🚪' : '표준 2D 창문🪟'}이 성공적으로 결합되었습니다.`);
-  };
-
-  // Move Room by Directional Keys
-  const handleMoveRoom = (dxPercent, dyPercent) => {
-    if (!selectedRoomId) return;
-
-    setMagicRooms((prev) =>
-      prev.map((r) => {
-        if (r.id === selectedRoomId) {
-          let newX = Math.max(0, Math.min(100 - r.wMeters * 10, r.x + dxPercent));
-          let newY = Math.max(0, Math.min(100 - r.hMeters * 10, r.y + dyPercent));
-
-          // Magicplan Magnetic Wall Snap to other rooms
-          prev.forEach((other) => {
-            if (other.id !== r.id) {
-              const otherW = other.wMeters * 10;
-              const otherH = other.hMeters * 10;
-              const rW = r.wMeters * 10;
-              const rH = r.hMeters * 10;
-
-              if (Math.abs(newX - (other.x + otherW)) < 4) newX = other.x + otherW;
-              if (Math.abs((newX + rW) - other.x) < 4) newX = other.x - rW;
-              if (Math.abs(newY - (other.y + otherH)) < 4) newY = other.y + otherH;
-              if (Math.abs((newY + rH) - other.y) < 4) newY = other.y - rH;
-            }
-          });
-
-          return { ...r, x: newX, y: newY };
+        if (error) {
+          throw new Error(error.message || '서버 응답 오류');
         }
-        return r;
-      })
-    );
-  };
 
-  // Open Dimension Input Modal for Selected Room
-  const handleOpenDimModal = (side, targetRoomId = null) => {
-    const roomId = targetRoomId || selectedRoomId;
-    if (!roomId) return;
-    const targetRoom = magicRooms.find((r) => r.id === roomId);
-    if (!targetRoom) return;
+        const newCharData = {
+          user_id: currentUserProfile.id,
+          family_id: familyId,
+          name: newName,
+          emoji: null,
+          image_url: data.imageUrl,
+          personality: newPersonality,
+          level: 1,
+          exp: 0,
+        };
+        
+        const { data: insertedChar, error: insertError } = await supabase
+          .from('petmong_characters')
+          .insert(newCharData)
+          .select()
+          .single();
 
-    setSelectedRoomId(roomId);
-    setEditingRoomId(roomId);
-    setEditingWallSide(side);
-    setDimInputValue(side === 'width' ? String(targetRoom.wMeters) : String(targetRoom.hMeters));
-    setDimModalVisible(true);
-  };
+        if (insertError) throw insertError;
 
-  // Apply Dimension Change
-  const handleApplyDimensionChange = () => {
-    const num = parseFloat(dimInputValue);
-    if (isNaN(num) || num <= 0.5 || num > 25) {
-      Alert.alert('알림', '올바른 미터 수치(0.5 ~ 25.0)를 입력해주세요.');
-      return;
+        setIsGenerating(false);
+        setMyCharacter(insertedChar);
+        setCreateModalVisible(false);
+        setPetmongCharacters(prev => [...prev, insertedChar]);
+        setActivities(prev => [{ id: `act-${Date.now()}`, text: `${newName}님이 우리 집 방에 놀러왔어요! 🎉`, time: '방금 전' }, ...prev]);
+        
+        Alert.alert('탄생 완료! 🎉', '나를 똑닮은 귀여운 반려몽이 부화했어요!');
+      } catch (err) {
+        setIsGenerating(false);
+        console.error('Edge function error:', err);
+        Alert.alert('오류 발생', '반려몽 생성에 실패했습니다. 사진을 다시 올려주세요.');
+      }
     }
-
-    const targetId = editingRoomId || selectedRoomId;
-    setMagicRooms((prev) =>
-      prev.map((r) =>
-        r.id === targetId
-          ? editingWallSide === 'width'
-            ? { ...r, wMeters: num }
-            : { ...r, hMeters: num }
-          : r
-      )
-    );
-    setDimModalVisible(false);
-    Alert.alert('치수 변경 완료 📐', `벽면 길이가 ${num.toFixed(1)}m 로 정밀하게 조정되었습니다.`);
   };
 
-  // Buy Furniture Item
+  // Handle Interaction
+  const handleInteract = (actionType) => {
+    if (!selectedTargetChar || !myCharacter) return;
+    
+    const actionText = actionType === 'greet' ? '반갑게 인사했습니다! 👋' : 
+                       actionType === 'gift' ? '예쁜 선물을 주었습니다! 🎁' : 
+                       '다정하게 쓰다듬어 주었습니다! ✨';
+    
+    const expGain = actionType === 'gift' ? 15 : 5;
+    
+    setActivities(prev => [{
+      id: `act-${Date.now()}`,
+      text: `${myCharacter.name}님이 ${selectedTargetChar.name}님에게 ${actionText}`,
+      time: '방금 전'
+    }, ...prev]);
+
+    setMyCharacter(prev => {
+      let newExp = prev.exp + expGain;
+      let newLevel = prev.level;
+      if (newExp >= 100) {
+        newExp -= 100;
+        newLevel += 1;
+        Alert.alert('레벨업! 🎉', `${prev.name}의 레벨이 ${newLevel}이 되었습니다!`);
+      }
+      return { ...prev, exp: newExp, level: newLevel };
+    });
+
+    setInteractionModalVisible(false);
+  };
+
   const handleBuyFurniture = (item) => {
     if (points < item.cost) {
       Alert.alert('포인트 부족 ⚠️', `[${item.name}] 구매에는 ${item.cost}P가 필요합니다. 스몰톡 및 장보기로 포인트를 모아보세요!`);
@@ -313,7 +302,7 @@ export default function InteriorScreen({
 
     Alert.alert(
       '가구 구매',
-      `[${item.name}]을(를) ${item.cost} 포인트로 구매하여 평면도에 배치하시겠습니까?`,
+      `[${item.name}]을(를) ${item.cost} 포인트로 구매하여 배치하시겠습니까?`,
       [
         { text: '취소', style: 'cancel' },
         {
@@ -335,14 +324,13 @@ export default function InteriorScreen({
             if (onUpdatePlacedFurniture) onUpdatePlacedFurniture(updated);
 
             setShopModalVisible(false);
-            Alert.alert('가구 추가 완료 🎉', '평면도 중심에 가구가 배치되었습니다. 손가락으로 드래그하여 원하는 위치로 옮겨보세요!');
+            Alert.alert('가구 추가 완료 🎉', '방 중심에 가구가 배치되었습니다. 손가락으로 드래그하여 원하는 위치로 옮겨보세요!');
           },
         },
       ]
     );
   };
 
-  // Rotate Placed Furniture
   const handleRotateFurniture = (item) => {
     const updated = (placedFurniture || []).map((f) =>
       f.id === item.id ? { ...f, rotation: (f.rotation + 45) % 360 } : f
@@ -350,9 +338,8 @@ export default function InteriorScreen({
     if (onUpdatePlacedFurniture) onUpdatePlacedFurniture(updated);
   };
 
-  // Delete Placed Furniture
   const handleDeleteFurniture = (item) => {
-    Alert.alert('가구 철거', `[${item.name}]을(를) 평면도에서 철거하시겠습니까?`, [
+    Alert.alert('가구 철거', `[${item.name}]을(를) 철거하시겠습니까?`, [
       { text: '취소', style: 'cancel' },
       {
         text: '철거하기',
@@ -366,319 +353,17 @@ export default function InteriorScreen({
     ]);
   };
 
-  // High-Visibility Architectural Blueprint Grid Mesh Lines Component
-  const RenderHighContrastGridMesh = () => (
-    <View style={styles.gridMeshContainer} pointerEvents="none">
-      {GRID_POSITIONS.map((p) => {
-        const isMajor = p % 25 === 0;
-        return (
-          <React.Fragment key={`grid-line-${p}`}>
-            <View
-              style={[
-                styles.gridMeshLineH,
-                { top: `${p}%` },
-                isMajor && styles.gridMeshLineMajor,
-              ]}
-            />
-            <View
-              style={[
-                styles.gridMeshLineV,
-                { left: `${p}%` },
-                isMajor && styles.gridMeshLineMajor,
-              ]}
-            />
-          </React.Fragment>
-        );
-      })}
-    </View>
-  );
-
-  // Standard Architectural 2D Door & Window Blueprint Symbol Component
-  const RenderArchitecturalOpeningSymbol = ({ type, wall, offset }) => {
-    const isHorizontal = wall === 'top' || wall === 'bottom';
-
-    if (type === 'door') {
-      return (
-        <View
-          style={[
-            styles.archOpeningBox,
-            wall === 'bottom' && { bottom: -7, left: `${offset}%` },
-            wall === 'top' && { top: -7, left: `${offset}%` },
-            wall === 'right' && { right: -7, top: `${offset}%` },
-            wall === 'left' && { left: -7, top: `${offset}%` },
-          ]}
-        >
-          <View style={[styles.archDoorSymbolContainer, !isHorizontal && { transform: [{ rotate: '90deg' }] }]}>
-            <View style={styles.archDoorGap} />
-            <View style={styles.archDoorLeafLine} />
-            <View style={styles.archDoorArcQuarter} />
-          </View>
-        </View>
-      );
-    }
-
-    return (
-      <View
-        style={[
-          styles.archOpeningBox,
-          wall === 'bottom' && { bottom: -5, left: `${offset}%` },
-          wall === 'top' && { top: -5, left: `${offset}%` },
-          wall === 'right' && { right: -5, top: `${offset}%` },
-          wall === 'left' && { left: -5, top: `${offset}%` },
-        ]}
-      >
-        <View style={[styles.archWindowSymbolContainer, !isHorizontal && { transform: [{ rotate: '90deg' }] }]}>
-          <View style={styles.archWindowPaneLine} />
-          <View style={styles.archWindowPaneLine} />
-        </View>
-      </View>
-    );
-  };
-
-  // Magicplan Draggable & Drag-to-Resize Room Component
-  const MagicRoomComponent = ({ room, canvasWidth }) => {
-    const isSelected = selectedRoomId === room.id;
-    const [pos, setPos] = useState({ x: room.x, y: room.y });
-    const startPos = useRef({ x: room.x, y: room.y });
-    const startSize = useRef({ wMeters: room.wMeters, hMeters: room.hMeters });
-
-    useEffect(() => {
-      setPos({ x: room.x, y: room.y });
-    }, [room.x, room.y]);
-
-    const widthPercent = room.wMeters * 10;
-    const heightPercent = room.hMeters * 10;
-    const roomSqMeters = (room.wMeters * room.hMeters).toFixed(1);
-
-    // PanResponder for Moving Room
-    const movePanResponder = useRef(
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onPanResponderGrant: () => {
-          setSelectedRoomId(room.id);
-          startPos.current = { x: room.x, y: room.y };
-        },
-        onPanResponderMove: (evt, gestureState) => {
-          const deltaX = (gestureState.dx / canvasWidth) * 100;
-          const deltaY = (gestureState.dy / canvasWidth) * 100;
-
-          const newX = Math.max(0, Math.min(100 - widthPercent, startPos.current.x + deltaX));
-          const newY = Math.max(0, Math.min(100 - heightPercent, startPos.current.y + deltaY));
-
-          setPos({ x: newX, y: newY });
-        },
-        onPanResponderRelease: (evt, gestureState) => {
-          const deltaX = (gestureState.dx / canvasWidth) * 100;
-          const deltaY = (gestureState.dy / canvasWidth) * 100;
-
-          if (Math.abs(gestureState.dx) < 3 && Math.abs(gestureState.dy) < 3) {
-            setSelectedRoomId(room.id);
-            return;
-          }
-
-          let finalX = Math.max(0, Math.min(100 - widthPercent, startPos.current.x + deltaX));
-          let finalY = Math.max(0, Math.min(100 - heightPercent, startPos.current.y + deltaY));
-
-          // Snap alignment to other rooms
-          magicRooms.forEach((other) => {
-            if (other.id !== room.id) {
-              const otherW = other.wMeters * 10;
-              const otherH = other.hMeters * 10;
-
-              if (Math.abs(finalX - (other.x + otherW)) < 4) finalX = other.x + otherW;
-              if (Math.abs((finalX + widthPercent) - other.x) < 4) finalX = other.x - widthPercent;
-              if (Math.abs(finalY - (other.y + otherH)) < 4) finalY = other.y + otherH;
-              if (Math.abs((finalY + heightPercent) - other.y) < 4) finalY = other.y - heightPercent;
-            }
-          });
-
-          setMagicRooms((prev) =>
-            prev.map((r) => (r.id === room.id ? { ...r, x: finalX, y: finalY } : r))
-          );
-        },
-      })
-    ).current;
-
-    // PanResponder for Drag-to-Resize Corner Handle (Feature 1)
-    const resizePanResponder = useRef(
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onStartShouldSetPanResponderCapture: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponderCapture: () => true,
-        onPanResponderGrant: () => {
-          setSelectedRoomId(room.id);
-          startSize.current = { wMeters: room.wMeters, hMeters: room.hMeters };
-        },
-        onPanResponderMove: (evt, gestureState) => {
-          const deltaWMeters = (gestureState.dx / canvasWidth) * 10;
-          const deltaHMeters = (gestureState.dy / canvasWidth) * 10;
-
-          const newW = Math.max(1.2, Math.min(20.0, startSize.current.wMeters + deltaWMeters));
-          const newH = Math.max(1.2, Math.min(20.0, startSize.current.hMeters + deltaHMeters));
-
-          setMagicRooms((prev) =>
-            prev.map((r) =>
-              r.id === room.id
-                ? { ...r, wMeters: parseFloat(newW.toFixed(1)), hMeters: parseFloat(newH.toFixed(1)) }
-                : r
-            )
-          );
-        },
-      })
-    ).current;
-
-    return (
-      <View
-        {...movePanResponder.panHandlers}
-        style={[
-          styles.magicRoomBox,
-          {
-            left: `${pos.x}%`,
-            top: `${pos.y}%`,
-            width: `${widthPercent}%`,
-            height: `${heightPercent}%`,
-            backgroundColor: room.color,
-          },
-          isSelected && styles.magicRoomBoxSelected,
-        ]}
-      >
-        {/* Magicplan Top Wall Meter Tag (Interactive Button) */}
-        <TouchableOpacity
-          style={styles.magicWallTagTop}
-          activeOpacity={0.7}
-          onPress={() => handleOpenDimModal('width', room.id)}
-        >
-          <Text style={styles.magicWallTagText}>📏 {room.wMeters.toFixed(1)}m</Text>
-        </TouchableOpacity>
-
-        {/* Magicplan Left Wall Meter Tag (Interactive Button) */}
-        <TouchableOpacity
-          style={styles.magicWallTagLeft}
-          activeOpacity={0.7}
-          onPress={() => handleOpenDimModal('height', room.id)}
-        >
-          <Text style={styles.magicWallTagText}>📏 {room.hMeters.toFixed(1)}m</Text>
-        </TouchableOpacity>
-
-        {/* Room Title & Square Meters Area */}
-        <Text style={styles.magicRoomTitle}>{room.emoji} {room.name}</Text>
-        <Text style={styles.magicRoomAreaText}>{roomSqMeters} m²</Text>
-
-        {/* Feature 1: Drag-and-Drop Corner Handle for Realtime Resizing */}
-        {isSelected && (
-          <View
-            {...resizePanResponder.panHandlers}
-            style={styles.roomCornerResizeHandle}
-          >
-            <Scaling size={12} color="#FFFFFF" />
-          </View>
-        )}
-
-        {/* Architectural 2D Doors & Windows Symbols */}
-        {room.openings.map((op) => (
-          <RenderArchitecturalOpeningSymbol
-            key={op.id}
-            type={op.type}
-            wall={op.wall}
-            offset={op.offset}
-          />
-        ))}
-      </View>
-    );
-  };
-
-  // Draggable Item Component (For Placed Furniture on Main Canvas)
-  const DraggableFurniture = ({ item }) => {
-    const isSelected = selectedFurnitureId === item.id;
-    const [pos, setPos] = useState({ x: item.x, y: item.y });
-    const startPos = useRef({ x: item.x, y: item.y });
-
-    useEffect(() => {
-      setPos({ x: item.x, y: item.y });
-    }, [item.x, item.y]);
-
-    const panResponder = useRef(
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onPanResponderGrant: () => {
-          setSelectedFurnitureId(item.id);
-          startPos.current = { x: item.x, y: item.y };
-        },
-        onPanResponderMove: (evt, gestureState) => {
-          const deltaX = (gestureState.dx / BASE_CANVAS_SIZE) * 100;
-          const deltaY = (gestureState.dy / BASE_CANVAS_SIZE) * 100;
-
-          const newX = Math.max(0, Math.min(84, startPos.current.x + deltaX));
-          const newY = Math.max(0, Math.min(84, startPos.current.y + deltaY));
-
-          setPos({ x: newX, y: newY });
-        },
-        onPanResponderRelease: (evt, gestureState) => {
-          const deltaX = (gestureState.dx / BASE_CANVAS_SIZE) * 100;
-          const deltaY = (gestureState.dy / BASE_CANVAS_SIZE) * 100;
-
-          const finalX = Math.max(0, Math.min(84, startPos.current.x + deltaX));
-          const finalY = Math.max(0, Math.min(84, startPos.current.y + deltaY));
-
-          const updated = (placedFurniture || []).map((f) =>
-            f.id === item.id ? { ...f, x: finalX, y: finalY } : f
-          );
-          if (onUpdatePlacedFurniture) onUpdatePlacedFurniture(updated);
-        },
-      })
-    ).current;
-
-    return (
-      <View
-        {...panResponder.panHandlers}
-        style={[
-          styles.furnitureWrapper,
-          {
-            left: `${pos.x}%`,
-            top: `${pos.y}%`,
-            transform: [{ rotate: `${item.rotation}deg` }],
-          },
-          isSelected && styles.furnitureWrapperSelected,
-        ]}
-      >
-        <Text style={styles.furnitureEmoji}>{item.emoji}</Text>
-
-        {isSelected && (
-          <View style={styles.furnitureControlOverlay}>
-            <TouchableOpacity
-              style={styles.controlBtn}
-              onPress={() => handleRotateFurniture(item)}
-            >
-              <RotateCw size={12} color="#FFFFFF" />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.controlBtn, styles.controlBtnDelete]}
-              onPress={() => handleDeleteFurniture(item)}
-            >
-              <Trash2 size={12} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
-    );
-  };
-
   const filteredCatalog = FURNITURE_CATALOG.filter((f) => f.category === selectedCategory);
-  const houseArea = calculateTotalArea();
 
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Header & Points Banner */}
+        {/* FamLink Unified Header & Points Card */}
         <View style={styles.headerCard}>
           <View style={styles.headerTitleRow}>
             <View style={styles.headerTextGroup}>
-              <Text style={styles.headerTitle}>가족 드림하우스 🏠</Text>
-              <Text style={styles.headerSub}>Magicplan 도면에 포인트를 모아 가구를 꾸며보세요!</Text>
+              <Text style={styles.headerTitle}>우리 집 반려몽 🐾</Text>
+              <Text style={styles.headerSub}>AI 반려몽과 함께 소통하고 방을 꾸며보세요!</Text>
             </View>
 
             <TouchableOpacity
@@ -691,7 +376,7 @@ export default function InteriorScreen({
             </TouchableOpacity>
           </View>
 
-          {/* Points Status */}
+          {/* Points Status Bar */}
           <View style={styles.pointsBar}>
             <View style={styles.pointsBarLeft}>
               <Trophy size={18} color="#F1C40F" style={{ marginRight: 6 }} />
@@ -701,343 +386,262 @@ export default function InteriorScreen({
           </View>
         </View>
 
-        {/* Floor Plan & Furniture Canvas Box */}
+        {/* Main Pet Room Interactive Canvas */}
         <View style={styles.canvasCard}>
           <View style={styles.canvasHeader}>
             <View style={styles.canvasTitleGroup}>
-              <Text style={styles.canvasTitle}>Magicplan 우리 집 평면도</Text>
+              <Text style={styles.canvasTitle}>가족 아늑한 방</Text>
               <Text style={styles.canvasAreaSubtitle}>
-                전용면적: {houseArea.sqMeters} m² ({houseArea.pyeong} 평)
+                {myCharacter ? `${myCharacter.name} (${myCharacter.personality})` : '반려몽 생성 필요'}
               </Text>
             </View>
 
-            <View style={styles.canvasBtnRow}>
-              <TouchableOpacity
-                style={[styles.changePlanBtn, { backgroundColor: '#FFEBEB', marginRight: 6 }]}
-                onPress={() => setMagicplanModalVisible(true)}
-              >
-                <Wand2 size={13} color="#FF7E82" style={{ marginRight: 4 }} />
-                <Text style={[styles.changePlanBtnText, { color: '#FF7E82' }]}>Magicplan 스튜디오</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.changePlanBtn} onPress={pickFloorPlanImage}>
-                <Camera size={13} color="#4A90E2" style={{ marginRight: 4 }} />
-                <Text style={styles.changePlanBtnText}>사진 업로드</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={styles.logBtn}
+              onPress={() => setActivityLogVisible(true)}
+            >
+              <List size={14} color="#4A90E2" style={{ marginRight: 4 }} />
+              <Text style={styles.logBtnText}>활동 로그</Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Interactive Main Canvas */}
+          {/* Interactive Room Canvas */}
           <TouchableOpacity
             activeOpacity={1}
             onPress={() => setSelectedFurnitureId(null)}
             style={styles.canvasContainer}
           >
-            {/* Render Floor Plan Image OR Render Custom Drawn Magicplan Rooms */}
-            {floorPlanUrl ? (
-              <Image
-                source={{ uri: floorPlanUrl }}
-                style={styles.floorPlanImage}
-                resizeMode="contain"
-              />
-            ) : (
-              <View style={styles.drawnCanvasWrapper}>
-                {/* High-Contrast Architectural Grid Mesh Overlay */}
-                <RenderHighContrastGridMesh />
-
-                {/* Render Magicplan Rooms */}
-                {magicRooms.map((r) => (
-                  <View
-                    key={r.id}
-                    style={[
-                      styles.renderedRoomBox,
-                      {
-                        left: `${r.x}%`,
-                        top: `${r.y}%`,
-                        width: `${r.wMeters * 10}%`,
-                        height: `${r.hMeters * 10}%`,
-                        backgroundColor: r.color,
-                      },
-                    ]}
-                  >
-                    <Text style={styles.renderedRoomText}>{r.emoji} {r.name}</Text>
-                    <Text style={styles.renderedRoomArea}>{(r.wMeters * r.hMeters).toFixed(1)} m²</Text>
-
-                    {/* Architectural 2D Doors & Windows Symbols */}
-                    {r.openings.map((op) => (
-                      <RenderArchitecturalOpeningSymbol
-                        key={op.id}
-                        type={op.type}
-                        wall={op.wall}
-                        offset={op.offset}
-                      />
-                    ))}
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {/* Placed Furniture Items Overlay */}
+            {/* Placed Furniture Items */}
             {(placedFurniture || []).map((item) => (
-              <DraggableFurniture key={item.id} item={item} />
+              <DraggableFurniture
+                key={item.id}
+                item={item}
+                isSelected={selectedFurnitureId === item.id}
+                canvasWidth={BASE_CANVAS_SIZE}
+                onSelect={setSelectedFurnitureId}
+                onMove={(id, x, y) => {
+                  const updated = (placedFurniture || []).map(f => f.id === id ? { ...f, x, y } : f);
+                  if (onUpdatePlacedFurniture) onUpdatePlacedFurniture(updated);
+                }}
+                onRotate={handleRotateFurniture}
+                onDelete={handleDeleteFurniture}
+                styles={styles}
+              />
             ))}
+
+            {/* Other Family Petmong Characters */}
+            {familyCharacters.map((char) => (
+              <TouchableOpacity
+                key={char.id}
+                style={[styles.subCharContainer, { left: `${char.x}%`, top: `${char.y}%` }]}
+                onPress={() => {
+                  setSelectedTargetChar(char);
+                  setInteractionModalVisible(true);
+                }}
+              >
+                {char.image_url ? (
+                  <Image source={{ uri: char.image_url }} style={styles.subCharImage} />
+                ) : (
+                  <Text style={styles.subCharEmoji}>{char.emoji || '🐱'}</Text>
+                )}
+                <View style={styles.subCharLabelBox}>
+                  <Text style={styles.subCharLabelText}>{char.name}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+
+            {/* My Main Petmong Character (Floating Animated) */}
+            {myCharacter && (
+              <Animated.View
+                style={[
+                  styles.mainCharContainer,
+                  { transform: [{ translateY: floatAnim }] },
+                ]}
+              >
+                <View style={styles.charShadow} />
+                {myCharacter.image_url ? (
+                  <View style={styles.mainCharImageContainer}>
+                    <Image source={{ uri: myCharacter.image_url }} style={styles.mainCharImage} />
+                  </View>
+                ) : (
+                  <Text style={styles.mainCharEmoji}>{myCharacter.emoji || '🐶'}</Text>
+                )}
+
+                <View style={styles.mainCharBadge}>
+                  <Text style={styles.mainCharName}>{myCharacter.name}</Text>
+                  <View style={styles.expBarBg}>
+                    <View style={[styles.expBarFill, { width: `${myCharacter.exp || 0}%` }]} />
+                  </View>
+                  <Text style={styles.levelText}>Lv.{myCharacter.level || 1}</Text>
+                </View>
+              </Animated.View>
+            )}
           </TouchableOpacity>
 
           <Text style={styles.canvasGuideText}>
-            💡 상단 [Magicplan 스튜디오]에서 귀퉁이를 끌어 방 크기를 자유롭게 조절하고 전체 캔버스를 확장해 보세요!
+            💡 다른 가족의 반려몽을 터치하면 인사나 선물을 건넬 수 있습니다!
           </Text>
-        </View>
-
-        {/* Inventory Summary */}
-        <View style={styles.inventoryCard}>
-          <Text style={styles.inventoryTitle}>배치된 가구 목록 ({(placedFurniture || []).length}개)</Text>
-          {(placedFurniture || []).length === 0 ? (
-            <Text style={styles.emptyInventoryText}>
-              아직 배치된 가구가 없습니다. 상단 [가구 상점]에서 이쁜 가구를 구매해 보세요!
-            </Text>
-          ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.inventoryList}>
-              {(placedFurniture || []).map((f) => (
-                <TouchableOpacity
-                  key={f.id}
-                  style={[
-                    styles.inventoryItemChip,
-                    selectedFurnitureId === f.id && styles.inventoryItemChipActive,
-                  ]}
-                  onPress={() => setSelectedFurnitureId(f.id)}
-                >
-                  <Text style={styles.inventoryItemEmoji}>{f.emoji}</Text>
-                  <Text style={styles.inventoryItemName}>{f.name}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          )}
         </View>
       </ScrollView>
 
-      {/* MAGICPLAN STUDIO ENGINE MODAL */}
+      {/* AI Character Creation Modal (FamLink Unified Style) */}
       <Modal
         animationType="slide"
         transparent={true}
-        visible={magicplanModalVisible}
-        onRequestClose={() => setMagicplanModalVisible(false)}
+        visible={createModalVisible}
+        onRequestClose={() => {}}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalViewLarge}>
+          <View style={styles.modalView}>
             <View style={styles.modalHeaderRow}>
               <View style={styles.modalHeaderTitleRow}>
-                <Wand2 size={22} color="#FF7E82" style={{ marginRight: 6 }} />
-                <Text style={styles.modalHeader}>Magicplan 스튜디오 🪄</Text>
+                <Sparkles size={20} color="#FF7E82" style={{ marginRight: 6 }} />
+                <Text style={styles.modalHeader}>나만의 AI 반려몽 태어나기 🐣</Text>
               </View>
-              <TouchableOpacity onPress={() => setMagicplanModalVisible(false)}>
-                <X size={22} color="#8E8E93" />
-              </TouchableOpacity>
             </View>
 
-            {/* Total Area Summary & Workspace Expansion Bar */}
-            <View style={styles.magicAreaSummaryBanner}>
-              <View style={styles.areaBannerTopRow}>
-                <Text style={styles.magicAreaSummaryText}>
-                  총 평형: <Text style={{ fontWeight: '900', color: '#FF7E82' }}>{houseArea.pyeong}평</Text> ({houseArea.sqMeters} m²)
-                </Text>
-                <Text style={styles.canvasScaleText}>캔버스: {canvasScaleMultiplier}x</Text>
-              </View>
+            <Text style={styles.modalSubDesc}>
+              얼굴 사진을 올리면 AI가 나를 닮은 귀여운 맞춤 캐릭터 반려몽을 만들어 드려요!
+            </Text>
 
-              {/* Expandable Workspace Control Chips */}
-              <View style={styles.workspaceExpandControlRow}>
-                <Text style={styles.expandLabel}>전체 영역 확장:</Text>
-                {[
-                  { label: '1.0x', mult: 1.0 },
-                  { label: '1.5x ↔️', mult: 1.5 },
-                  { label: '2.0x 넓게', mult: 2.0 },
-                  { label: '2.5x 대형', mult: 2.5 },
-                ].map((item) => (
+            <View style={styles.inputGroup}>
+              <Text style={styles.modalLabel}>반려몽 이름</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="예: 몽몽이"
+                value={newName}
+                onChangeText={setNewName}
+                placeholderTextColor="#AEAEB2"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.modalLabel}>성격 선택</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
+                {PERSONALITY_OPTIONS.map((p) => (
                   <TouchableOpacity
-                    key={`scale-${item.mult}`}
+                    key={p}
                     style={[
-                      styles.workspaceScaleBtn,
-                      canvasScaleMultiplier === item.mult && styles.workspaceScaleBtnActive,
+                      styles.traitSelectBtn,
+                      newPersonality === p && styles.traitSelectBtnActive,
                     ]}
-                    onPress={() => setCanvasScaleMultiplier(item.mult)}
+                    onPress={() => setNewPersonality(p)}
                   >
                     <Text
                       style={[
-                        styles.workspaceScaleBtnText,
-                        canvasScaleMultiplier === item.mult && styles.workspaceScaleBtnTextActive,
+                        styles.traitSelectText,
+                        newPersonality === p && styles.traitSelectTextActive,
                       ]}
                     >
-                      {item.label}
+                      {p}
                     </Text>
                   </TouchableOpacity>
                 ))}
-              </View>
+              </ScrollView>
             </View>
 
-            {/* Room Add Tool Chips */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.toolBarRow}>
-              <TouchableOpacity style={styles.toolChip} onPress={() => handleAddMagicRoom('living')}>
-                <Text style={styles.toolChipText}>+ 거실 🛋️</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.toolChip} onPress={() => handleAddMagicRoom('bedroom')}>
-                <Text style={styles.toolChipText}>+ 침실 🛏️</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.toolChip} onPress={() => handleAddMagicRoom('kitchen')}>
-                <Text style={styles.toolChipText}>+ 주방 🍳</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.toolChip} onPress={() => handleAddMagicRoom('bathroom')}>
-                <Text style={styles.toolChipText}>+ 욕실 🛁</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.toolChip} onPress={() => handleAddMagicRoom('corridor')}>
-                <Text style={styles.toolChipText}>+ 현관/복도 🚪</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.toolChip} onPress={() => handleAddMagicRoom('balcony')}>
-                <Text style={styles.toolChipText}>+ 발코니 🪴</Text>
-              </TouchableOpacity>
-            </ScrollView>
+            <TouchableOpacity
+              style={styles.createSubmitBtn}
+              onPress={handlePickImageAndCreate}
+              activeOpacity={0.8}
+            >
+              <Camera size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={styles.createSubmitBtnText}>내 사진 찍고/선택해서 생성하기</Text>
+            </TouchableOpacity>
 
-            {/* Selected Room Control Panel */}
-            {selectedRoomId && (
-              <View style={styles.selectedRoomControlPanel}>
-                <View style={styles.roomControlHeader}>
-                  <Text style={styles.selectedRoomTitleText}>
-                    선택된 방: {magicRooms.find((r) => r.id === selectedRoomId)?.emoji} {magicRooms.find((r) => r.id === selectedRoomId)?.name}
-                  </Text>
-                  <TouchableOpacity onPress={() => handleDeleteMagicRoom(selectedRoomId)}>
-                    <Text style={{ fontSize: 11, color: '#E74C3C', fontWeight: '800' }}>[방 삭제 🗑️]</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Wall Length Quick Action Buttons & Openings */}
-                <View style={styles.roomActionBtnGroup}>
-                  <TouchableOpacity style={styles.dimActionBtn} onPress={() => handleOpenDimModal('width')}>
-                    <Sliders size={12} color="#1C1C1E" style={{ marginRight: 4 }} />
-                    <Text style={styles.dimActionBtnText}>📐 가로 치수 입력</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity style={styles.dimActionBtn} onPress={() => handleOpenDimModal('height')}>
-                    <Sliders size={12} color="#1C1C1E" style={{ marginRight: 4 }} />
-                    <Text style={styles.dimActionBtnText}>📐 세로 치수 입력</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity style={styles.openingAddBtn} onPress={() => handleAddOpeningToRoom('door')}>
-                    <Text style={styles.openingAddBtnText}>+ 표준 2D 문🚪 추가</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity style={styles.openingAddBtn} onPress={() => handleAddOpeningToRoom('window')}>
-                    <Text style={styles.openingAddBtnText}>+ 표준 2D 창문🪟 추가</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Arrow Directional Pad */}
-                <View style={styles.roomMovePadRow}>
-                  <Text style={styles.movePadLabel}>방 미세 이동 (자석 스냅):</Text>
-                  <TouchableOpacity style={styles.padBtn} onPress={() => handleMoveRoom(0, -4)}>
-                    <ArrowUp size={12} color="#1C1C1E" />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.padBtn} onPress={() => handleMoveRoom(0, 4)}>
-                    <ArrowDown size={12} color="#1C1C1E" />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.padBtn} onPress={() => handleMoveRoom(-4, 0)}>
-                    <ArrowLeft size={12} color="#1C1C1E" />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.padBtn} onPress={() => handleMoveRoom(4, 0)}>
-                    <ArrowRight size={12} color="#1C1C1E" />
-                  </TouchableOpacity>
-                </View>
+            {/* AI Generation Loading Overlay */}
+            {isGenerating && (
+              <View style={styles.generatingOverlay}>
+                <ActivityIndicator size="large" color="#FF7E82" />
+                <Text style={styles.generatingText}>
+                  AI가 나를 닮은 귀여운 반려몽을{'\n'}정성껏 그리는 중입니다... 🎨
+                </Text>
               </View>
             )}
+          </View>
+        </View>
+      </Modal>
 
-            {/* Scrollable Expandable Magicplan Canvas with High-Contrast Grid */}
-            <ScrollView
-              horizontal={true}
-              nestedScrollEnabled={true}
-              showsHorizontalScrollIndicator={true}
-              style={{ flex: 1, maxHeight: BASE_CANVAS_SIZE + 10 }}
-            >
-              <ScrollView
-                nestedScrollEnabled={true}
-                showsVerticalScrollIndicator={true}
-              >
-                <View
-                  style={[
-                    styles.magicEditorCanvas,
-                    {
-                      width: activeCanvasSize,
-                      height: activeCanvasSize,
-                    },
-                  ]}
-                >
-                  {/* High-Contrast Architectural Grid Mesh Overlay */}
-                  <RenderHighContrastGridMesh />
+      {/* Character Interaction Modal (FamLink Unified Style) */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={interactionModalVisible}
+        onRequestClose={() => setInteractionModalVisible(false)}
+      >
+        <View style={styles.modalOverlayCenter}>
+          <View style={styles.interactModalBox}>
+            <View style={styles.interactAvatarBox}>
+              {selectedTargetChar?.image_url ? (
+                <Image source={{ uri: selectedTargetChar.image_url }} style={{ width: 80, height: 80, borderRadius: 40 }} />
+              ) : (
+                <Text style={{ fontSize: 48 }}>{selectedTargetChar?.emoji || '🐱'}</Text>
+              )}
+            </View>
 
-                  {magicRooms.map((room) => (
-                    <MagicRoomComponent
-                      key={room.id}
-                      room={room}
-                      canvasWidth={activeCanvasSize}
-                    />
-                  ))}
+            <Text style={styles.interactTitle}>{selectedTargetChar?.name}에게 마음 전하기</Text>
+            <Text style={styles.interactDesc}>상대방 반려몽에게 인사를 건네거나 선물을 해보세요!</Text>
+
+            <View style={styles.interactBtnRow}>
+              <TouchableOpacity style={styles.interactBtnItem} onPress={() => handleInteract('greet')}>
+                <View style={[styles.interactIconBox, { backgroundColor: '#EBF5FF' }]}>
+                  <Smile size={24} color="#4A90E2" />
                 </View>
-              </ScrollView>
-            </ScrollView>
+                <Text style={styles.interactBtnText}>인사하기 👋</Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.makerConfirmBtn}
-              onPress={() => {
-                if (onUpdateFloorPlan) onUpdateFloorPlan(null);
-                setMagicplanModalVisible(false);
-                Alert.alert('Magicplan 도면 저장 완료! 🪄', `전용면적 ${houseArea.sqMeters}m² (${houseArea.pyeong}평) 도면이 성공적으로 반영되었습니다.`);
-              }}
-            >
-              <Text style={styles.makerConfirmBtnText}>이 Magicplan 도면으로 완성 및 저장</Text>
+              <TouchableOpacity style={styles.interactBtnItem} onPress={() => handleInteract('gift')}>
+                <View style={[styles.interactIconBox, { backgroundColor: '#FFEBEB' }]}>
+                  <Gift size={24} color="#FF7E82" />
+                </View>
+                <Text style={styles.interactBtnText}>선물하기 🎁</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.interactBtnItem} onPress={() => handleInteract('pet')}>
+                <View style={[styles.interactIconBox, { backgroundColor: '#FFF9E6' }]}>
+                  <Heart size={24} color="#F1C40F" />
+                </View>
+                <Text style={styles.interactBtnText}>쓰다듬기 ✨</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity style={styles.closeInteractBtn} onPress={() => setInteractionModalVisible(false)}>
+              <Text style={styles.closeInteractText}>닫기</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      {/* DIMENSION KEYPAD EDIT MODAL */}
+      {/* Activity Log Modal */}
       <Modal
-        animationType="fade"
+        animationType="slide"
         transparent={true}
-        visible={dimModalVisible}
-        onRequestClose={() => setDimModalVisible(false)}
+        visible={activityLogVisible}
+        onRequestClose={() => setActivityLogVisible(false)}
       >
-        <View style={styles.modalOverlayCenter}>
-          <View style={styles.dimModalBox}>
-            <Text style={styles.dimModalTitle}>
-              Magicplan 정밀 치수 입력 📐
-            </Text>
-            <Text style={styles.dimModalSub}>
-              {editingWallSide === 'width' ? '가로 벽면' : '세로 벽면'}의 실제 미터(m) 길이를 입력하세요.
-            </Text>
-
-            <View style={styles.dimInputRow}>
-              <TextInput
-                style={styles.dimTextInput}
-                keyboardType="numeric"
-                value={dimInputValue}
-                onChangeText={setDimInputValue}
-                placeholder="4.5"
-                autoFocus={true}
-              />
-              <Text style={styles.dimUnitText}>m (미터)</Text>
-            </View>
-
-            <View style={styles.dimModalBtnRow}>
-              <TouchableOpacity
-                style={[styles.dimModalBtn, { backgroundColor: '#F1F2F4' }]}
-                onPress={() => setDimModalVisible(false)}
-              >
-                <Text style={[styles.dimModalBtnText, { color: '#8E8E93' }]}>취소</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.dimModalBtn, { backgroundColor: '#FF7E82' }]}
-                onPress={handleApplyDimensionChange}
-              >
-                <Text style={[styles.dimModalBtnText, { color: '#FFFFFF' }]}>치수 적용</Text>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalView}>
+            <View style={styles.modalHeaderRow}>
+              <View style={styles.modalHeaderTitleRow}>
+                <List size={20} color="#4A90E2" style={{ marginRight: 6 }} />
+                <Text style={styles.modalHeader}>가족 소통 활동 로그</Text>
+              </View>
+              <TouchableOpacity onPress={() => setActivityLogVisible(false)}>
+                <X size={20} color="#8E8E93" />
               </TouchableOpacity>
             </View>
+
+            <ScrollView style={{ maxHeight: 350 }}>
+              {activities.map((act) => (
+                <View key={act.id} style={styles.logItemCard}>
+                  <View style={styles.logDot} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.logText}>{act.text}</Text>
+                    <Text style={styles.logTime}>{act.time}</Text>
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -1065,8 +669,6 @@ export default function InteriorScreen({
             <View style={styles.categoryTabRow}>
               {[
                 { id: 'living', name: '거실 🛋️' },
-                { id: 'kitchen', name: '주방 🍽️' },
-                { id: 'bedroom', name: '침실 🛏️' },
                 { id: 'deco', name: '데코 🪴' },
               ].map((cat) => (
                 <TouchableOpacity
@@ -1231,18 +833,15 @@ const styles = StyleSheet.create({
     color: '#FF7E82',
     marginTop: 2,
   },
-  canvasBtnRow: {
-    flexDirection: 'row',
-  },
-  changePlanBtn: {
+  logBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#EBF5FF',
-    paddingHorizontal: 9,
+    paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 14,
   },
-  changePlanBtnText: {
+  logBtnText: {
     fontSize: 11,
     fontWeight: '700',
     color: '#4A90E2',
@@ -1254,140 +853,102 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
     backgroundColor: '#FAF9F6',
+    borderWidth: 1,
+    borderColor: '#EBEBEB',
   },
-  floorPlanImage: {
-    width: '100%',
-    height: '100%',
-  },
-  drawnCanvasWrapper: {
-    width: '100%',
-    height: '100%',
-    position: 'relative',
-    backgroundColor: '#FAF9F6',
-  },
-  gridMeshContainer: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  gridMeshLineH: {
+  mainCharContainer: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: '#CBD5E1',
-  },
-  gridMeshLineV: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    width: 1,
-    backgroundColor: '#CBD5E1',
-  },
-  gridMeshLineMajor: {
-    backgroundColor: '#94A3B8',
-    height: 1.5,
-    width: 1.5,
-  },
-  renderedRoomBox: {
-    position: 'absolute',
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#1C1C1E',
-    justifyContent: 'center',
+    left: '35%',
+    top: '35%',
     alignItems: 'center',
-    padding: 4,
   },
-  renderedRoomText: {
+  mainCharEmoji: {
+    fontSize: 70,
+  },
+  mainCharImageContainer: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    overflow: 'hidden',
+    borderWidth: 3,
+    borderColor: '#FF7E82',
+  },
+  mainCharImage: {
+    width: '100%',
+    height: '100%',
+  },
+  charShadow: {
+    width: 80,
+    height: 12,
+    backgroundColor: 'rgba(0,0,0,0.08)',
+    borderRadius: 40,
+    position: 'absolute',
+    bottom: -6,
+  },
+  mainCharBadge: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+    alignItems: 'center',
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#EBEBEB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  mainCharName: {
     fontSize: 12,
     fontWeight: '800',
     color: '#1C1C1E',
   },
-  renderedRoomArea: {
+  expBarBg: {
+    width: 64,
+    height: 5,
+    backgroundColor: '#F1F2F4',
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginVertical: 3,
+  },
+  expBarFill: {
+    height: '100%',
+    backgroundColor: '#FF7E82',
+  },
+  levelText: {
     fontSize: 9,
     fontWeight: '700',
     color: '#8E8E93',
   },
-  archOpeningBox: {
+  subCharContainer: {
     position: 'absolute',
-    justifyContent: 'center',
     alignItems: 'center',
   },
-  archDoorSymbolContainer: {
-    width: 24,
-    height: 14,
-    position: 'relative',
-  },
-  archDoorGap: {
-    width: '100%',
-    height: 3,
-    backgroundColor: '#FFFFFF',
-    position: 'absolute',
-    top: 5,
-  },
-  archDoorLeafLine: {
-    width: 2,
-    height: 12,
-    backgroundColor: '#1C1C1E',
-    position: 'absolute',
-    left: 2,
-    top: 1,
-  },
-  archDoorArcQuarter: {
-    width: 12,
-    height: 12,
-    borderTopRightRadius: 12,
-    borderWidth: 1.5,
-    borderColor: '#1C1C1E',
-    borderBottomWidth: 0,
-    borderLeftWidth: 0,
-    position: 'absolute',
-    left: 2,
-    top: 1,
-  },
-  archWindowSymbolContainer: {
-    width: 24,
-    height: 8,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#1C1C1E',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    paddingVertical: 1,
-  },
-  archWindowPaneLine: {
-    width: '90%',
-    height: 1,
-    backgroundColor: '#4A90E2',
-  },
-  furnitureWrapper: {
-    position: 'absolute',
-    padding: 6,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  furnitureWrapperSelected: {
+  subCharImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     borderWidth: 2,
-    borderColor: '#FF7E82',
-    backgroundColor: 'rgba(255,126,130,0.2)',
+    borderColor: '#4A90E2',
   },
-  furnitureEmoji: {
-    fontSize: 32,
+  subCharEmoji: {
+    fontSize: 42,
   },
-  furnitureControlOverlay: {
-    position: 'absolute',
-    top: -24,
-    flexDirection: 'row',
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    borderRadius: 12,
-    padding: 3,
+  subCharLabelBox: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginTop: 2,
+    borderWidth: 1,
+    borderColor: '#EBEBEB',
   },
-  controlBtn: {
-    padding: 4,
-    marginHorizontal: 2,
-  },
-  controlBtnDelete: {
-    backgroundColor: '#E74C3C',
-    borderRadius: 6,
+  subCharLabelText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#1C1C1E',
   },
   canvasGuideText: {
     fontSize: 11,
@@ -1442,6 +1003,37 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1C1C1E',
   },
+  furnitureWrapper: {
+    position: 'absolute',
+    padding: 6,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  furnitureWrapperSelected: {
+    borderWidth: 2,
+    borderColor: '#FF7E82',
+    backgroundColor: 'rgba(255,126,130,0.2)',
+  },
+  furnitureEmoji: {
+    fontSize: 32,
+  },
+  furnitureControlOverlay: {
+    position: 'absolute',
+    top: -24,
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    borderRadius: 12,
+    padding: 3,
+  },
+  controlBtn: {
+    padding: 4,
+    marginHorizontal: 2,
+  },
+  controlBtnDelete: {
+    backgroundColor: '#E74C3C',
+    borderRadius: 6,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -1459,20 +1051,13 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 20,
-    maxHeight: '80%',
-  },
-  modalViewLarge: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 18,
-    maxHeight: '95%',
+    maxHeight: '85%',
   },
   modalHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   modalHeaderTitleRow: {
     flexDirection: 'row',
@@ -1480,297 +1065,171 @@ const styles = StyleSheet.create({
   },
   modalHeader: {
     fontSize: 18,
-    fontWeight: '900',
-    color: '#1C1C1E',
-  },
-  magicAreaSummaryBanner: {
-    backgroundColor: '#FFF5F5',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#FFD6D6',
-  },
-  areaBannerTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  magicAreaSummaryText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#1C1C1E',
-  },
-  canvasScaleText: {
-    fontSize: 11,
     fontWeight: '800',
-    color: '#4A90E2',
+    color: '#1C1C1E',
   },
-  workspaceExpandControlRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 6,
+  modalSubDesc: {
+    fontSize: 12,
+    color: '#8E8E93',
+    marginBottom: 16,
+    lineHeight: 18,
   },
-  expandLabel: {
-    fontSize: 10,
+  inputGroup: {
+    marginBottom: 14,
+  },
+  modalLabel: {
+    fontSize: 12,
     fontWeight: '700',
     color: '#8E8E93',
-    marginRight: 6,
+    marginBottom: 6,
   },
-  workspaceScaleBtn: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    marginRight: 4,
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
-  },
-  workspaceScaleBtnActive: {
-    backgroundColor: '#FF7E82',
-    borderColor: '#FF7E82',
-  },
-  workspaceScaleBtnText: {
-    fontSize: 10,
-    fontWeight: '700',
+  modalInput: {
+    backgroundColor: '#F1F2F4',
+    borderRadius: 10,
+    padding: 10,
+    fontSize: 13,
     color: '#1C1C1E',
   },
-  workspaceScaleBtnTextActive: {
-    color: '#FFFFFF',
-  },
-  toolBarRow: {
-    flexDirection: 'row',
-    marginBottom: 8,
-  },
-  toolChip: {
-    backgroundColor: '#F1F2F4',
+  traitSelectBtn: {
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 14,
-    marginRight: 8,
-  },
-  toolChipText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#1C1C1E',
-  },
-  selectedRoomControlPanel: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 14,
-    padding: 10,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
-  },
-  roomControlHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  selectedRoomTitleText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#1C1C1E',
-  },
-  roomActionBtnGroup: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 6,
-  },
-  dimActionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#EBF5FF',
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 8,
-    marginRight: 6,
-    marginBottom: 6,
-  },
-  dimActionBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#4A90E2',
-  },
-  openingAddBtn: {
     backgroundColor: '#F1F2F4',
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 8,
-    marginRight: 6,
-    marginBottom: 6,
-  },
-  openingAddBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#1C1C1E',
-  },
-  roomMovePadRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  movePadLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#8E8E93',
     marginRight: 6,
   },
-  padBtn: {
-    backgroundColor: '#FFFFFF',
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginHorizontal: 3,
-    borderWidth: 1,
-    borderColor: '#D1D1D6',
-  },
-  magicEditorCanvas: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: '#94A3B8',
-    position: 'relative',
-    marginBottom: 10,
-  },
-  magicRoomBox: {
-    position: 'absolute',
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: '#1C1C1E',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 4,
-  },
-  magicRoomBoxSelected: {
-    borderColor: '#FF7E82',
-    borderWidth: 3,
-  },
-  roomCornerResizeHandle: {
-    position: 'absolute',
-    right: -10,
-    bottom: -10,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+  traitSelectBtnActive: {
     backgroundColor: '#FF7E82',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-    zIndex: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3,
-    elevation: 4,
   },
-  magicWallTagTop: {
-    position: 'absolute',
-    top: -11,
-    backgroundColor: '#1C1C1E',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-    zIndex: 10,
-  },
-  magicWallTagLeft: {
-    position: 'absolute',
-    left: -22,
-    backgroundColor: '#1C1C1E',
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 8,
-    zIndex: 10,
-  },
-  magicWallTagText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  magicRoomTitle: {
+  traitSelectText: {
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: '700',
     color: '#1C1C1E',
   },
-  magicRoomAreaText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#8E8E93',
-    marginTop: 1,
+  traitSelectTextActive: {
+    color: '#FFFFFF',
   },
-  makerConfirmBtn: {
+  createSubmitBtn: {
     backgroundColor: '#FF7E82',
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderRadius: 14,
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 10,
   },
-  makerConfirmBtnText: {
+  createSubmitBtnText: {
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '800',
   },
-  dimModalBox: {
+  generatingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 24,
+    padding: 20,
+    zIndex: 100,
+  },
+  generatingText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    textAlign: 'center',
+    marginTop: 14,
+    lineHeight: 20,
+  },
+  interactModalBox: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 24,
     padding: 20,
     width: '85%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 5,
+    alignItems: 'center',
   },
-  dimModalTitle: {
+  interactAvatarBox: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#F8F9FA',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: '#EBEBEB',
+  },
+  interactTitle: {
     fontSize: 16,
     fontWeight: '800',
     color: '#1C1C1E',
     marginBottom: 4,
   },
-  dimModalSub: {
-    fontSize: 12,
+  interactDesc: {
+    fontSize: 11,
     color: '#8E8E93',
-    marginBottom: 14,
+    marginBottom: 16,
+    textAlign: 'center',
   },
-  dimInputRow: {
+  interactBtnRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: '#D1D1D6',
+    justifyContent: 'space-around',
+    width: '100%',
     marginBottom: 16,
   },
-  dimTextInput: {
-    flex: 1,
-    fontSize: 20,
-    fontWeight: '900',
-    color: '#1C1C1E',
-    padding: 0,
+  interactBtnItem: {
+    alignItems: 'center',
   },
-  dimUnitText: {
-    fontSize: 14,
+  interactIconBox: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  interactBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1C1C1E',
+  },
+  closeInteractBtn: {
+    backgroundColor: '#F1F2F4',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  closeInteractText: {
+    fontSize: 12,
     fontWeight: '700',
     color: '#8E8E93',
   },
-  dimModalBtnRow: {
+  logItemCard: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  dimModalBtn: {
-    flex: 0.48,
-    paddingVertical: 10,
+    alignItems: 'flex-start',
+    backgroundColor: '#F8F9FA',
+    padding: 12,
     borderRadius: 12,
-    alignItems: 'center',
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#EBEBEB',
   },
-  dimModalBtnText: {
-    fontSize: 13,
-    fontWeight: '800',
+  logDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#4A90E2',
+    marginTop: 4,
+    marginRight: 10,
+  },
+  logText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    lineHeight: 16,
+  },
+  logTime: {
+    fontSize: 10,
+    color: '#8E8E93',
+    marginTop: 2,
   },
   categoryTabRow: {
     flexDirection: 'row',
