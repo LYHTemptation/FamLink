@@ -14,6 +14,9 @@ import {
   Platform,
   Image,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
@@ -503,78 +506,85 @@ export default function InteriorScreen({
         visible={createModalVisible}
         onRequestClose={() => setCreateModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalView}>
-            <View style={styles.modalHeaderRow}>
-              <View style={styles.modalHeaderTitleRow}>
-                <Sparkles size={20} color="#FF7E82" style={{ marginRight: 6 }} />
-                <Text style={styles.modalHeader}>나만의 AI 반려몽 태어나기 🐣</Text>
-              </View>
-              <TouchableOpacity onPress={() => setCreateModalVisible(false)}>
-                <X size={20} color="#8E8E93" />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.modalSubDesc}>
-              얼굴 사진을 올리면 AI가 나를 닮은 귀여운 맞춤 캐릭터 반려몽을 만들어 드려요!
-            </Text>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.modalLabel}>반려몽 이름</Text>
-              <TextInput
-                style={styles.modalInput}
-                placeholder="예: 몽몽이"
-                value={newName}
-                onChangeText={setNewName}
-                placeholderTextColor="#AEAEB2"
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.modalLabel}>성격 선택</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
-                {PERSONALITY_OPTIONS.map((p) => (
-                  <TouchableOpacity
-                    key={p}
-                    style={[
-                      styles.traitSelectBtn,
-                      newPersonality === p && styles.traitSelectBtnActive,
-                    ]}
-                    onPress={() => setNewPersonality(p)}
-                  >
-                    <Text
-                      style={[
-                        styles.traitSelectText,
-                        newPersonality === p && styles.traitSelectTextActive,
-                      ]}
-                    >
-                      {p}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-
-            <TouchableOpacity
-              style={styles.createSubmitBtn}
-              onPress={handlePickImageAndCreate}
-              activeOpacity={0.8}
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.modalOverlay}>
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              style={{ width: '100%' }}
             >
-              <Camera size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.createSubmitBtnText}>내 사진 찍고/선택해서 생성하기</Text>
-            </TouchableOpacity>
+              <View style={styles.modalView}>
+                <View style={styles.modalHeaderRow}>
+                  <View style={styles.modalHeaderTitleRow}>
+                    <Sparkles size={20} color="#FF7E82" style={{ marginRight: 6 }} />
+                    <Text style={styles.modalHeader}>나만의 AI 반려몽 태어나기 🐣</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setCreateModalVisible(false)}>
+                    <X size={20} color="#8E8E93" />
+                  </TouchableOpacity>
+                </View>
 
-            {/* AI Generation Loading Overlay */}
-            {isGenerating && (
-              <View style={styles.generatingOverlay}>
-                <ActivityIndicator size="large" color="#FF7E82" />
-                <Text style={styles.generatingText}>
-                  AI가 나를 닮은 귀여운 반려몽을{'\n'}정성껏 그리는 중입니다... 🎨
+                <Text style={styles.modalSubDesc}>
+                  얼굴 사진을 올리면 AI가 나를 닮은 귀여운 맞춤 캐릭터 반려몽을 만들어 드려요!
                 </Text>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.modalLabel}>반려몽 이름</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="예: 몽몽이"
+                    value={newName}
+                    onChangeText={setNewName}
+                    placeholderTextColor="#AEAEB2"
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.modalLabel}>성격 선택</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
+                    {PERSONALITY_OPTIONS.map((p) => (
+                      <TouchableOpacity
+                        key={p}
+                        style={[
+                          styles.traitSelectBtn,
+                          newPersonality === p && styles.traitSelectBtnActive,
+                        ]}
+                        onPress={() => setNewPersonality(p)}
+                      >
+                        <Text
+                          style={[
+                            styles.traitSelectText,
+                            newPersonality === p && styles.traitSelectTextActive,
+                          ]}
+                        >
+                          {p}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.createSubmitBtn}
+                  onPress={handlePickImageAndCreate}
+                  activeOpacity={0.8}
+                >
+                  <Camera size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.createSubmitBtnText}>내 사진 찍고/선택해서 생성하기</Text>
+                </TouchableOpacity>
+
+                {/* AI Generation Loading Overlay */}
+                {isGenerating && (
+                  <View style={styles.generatingOverlay}>
+                    <ActivityIndicator size="large" color="#FF7E82" />
+                    <Text style={styles.generatingText}>
+                      AI가 나를 닮은 귀여운 반려몽을{'\n'}정성껏 그리는 중입니다... 🎨
+                    </Text>
+                  </View>
+                )}
               </View>
-            )}
+            </KeyboardAvoidingView>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </Modal>
 
       {/* Character Interaction Modal (FamLink Unified Style) */}
