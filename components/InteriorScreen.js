@@ -396,13 +396,25 @@ export default function InteriorScreen({
               </Text>
             </View>
 
-            <TouchableOpacity
-              style={styles.logBtn}
-              onPress={() => setActivityLogVisible(true)}
-            >
-              <List size={14} color="#4A90E2" style={{ marginRight: 4 }} />
-              <Text style={styles.logBtnText}>활동 로그</Text>
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              {!myCharacter && (
+                <TouchableOpacity
+                  style={[styles.logBtn, { backgroundColor: '#FFEBEB', marginRight: 6 }]}
+                  onPress={() => setCreateModalVisible(true)}
+                >
+                  <Sparkles size={13} color="#FF7E82" style={{ marginRight: 4 }} />
+                  <Text style={[styles.logBtnText, { color: '#FF7E82' }]}>반려몽 만들기</Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                style={styles.logBtn}
+                onPress={() => setActivityLogVisible(true)}
+              >
+                <List size={14} color="#4A90E2" style={{ marginRight: 4 }} />
+                <Text style={styles.logBtnText}>활동 로그</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Interactive Room Canvas */}
@@ -489,7 +501,7 @@ export default function InteriorScreen({
         animationType="slide"
         transparent={true}
         visible={createModalVisible}
-        onRequestClose={() => {}}
+        onRequestClose={() => setCreateModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalView}>
@@ -498,6 +510,9 @@ export default function InteriorScreen({
                 <Sparkles size={20} color="#FF7E82" style={{ marginRight: 6 }} />
                 <Text style={styles.modalHeader}>나만의 AI 반려몽 태어나기 🐣</Text>
               </View>
+              <TouchableOpacity onPress={() => setCreateModalVisible(false)}>
+                <X size={20} color="#8E8E93" />
+              </TouchableOpacity>
             </View>
 
             <Text style={styles.modalSubDesc}>
