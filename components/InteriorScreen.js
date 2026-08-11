@@ -223,7 +223,7 @@ export default function InteriorScreen({
       
       try {
         const { data, error } = await supabase.functions.invoke('generate-petmong', {
-          body: { imageBase64: result.assets[0].base64 }
+          body: { imageBase64: result.assets[0].base64, personality: newPersonality }
         });
 
         if (error) {

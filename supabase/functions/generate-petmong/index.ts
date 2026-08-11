@@ -5,6 +5,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const PERSONALITY_TRAIT_MAP: Record<string, string> = {
+  '다정한': 'affectionate, gentle and warm smiling expression',
+  '장난꾸러기': 'playful, mischievous expression with a cheeky grin',
+  '잠꾸러기': 'sleepy, cozy expression with eyelids drooping sleepily',
+  '애교쟁이': 'super cute, charming and loving sparkling eyes expression',
+  '호기심많은': 'curious, wide-eyed inquisitive expression',
+};
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -12,7 +20,7 @@ serve(async (req) => {
   }
 
   try {
-    const { imageBase64 } = await req.json();
+    const { imageBase64, personality } = await req.json();
 
     if (!imageBase64) {
       return new Response(JSON.stringify({ error: 'No image provided' }), {
@@ -50,9 +58,12 @@ serve(async (req) => {
     const description = visionData.candidates?.[0]?.content?.parts?.[0]?.text || "A cute person";
     console.log("Image description:", description);
 
-    // Step 2: Generate character with Gemini Image Model
-    console.log("Step 2: Generating character with Gemini Image...");
-    const finalPrompt = `A cute, simple, 2D flat vector art of a tiny kawaii blob monster hatched from an egg. White background. 'Sumone' app style, no shadows, extremely cute and emotional. The monster must visually incorporate these specific features from the person: ${description}. Keep it very minimal and adorable.`;
+    // Map personality to prompt visual trait
+    const personalityTrait = PERSONALITY_TRAIT_MAP[personality] || `${personality} expression`;
+
+    // Step 2: Generate character with Gemini Image Model incorporating visual features and personality
+    console.log("Step 2: Generating character with Gemini Image incorporating personality...");
+    const finalPrompt = `A cute, simple, 2D flat vector art of a tiny kawaii blob monster hatched from an egg. White background. 'Sumone' app style, no shadows, extremely cute and emotional. The monster must visually incorporate these specific features from the person: ${description}. The monster MUST express this distinct personality vibe: ${personalityTrait}. Keep it very minimal, iconic, and adorable.`;
 
     const imageGenResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${GEMINI_API_KEY}`, {
       method: 'POST',
