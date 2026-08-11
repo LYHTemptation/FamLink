@@ -36,7 +36,7 @@ import {
 } from 'lucide-react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const BASE_CANVAS_SIZE = SCREEN_WIDTH - 32;
+const BASE_CANVAS_SIZE = SCREEN_WIDTH - 64; // Account for scrollContent padding 32 + canvasCard padding 32
 
 // Cute Room Furniture Catalog (FamLink Palette Style)
 const FURNITURE_CATALOG = [
@@ -847,12 +847,12 @@ const styles = StyleSheet.create({
     color: '#4A90E2',
   },
   canvasContainer: {
-    width: BASE_CANVAS_SIZE,
-    height: BASE_CANVAS_SIZE,
+    width: '100%',
+    aspectRatio: 1,
     borderRadius: 16,
     overflow: 'hidden',
     position: 'relative',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FAFAFC',
     borderWidth: 1,
     borderColor: '#EBEBEB',
   },
