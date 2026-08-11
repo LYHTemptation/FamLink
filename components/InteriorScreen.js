@@ -1173,7 +1173,7 @@ const styles = StyleSheet.create({
   },
   interactBtnRow: {
     flexDirection: 'row',
-    justify.content: 'space-around',
+    justifyContent: 'space-around',
     width: '100%',
     marginBottom: 16,
   },
