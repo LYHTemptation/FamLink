@@ -477,9 +477,11 @@ export default function App() {
         return {
           id: m.id,
           sender: m.profiles?.role || 'son',
+          profile_id: m.profile_id,
           text: m.text || '',
           image: m.image_url || null,
           image_url: m.image_url || null,
+          room_id: m.room_id || 'family-group',
           timestamp,
           readBy: m.read_by || [],
         };
@@ -967,6 +969,7 @@ export default function App() {
             profile_id: session.user.id,
             text: messageData.text || '',
             image_url: imageUrl,
+            room_id: messageData.roomId || 'family-group',
             read_by: [profile.id],
           });
         if (error) throw error;
@@ -989,8 +992,10 @@ export default function App() {
       const newMsg = {
         id: String(Date.now()),
         sender: currentUser,
+        profile_id: session?.user?.id || profile?.id || null,
         text: messageData.text || '',
         image: messageData.image || null,
+        room_id: messageData.roomId || 'family-group',
         timestamp,
         readBy: [currentUser],
       };

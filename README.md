@@ -79,6 +79,20 @@ npx expo start
 - **Android**: 스마트폰의 `Expo Go` 앱으로 터미널의 QR 코드를 스캔
 - **iOS**: 스마트폰 카메라 앱으로 QR 코드를 스캔하여 `Expo Go`로 열기
 
+### 5. 앱 빌드 및 추출 (EAS Build)
+실제 기기에 설치할 수 있는 안드로이드 앱 파일(`.apk`)을 추출하는 방법입니다.
+```bash
+# 1. EAS CLI 전역 설치 (최초 1회)
+npm install -g eas-cli
+
+# 2. Expo 계정 로그인
+eas login
+
+# 3. 안드로이드 프리뷰 빌드 실행 (APK 추출)
+eas build -p android --profile preview
+```
+빌드가 완료되면 터미널에 제공되는 링크나 QR 코드를 통해 안드로이드 기기에 다운로드 및 설치가 가능합니다.
+
 ---
 
 ## 📂 프로젝트 구조 (Project Structure)

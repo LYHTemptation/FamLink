@@ -38,11 +38,15 @@ CREATE TABLE IF NOT EXISTS messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   family_id UUID REFERENCES families(id) ON DELETE CASCADE NOT NULL,
   profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  room_id TEXT DEFAULT 'family-group' NOT NULL,
   text TEXT,
   image_url TEXT,
   read_by UUID[] DEFAULT '{}'::uuid[] NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- 기존 messages 테이블에 새 컬럼 추가
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS room_id TEXT DEFAULT 'family-group' NOT NULL;
 
 -- 5. 캘린더 일정 테이블 (events)
 CREATE TABLE IF NOT EXISTS events (

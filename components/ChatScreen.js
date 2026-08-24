@@ -72,6 +72,7 @@ export default function ChatScreen({ messages, currentUser, currentUserProfile, 
     onSendMessage({
       text: inputText,
       image: selectedPhoto,
+      roomId: selectedRoomId || 'family-group',
     });
     
     setInputText('');
@@ -237,10 +238,9 @@ export default function ChatScreen({ messages, currentUser, currentUserProfile, 
     
     // Accurately determine if the message was sent by the current logged-in user
     const isMe =
-      item.sender === currentUser ||
-      item.profile_id === currentUser ||
-      (currentUserProfile && (item.profile_id === currentUserProfile.id || item.sender === currentUserProfile.role)) ||
-      (item.senderObj && currentUserProfile && item.senderObj.role === currentUserProfile.role);
+      (currentUserProfile && item.profile_id) 
+        ? item.profile_id === currentUserProfile.id
+        : item.sender === currentUser;
     
     // Calculate read receipts (exclude sender)
     const readByList = item.readBy || [];
@@ -493,7 +493,7 @@ export default function ChatScreen({ messages, currentUser, currentUserProfile, 
       {/* Messages List */}
       <FlatList
         ref={flatListRef}
-        data={messages}
+        data={(messages || []).filter(m => (m.room_id || 'family-group') === (selectedRoomId || 'family-group'))}
         keyExtractor={(item) => item.id}
         renderItem={renderMessageItem}
         contentContainerStyle={styles.listContent}
