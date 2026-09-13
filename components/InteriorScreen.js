@@ -56,6 +56,78 @@ const FURNITURE_CATALOG = [
 const EMOJI_OPTIONS = ['🐶', '🐱', '🐰', '🐼', '🦊', '🐻', '🐹', '🐥'];
 const PERSONALITY_OPTIONS = ['다정한', '장난꾸러기', '잠꾸러기', '애교쟁이', '호기심많은'];
 
+const PETMONG_DIALOGUES = {
+  '다정한': [
+    '오늘 하루도 우리 가족 모두 행복했으면 좋겠어요! ❤️',
+    '아빠, 엄마, 오늘 많이 고생하셨죠? 토닥토닥 힘내세요!',
+    '가족들과 함께 있는 이 방이 세상에서 제일 따뜻해요 ✨',
+    '따뜻한 물 한 잔 마시고 잠시 쉬어가는 건 어때요? ☕',
+    '우리 가족이 웃을 때 저도 제일 행복해요! 🥰',
+    '오늘 하루도 서로 다정하게 안아주는 건 어때요? 🫂',
+  ],
+  '장난꾸러기': [
+    '메롱~ 오늘 스몰톡 답변 아직 안 한 사람 손 들어! 😜',
+    '심심한데 나랑 방에서 술래잡기 할 가족 누구야?! 🏃',
+    '가구 위치 또 맘대로 바꿔놓을까 보다 크큭 😆',
+    '오늘 간식은 맛있는 치킨 먹자고 가족들한테 졸라줘! 🍗',
+    '방 구석에 내 보물 숨겨놨지롱~ 맞춰봐라 몽!',
+    '우다다다! 방 안을 10바퀴 돌고 올게요! 💨',
+  ],
+  '잠꾸러기': [
+    '쿠울... 푹신한 러그 위에서 5분만 더 잘래요... zZ 💤',
+    '하아암~ 졸린데 배는 고프다 몽... 🥐',
+    '세상에서 제일 좋은 건 소파에 누워 뒹굴거리기야...',
+    '눈이 솔솔 감겨요... 가족들 모두 좋은 꿈 꿔요 🌙',
+    '낮잠 자고 일어나면 머리가 맑아진다몽~ 😴',
+    '이불 밖은 너무 위험해 몽... 꼼짝 안 할래!',
+  ],
+  '애교쟁이': [
+    '나 쓰다듬어줘서 너무너무 행복해 몽! 꼬리 살랑살랑~ 💕',
+    '헤헤, 나만 바라봐줘! 내가 세상에서 제일 귀엽지? 🐾',
+    '사랑해요 우리 가족! 뽀뽀 쪽~ 😘',
+    '오늘도 가족들 얼굴 보니까 힘이 불끈 솟아나요! ✨',
+    '내 곁에 항상 있어줘서 고마워요 몽몽! 💖',
+    '안아줘 안아줘! 꼬옥 안아주면 기분이 최고야!',
+  ],
+  '호기심많은': [
+    '킁킁, 오늘 저녁엔 무슨 맛있는 냄새가 날까?! 🍲',
+    '방에 새로운 가구 또 들여놓으면 안 돼요? 궁금궁금 🌟',
+    '오늘 가족들한테 무슨 재미있는 일이 있었을까?! 🧐',
+    '저 창문 밖에는 어떤 신나는 모험이 기다리고 있을까? 🎈',
+    '새로운 스몰톡 질문이 뭔지 얼른 확인하러 가자 몽!',
+    '가족들의 기분 이모지는 오늘 뭘까? 궁금해 몽!',
+  ],
+  default: [
+    '우리 가족 사랑해요! 오늘도 파이팅! 🍀',
+    '함께라서 더 행복한 우리 집 FamLink! 🏡',
+    '오늘도 나랑 눈 마주쳐줘서 고마워요 ✨',
+  ],
+};
+
+const getRandomDialogue = (personality) => {
+  const currentHour = new Date().getHours();
+  if (currentHour >= 6 && currentHour < 10) {
+    const morningQuotes = [
+      '좋은 아침이에요! 오늘도 활기찬 하루 시작해봐요 ☀️',
+      '상쾌한 아침 공기~ 오늘 하루도 힘내세요! 🥐',
+    ];
+    if (Math.random() < 0.35) {
+      return morningQuotes[Math.floor(Math.random() * morningQuotes.length)];
+    }
+  } else if (currentHour >= 22 || currentHour < 5) {
+    const nightQuotes = [
+      '모두 오늘 하루도 수고 많았어요. 푹 자고 내일 만나요 🌙',
+      '별빛이 반짝이는 밤... 좋은 꿈 꾸세요 몽 zZ 💤',
+    ];
+    if (Math.random() < 0.45) {
+      return nightQuotes[Math.floor(Math.random() * nightQuotes.length)];
+    }
+  }
+
+  const list = PETMONG_DIALOGUES[personality] || PETMONG_DIALOGUES['default'];
+  return list[Math.floor(Math.random() * list.length)];
+};
+
 // Draggable Item Component (FamLink Unified Design)
 const DraggableFurniture = React.memo(({ item, isSelected, canvasWidth, onSelect, onMove, onRotate, onDelete }) => {
   const [pos, setPos] = useState({ x: item.x, y: item.y });
@@ -128,6 +200,91 @@ const DraggableFurniture = React.memo(({ item, isSelected, canvasWidth, onSelect
   );
 });
 
+// Global In-Memory Cache for transparent images across tab switches
+const transparentImageCache = new Map();
+
+// Utility: Flood-fill transparency for AI-generated images with solid white backgrounds
+function makeBackgroundTransparent(imageUrl, threshold = 232) {
+  if (!imageUrl) return Promise.resolve(imageUrl);
+  if (transparentImageCache.has(imageUrl)) {
+    return Promise.resolve(transparentImageCache.get(imageUrl));
+  }
+  return new Promise((resolve) => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return resolve(imageUrl);
+    }
+
+    const img = new window.Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        const w = img.naturalWidth || img.width || 200;
+        const h = img.naturalHeight || img.height || 200;
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+
+        const imgData = ctx.getImageData(0, 0, w, h);
+        const data = imgData.data;
+
+        // BFS flood fill from all 4 borders to remove connected background white pixels
+        const visited = new Uint8Array(w * h);
+        const queue = [];
+
+        // Seed border pixels
+        for (let x = 0; x < w; x++) {
+          queue.push(x, 0);
+          queue.push(x, h - 1);
+        }
+        for (let y = 0; y < h; y++) {
+          queue.push(0, y);
+          queue.push(w - 1, y);
+        }
+
+        const isNearWhite = (idx) => {
+          const r = data[idx];
+          const g = data[idx + 1];
+          const b = data[idx + 2];
+          return r >= threshold && g >= threshold && b >= threshold;
+        };
+
+        let head = 0;
+        while (head < queue.length) {
+          const x = queue[head++];
+          const y = queue[head++];
+          const pixelIdx = y * w + x;
+
+          if (visited[pixelIdx]) continue;
+          visited[pixelIdx] = 1;
+
+          const dataIdx = pixelIdx * 4;
+          if (isNearWhite(dataIdx)) {
+            data[dataIdx + 3] = 0; // Alpha = 0 (Transparent)
+
+            // Add 4-way neighbors
+            if (x > 0 && !visited[pixelIdx - 1]) queue.push(x - 1, y);
+            if (x < w - 1 && !visited[pixelIdx + 1]) queue.push(x + 1, y);
+            if (y > 0 && !visited[pixelIdx - w]) queue.push(x, y - 1);
+            if (y < h - 1 && !visited[pixelIdx + w]) queue.push(x, y + 1);
+          }
+        }
+
+        ctx.putImageData(imgData, 0, 0);
+        const resultUrl = canvas.toDataURL('image/png');
+        transparentImageCache.set(imageUrl, resultUrl);
+        resolve(resultUrl);
+      } catch (err) {
+        console.error('Error removing background:', err);
+        resolve(imageUrl);
+      }
+    };
+    img.onerror = () => resolve(imageUrl);
+    img.src = imageUrl;
+  });
+}
+
 export default function InteriorScreen({
   points,
   onDeductPoints,
@@ -138,6 +295,7 @@ export default function InteriorScreen({
   familyId,
   petmongCharacters = [],
   setPetmongCharacters,
+  onAwardExp,
 }) {
   const insets = useSafeAreaInsets();
   
@@ -148,6 +306,7 @@ export default function InteriorScreen({
   
   // Petmong States (Linked with Supabase)
   const [myCharacter, setMyCharacter] = useState(null);
+  const [mainCharTransparentUrl, setMainCharTransparentUrl] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [familyCharacters, setFamilyCharacters] = useState([]);
   const [activities, setActivities] = useState([
@@ -160,6 +319,24 @@ export default function InteriorScreen({
   const [newName, setNewName] = useState('');
   const [newEmoji, setNewEmoji] = useState('🐶');
   const [newPersonality, setNewPersonality] = useState('다정한');
+
+  // Touch & Dialogue States (Sumone Style)
+  const bounceAnim = useRef(new Animated.Value(0)).current;
+  const heartAnim = useRef(new Animated.Value(0)).current;
+  const bubbleAnim = useRef(new Animated.Value(0)).current;
+  const [bubbleVisible, setBubbleVisible] = useState(false);
+  const [bubbleText, setBubbleText] = useState('');
+  const bubbleTimerRef = useRef(null);
+  const [heartVisible, setHeartVisible] = useState(false);
+  const [dailyTouchCount, setDailyTouchCount] = useState(0);
+
+  // Level Up Modal State
+  const [levelUpModalVisible, setLevelUpModalVisible] = useState(false);
+  const [levelUpInfo, setLevelUpInfo] = useState({ name: '', level: 1 });
+
+  // Sub Character Dialogue State
+  const [subBubbleCharId, setSubBubbleCharId] = useState(null);
+  const [subBubbleText, setSubBubbleText] = useState('');
 
   // Interaction Modal State
   const [interactionModalVisible, setInteractionModalVisible] = useState(false);
@@ -176,8 +353,8 @@ export default function InteriorScreen({
       const mine = petmongCharacters.find(c => c.user_id === currentUserProfile.id);
       const others = petmongCharacters.filter(c => c.user_id !== currentUserProfile.id).map((c, idx) => ({
         ...c,
-        x: 15 + (idx * 22) % 60,
-        y: 25 + (idx * 18) % 40
+        x: 10 + (idx * 28) % 70,
+        y: 54 + (idx * 14) % 24,
       }));
       
       if (mine) {
@@ -192,13 +369,117 @@ export default function InteriorScreen({
   }, [familyId, currentUserProfile, petmongCharacters]);
 
   useEffect(() => {
+    if (myCharacter?.image_url) {
+      if (transparentImageCache.has(myCharacter.image_url)) {
+        setMainCharTransparentUrl(transparentImageCache.get(myCharacter.image_url));
+      } else {
+        makeBackgroundTransparent(myCharacter.image_url).then(url => {
+          setMainCharTransparentUrl(url);
+          // Persist the clean transparent PNG to Supabase so it permanently never has a white background
+          if (myCharacter.id && !myCharacter.image_url.startsWith('data:image/png')) {
+            supabase
+              .from('petmong_characters')
+              .update({ image_url: url })
+              .eq('id', myCharacter.id)
+              .then(() => {
+                console.log('Successfully persisted transparent petmong character image in DB');
+              });
+          }
+        });
+      }
+    } else {
+      setMainCharTransparentUrl(null);
+    }
+  }, [myCharacter?.id, myCharacter?.image_url]);
+
+  useEffect(() => {
     Animated.loop(
       Animated.sequence([
-        Animated.timing(floatAnim, { toValue: -8, duration: 1500, useNativeDriver: true }),
-        Animated.timing(floatAnim, { toValue: 0, duration: 1500, useNativeDriver: true }),
+        Animated.timing(floatAnim, { toValue: -3, duration: 1800, useNativeDriver: true }),
+        Animated.timing(floatAnim, { toValue: 0, duration: 1800, useNativeDriver: true }),
       ])
     ).start();
   }, [floatAnim]);
+
+  // Handle Tap Interaction on My Petmong (Sumone Style)
+  const handlePetTap = () => {
+    if (!myCharacter) return;
+
+    // 1. Bounce animation
+    Animated.sequence([
+      Animated.timing(bounceAnim, { toValue: -18, duration: 150, useNativeDriver: true }),
+      Animated.spring(bounceAnim, { toValue: 0, friction: 3, tension: 70, useNativeDriver: true }),
+    ]).start();
+
+    // 2. Heart floating particle animation
+    setHeartVisible(true);
+    heartAnim.setValue(0);
+    Animated.timing(heartAnim, {
+      toValue: 1,
+      duration: 1100,
+      useNativeDriver: true,
+    }).start(() => setHeartVisible(false));
+
+    // 3. Speech bubble with personality & time-based quote
+    const quote = getRandomDialogue(myCharacter.personality);
+    setBubbleText(quote);
+    setBubbleVisible(true);
+    bubbleAnim.setValue(0);
+    Animated.spring(bubbleAnim, {
+      toValue: 1,
+      friction: 5,
+      tension: 60,
+      useNativeDriver: true,
+    }).start();
+
+    if (bubbleTimerRef.current) clearTimeout(bubbleTimerRef.current);
+    bubbleTimerRef.current = setTimeout(() => {
+      Animated.timing(bubbleAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }).start(() => setBubbleVisible(false));
+    }, 4500);
+
+    // 4. Award EXP on touch (up to 5 times per day)
+    if (dailyTouchCount < 5) {
+      setDailyTouchCount(prev => prev + 1);
+
+      if (onAwardExp && currentUserProfile?.id) {
+        onAwardExp(currentUserProfile.id, 3, '반려몽 쓰다듬기 (+3 EXP)');
+      } else {
+        setMyCharacter(prev => {
+          let newExp = (prev.exp || 0) + 3;
+          let newLevel = prev.level || 1;
+          if (newExp >= 100) {
+            newExp -= 100;
+            newLevel += 1;
+            setLevelUpInfo({ name: prev.name, level: newLevel });
+            setLevelUpModalVisible(true);
+          }
+          return { ...prev, exp: newExp, level: newLevel };
+        });
+      }
+
+      setActivities(prev => [{
+        id: `act-${Date.now()}`,
+        text: `${currentUserProfile?.name || '나'}님이 ${myCharacter.name}을(를) 다정하게 쓰다듬어 주었습니다 (+3 EXP) 💕`,
+        time: '방금 전'
+      }, ...prev]);
+    }
+  };
+
+  // Handle Tap on Other Family Member's Petmong
+  const handleSubCharPress = (char) => {
+    setSelectedTargetChar(char);
+    const quote = getRandomDialogue(char.personality || '다정한');
+    setSubBubbleCharId(char.id);
+    setSubBubbleText(quote);
+    setTimeout(() => {
+      setSubBubbleCharId(null);
+    }, 3500);
+    setInteractionModalVisible(true);
+  };
 
   // Handle AI Character Creation
   const handlePickImageAndCreate = async () => {
@@ -360,33 +641,33 @@ export default function InteriorScreen({
 
   return (
     <View style={styles.container}>
+      {/* Sub-header Bar */}
+      <View style={styles.subHeaderBar}>
+        <View style={styles.headerTextGroup}>
+          <Text style={styles.subHeaderTitle}>반려몽 🐾</Text>
+          <Text style={styles.subHeaderSub} numberOfLines={1} ellipsizeMode="tail">
+            {myCharacter ? `${myCharacter.name} (${myCharacter.personality})` : '가족 AI 펫과 방 꾸미기'}
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          style={styles.openShopBtn}
+          onPress={() => setShopModalVisible(true)}
+          activeOpacity={0.8}
+        >
+          <ShoppingBag size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
+          <Text style={styles.openShopBtnText}>가구 상점</Text>
+        </TouchableOpacity>
+      </View>
+
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* FamLink Unified Header & Points Card */}
-        <View style={styles.headerCard}>
-          <View style={styles.headerTitleRow}>
-            <View style={styles.headerTextGroup}>
-              <Text style={styles.headerTitle}>우리 집 반려몽 🐾</Text>
-              <Text style={styles.headerSub}>AI 반려몽과 함께 소통하고 방을 꾸며보세요!</Text>
-            </View>
-
-            <TouchableOpacity
-              style={styles.openShopBtn}
-              onPress={() => setShopModalVisible(true)}
-              activeOpacity={0.8}
-            >
-              <ShoppingBag size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
-              <Text style={styles.openShopBtnText}>가구 상점</Text>
-            </TouchableOpacity>
+        {/* Points Status Bar */}
+        <View style={styles.pointsBarCard}>
+          <View style={styles.pointsBarLeft}>
+            <Trophy size={18} color="#F1C40F" style={{ marginRight: 6 }} />
+            <Text style={styles.pointsBarLabel}>사용 가능한 포인트</Text>
           </View>
-
-          {/* Points Status Bar */}
-          <View style={styles.pointsBar}>
-            <View style={styles.pointsBarLeft}>
-              <Trophy size={18} color="#F1C40F" style={{ marginRight: 6 }} />
-              <Text style={styles.pointsBarLabel}>사용 가능한 포인트</Text>
-            </View>
-            <Text style={styles.pointsBarValue}>{points} P</Text>
-          </View>
+          <Text style={styles.pointsBarValue}>{points} P</Text>
         </View>
 
         {/* Main Pet Room Interactive Canvas */}
@@ -426,6 +707,44 @@ export default function InteriorScreen({
             onPress={() => setSelectedFurnitureId(null)}
             style={styles.canvasContainer}
           >
+            {/* 2-Tone Cozy Room Wall & Floor Background */}
+            <View style={styles.roomWallArea}>
+              {/* Cozy Window */}
+              <View style={styles.cozyWindow}>
+                <View style={styles.curtainTop} />
+                <View style={styles.windowGlass}>
+                  <Text style={styles.windowSunMoon}>
+                    {new Date().getHours() >= 6 && new Date().getHours() < 19 ? '☀️' : '🌙'}
+                  </Text>
+                  <View style={styles.windowFrameCrossH} />
+                  <View style={styles.windowFrameCrossV} />
+                </View>
+              </View>
+
+              {/* Cute wall photo frame */}
+              <View style={styles.wallPhotoFrame}>
+                <Heart size={10} color="#FF7E82" fill="#FF7E82" />
+                <Text style={styles.wallPhotoText}>FamLink</Text>
+              </View>
+            </View>
+
+            {/* Baseboard Moulding */}
+            <View style={styles.roomMoulding} />
+
+            {/* Cozy Wooden Floor Area */}
+            <View style={styles.roomFloorArea}>
+              <View style={[styles.floorPlankLine, { top: '33%' }]} />
+              <View style={[styles.floorPlankLine, { top: '66%' }]} />
+              <View style={styles.floorPlankLineVertical1} />
+              <View style={styles.floorPlankLineVertical2} />
+              <View style={styles.floorPlankLineVertical3} />
+            </View>
+
+            {/* Grounded Living Room Oval Rug on the Floor */}
+            <View style={styles.floorRug}>
+              <View style={styles.floorRugPattern} />
+            </View>
+
             {/* Placed Furniture Items */}
             {(placedFurniture || []).map((item) => (
               <DraggableFurniture
@@ -444,57 +763,177 @@ export default function InteriorScreen({
               />
             ))}
 
-            {/* Other Family Petmong Characters */}
+            {/* Other Family Petmong Characters Standing on Floor */}
             {familyCharacters.map((char) => (
               <TouchableOpacity
                 key={char.id}
+                activeOpacity={0.8}
                 style={[styles.subCharContainer, { left: `${char.x}%`, top: `${char.y}%` }]}
-                onPress={() => {
-                  setSelectedTargetChar(char);
-                  setInteractionModalVisible(true);
-                }}
+                onPress={() => handleSubCharPress(char)}
               >
+                {subBubbleCharId === char.id && (
+                  <View style={styles.subSpeechBubble}>
+                    <Text style={styles.subSpeechBubbleText}>{subBubbleText}</Text>
+                    <View style={styles.subSpeechBubbleArrow} />
+                  </View>
+                )}
                 {char.image_url ? (
-                  <Image source={{ uri: char.image_url }} style={styles.subCharImage} />
+                  <View style={styles.subCharImageWrapper}>
+                    {Platform.OS === 'web' ? (
+                      <img
+                        src={char.image_url}
+                        alt={char.name}
+                        style={{
+                          width: 48,
+                          height: 48,
+                          objectFit: 'contain',
+                          mixBlendMode: 'multiply',
+                          display: 'block',
+                          pointerEvents: 'none',
+                          userSelect: 'none',
+                        }}
+                      />
+                    ) : (
+                      <Image source={{ uri: char.image_url }} style={styles.subCharImage} resizeMode="contain" />
+                    )}
+                  </View>
                 ) : (
                   <Text style={styles.subCharEmoji}>{char.emoji || '🐱'}</Text>
                 )}
+                {/* Natural Ground Shadow */}
+                <View style={styles.subCharShadow} />
                 <View style={styles.subCharLabelBox}>
-                  <Text style={styles.subCharLabelText}>{char.name}</Text>
+                  <Text style={styles.subCharLabelText}>{char.name} (Lv.{char.level || 1})</Text>
                 </View>
               </TouchableOpacity>
             ))}
 
-            {/* My Main Petmong Character (Floating Animated) */}
+            {/* My Main Petmong Character (Standing naturally in the room) */}
             {myCharacter && (
               <Animated.View
                 style={[
                   styles.mainCharContainer,
-                  { transform: [{ translateY: floatAnim }] },
+                  { transform: [{ translateY: Animated.add(floatAnim, bounceAnim) }] },
                 ]}
               >
-                <View style={styles.charShadow} />
-                {myCharacter.image_url ? (
-                  <View style={styles.mainCharImageContainer}>
-                    <Image source={{ uri: myCharacter.image_url }} style={styles.mainCharImage} />
-                  </View>
-                ) : (
-                  <Text style={styles.mainCharEmoji}>{myCharacter.emoji || '🐶'}</Text>
+                {/* Speech Bubble */}
+                {bubbleVisible && (
+                  <Animated.View
+                    style={[
+                      styles.speechBubbleContainer,
+                      {
+                        opacity: bubbleAnim,
+                        transform: [
+                          { scale: bubbleAnim },
+                          { translateY: bubbleAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) },
+                        ],
+                      },
+                    ]}
+                  >
+                    <Text style={styles.speechBubbleText}>{bubbleText}</Text>
+                    <View style={styles.speechBubbleArrow} />
+                  </Animated.View>
                 )}
 
-                <View style={styles.mainCharBadge}>
-                  <Text style={styles.mainCharName}>{myCharacter.name}</Text>
-                  <View style={styles.expBarBg}>
-                    <View style={[styles.expBarFill, { width: `${myCharacter.exp || 0}%` }]} />
+                {/* Floating Heart & EXP Toast on Tap */}
+                {heartVisible && (
+                  <Animated.View
+                    style={[
+                      styles.floatingHeartContainer,
+                      {
+                        opacity: heartAnim.interpolate({ inputRange: [0, 0.2, 0.8, 1], outputRange: [0, 1, 0.9, 0] }),
+                        transform: [
+                          { translateY: heartAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -50] }) },
+                          { scale: heartAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.6, 1.3, 1] }) },
+                        ],
+                      },
+                    ]}
+                  >
+                    <Heart size={26} color="#FF4D6D" fill="#FF4D6D" />
+                    <Text style={styles.touchExpText}>+3 EXP</Text>
+                  </Animated.View>
+                )}
+
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={handlePetTap}
+                  style={styles.charTouchArea}
+                >
+                  {/* Character Sprite directly in room */}
+                  {myCharacter.image_url ? (
+                    <View style={styles.mainCharImageWrapper}>
+                      {Platform.OS === 'web' ? (
+                        <img
+                          src={mainCharTransparentUrl || transparentImageCache.get(myCharacter.image_url) || myCharacter.image_url}
+                          alt={myCharacter.name}
+                          style={{
+                            width: 100,
+                            height: 100,
+                            objectFit: 'contain',
+                            mixBlendMode: 'multiply',
+                            display: 'block',
+                            pointerEvents: 'none',
+                            userSelect: 'none',
+                            opacity: (mainCharTransparentUrl || transparentImageCache.has(myCharacter.image_url) || myCharacter.image_url.startsWith('data:image/png')) ? 1 : 0,
+                            transition: 'opacity 0.15s ease-in',
+                          }}
+                        />
+                      ) : (
+                        <Image
+                          source={{ uri: mainCharTransparentUrl || transparentImageCache.get(myCharacter.image_url) || myCharacter.image_url }}
+                          style={[
+                            styles.mainCharImage,
+                            { opacity: (mainCharTransparentUrl || transparentImageCache.has(myCharacter.image_url) || myCharacter.image_url.startsWith('data:image/png')) ? 1 : 0 }
+                          ]}
+                          resizeMode="contain"
+                        />
+                      )}
+                    </View>
+                  ) : (
+                    <Text style={styles.mainCharEmoji}>{myCharacter.emoji || '🐶'}</Text>
+                  )}
+
+                  {/* Soft Natural Ground Contact Shadow under feet */}
+                  <View style={styles.charGroundShadow} />
+
+                  {/* Character Mood Indicator */}
+                  <View style={styles.charMoodBadge}>
+                    <Text style={styles.charMoodEmoji}>
+                      {myCharacter.personality === '잠꾸러기' ? '💤' : 
+                       myCharacter.personality === '장난꾸러기' ? '😜' : 
+                       myCharacter.personality === '애교쟁이' ? '🥰' : 
+                       myCharacter.personality === '호기심많은' ? '🧐' : '😊'}
+                    </Text>
                   </View>
-                  <Text style={styles.levelText}>Lv.{myCharacter.level || 1}</Text>
+
+                  {/* Cute Touch Hint */}
+                  <View style={styles.touchHintBadge}>
+                    <Sparkles size={9} color="#FFFFFF" style={{ marginRight: 2 }} />
+                    <Text style={styles.touchHintText}>톡톡!</Text>
+                  </View>
+                </TouchableOpacity>
+
+                <View style={styles.mainCharBadge}>
+                  <View style={styles.nameRow}>
+                    <Text style={styles.mainCharName}>{myCharacter.name}</Text>
+                    <View style={styles.personalityTag}>
+                      <Text style={styles.personalityTagText}>{myCharacter.personality || '다정한'}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.expBarBg}>
+                    <View style={[styles.expBarFill, { width: `${Math.min(100, myCharacter.exp || 0)}%` }]} />
+                  </View>
+                  <View style={styles.levelRow}>
+                    <Text style={styles.levelText}>Lv.{myCharacter.level || 1}</Text>
+                    <Text style={styles.expNumberText}>{myCharacter.exp || 0}/100</Text>
+                  </View>
                 </View>
               </Animated.View>
             )}
           </TouchableOpacity>
 
           <Text style={styles.canvasGuideText}>
-            💡 다른 가족의 반려몽을 터치하면 인사나 선물을 건넬 수 있습니다!
+            💡 반려몽을 톡톡 터치하면 애정 대사와 함께 +3 EXP를 획득합니다!
           </Text>
         </View>
       </ScrollView>
@@ -734,6 +1173,33 @@ export default function InteriorScreen({
           </View>
         </View>
       </Modal>
+
+      {/* Level Up Celebration Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={levelUpModalVisible}
+        onRequestClose={() => setLevelUpModalVisible(false)}
+      >
+        <View style={styles.levelUpOverlay}>
+          <View style={styles.levelUpCard}>
+            <Text style={styles.levelUpEmoji}>🎊🌱✨</Text>
+            <Text style={styles.levelUpTitle}>반려몽 레벨업!</Text>
+            <Text style={styles.levelUpNameText}>
+              {levelUpInfo.name}의 레벨이 Lv.{levelUpInfo.level}로 올랐습니다!
+            </Text>
+            <Text style={styles.levelUpDesc}>
+              가족들의 따뜻한 관심과 소통으로 반려몽이 무럭무럭 자라고 있어요! 앞으로도 대화와 집안일을 함께하며 키워나가 봐요.
+            </Text>
+            <TouchableOpacity
+              style={styles.levelUpBtn}
+              onPress={() => setLevelUpModalVisible(false)}
+            >
+              <Text style={styles.levelUpBtnText}>신난다! 계속 키우기 💖</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -747,35 +1213,26 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 40,
   },
-  headerCard: {
+  subHeaderBar: {
+    height: 64,
+    paddingHorizontal: 20,
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 18,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  headerTitleRow: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F2F7',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 14,
   },
   headerTextGroup: {
     flex: 1,
   },
-  headerTitle: {
+  subHeaderTitle: {
     fontSize: 20,
-    fontWeight: '900',
+    fontWeight: '800',
     color: '#1C1C1E',
   },
-  headerSub: {
-    fontSize: 11,
+  subHeaderSub: {
+    fontSize: 12,
     color: '#8E8E93',
     marginTop: 2,
   },
@@ -783,21 +1240,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF7E82',
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#FF7E82',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 2,
   },
   openShopBtnText: {
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '700',
   },
-  pointsBar: {
+  pointsBarCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -807,6 +1259,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderWidth: 1,
     borderColor: '#FFEAA7',
+    marginBottom: 16,
   },
   pointsBarLeft: {
     flexDirection: 'row',
@@ -866,57 +1319,338 @@ const styles = StyleSheet.create({
   canvasContainer: {
     width: '100%',
     aspectRatio: 1,
-    borderRadius: 16,
+    borderRadius: 20,
     overflow: 'hidden',
     position: 'relative',
-    backgroundColor: '#FAFAFC',
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
+    backgroundColor: '#F8ECE0',
+    borderWidth: 1.5,
+    borderColor: '#EFE0D0',
+    shadowColor: '#C4A882',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  // 2-Tone Cozy Room Wall & Floor
+  roomWallArea: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '56%',
+    backgroundColor: '#F8ECE0',
+    borderBottomWidth: 1,
+    borderBottomColor: '#EADBCB',
+  },
+  cozyWindow: {
+    position: 'absolute',
+    top: 14,
+    left: 18,
+    width: 60,
+    height: 68,
+    backgroundColor: '#EAF6FF',
+    borderRadius: 10,
+    borderWidth: 2.5,
+    borderColor: '#E8D7C3',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+  },
+  curtainTop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 10,
+    backgroundColor: '#FFAAA6',
+    borderBottomLeftRadius: 5,
+    borderBottomRightRadius: 5,
+    zIndex: 2,
+  },
+  windowGlass: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#EBF6FF',
+    position: 'relative',
+  },
+  windowSunMoon: {
+    fontSize: 18,
+  },
+  windowFrameCrossH: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: '50%',
+    height: 1.5,
+    backgroundColor: '#E8D7C3',
+  },
+  windowFrameCrossV: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: '50%',
+    width: 1.5,
+    backgroundColor: '#E8D7C3',
+  },
+  wallPhotoFrame: {
+    position: 'absolute',
+    top: 16,
+    right: 18,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#E8D7C3',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+  },
+  wallPhotoText: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: '#FF7E82',
+    marginTop: 2,
+  },
+  roomMoulding: {
+    position: 'absolute',
+    top: '56%',
+    left: 0,
+    right: 0,
+    height: 8,
+    backgroundColor: '#EAD7C1',
+    borderTopWidth: 1,
+    borderTopColor: '#DEC5AC',
+    borderBottomWidth: 1,
+    borderBottomColor: '#DEC5AC',
+    zIndex: 1,
+  },
+  roomFloorArea: {
+    position: 'absolute',
+    top: '56%',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#F8EEDB',
+  },
+  floorPlankLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: 'rgba(212, 185, 155, 0.45)',
+  },
+  floorPlankLineVertical1: {
+    position: 'absolute',
+    top: 0,
+    height: '33%',
+    left: '28%',
+    width: 1,
+    backgroundColor: 'rgba(212, 185, 155, 0.35)',
+  },
+  floorPlankLineVertical2: {
+    position: 'absolute',
+    top: '33%',
+    height: '33%',
+    left: '68%',
+    width: 1,
+    backgroundColor: 'rgba(212, 185, 155, 0.35)',
+  },
+  floorPlankLineVertical3: {
+    position: 'absolute',
+    top: '66%',
+    height: '34%',
+    left: '42%',
+    width: 1,
+    backgroundColor: 'rgba(212, 185, 155, 0.35)',
+  },
+  floorRug: {
+    position: 'absolute',
+    top: '60%',
+    left: '50%',
+    marginLeft: -90,
+    width: 180,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: '#FFE4E9',
+    borderWidth: 2,
+    borderColor: '#FFCCD6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2,
+    shadowColor: '#BCA188',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+  },
+  floorRugPattern: {
+    width: 158,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 126, 130, 0.35)',
+    borderStyle: 'dashed',
   },
   mainCharContainer: {
     position: 'absolute',
-    left: '35%',
-    top: '32%',
+    left: '50%',
+    marginLeft: -65,
+    width: 130,
+    top: '40%',
     alignItems: 'center',
+    zIndex: 10,
+  },
+  charGlow: {
+    position: 'absolute',
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: 'rgba(255, 230, 235, 0.75)',
+    top: -8,
+    alignSelf: 'center',
+    zIndex: 0,
+  },
+  charRugPedestal: {
+    position: 'absolute',
+    bottom: 30,
+    width: 120,
+    height: 40,
+    borderRadius: 60,
+    backgroundColor: '#FFE4E8',
+    alignSelf: 'center',
+    borderWidth: 2,
+    borderColor: '#FFCCD4',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+    shadowColor: '#FF7E82',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 5,
+  },
+  charRugInner: {
+    width: 104,
+    height: 28,
+    borderRadius: 52,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 126, 130, 0.3)',
+    borderStyle: 'dashed',
+  },
+  charMoodBadge: {
+    position: 'absolute',
+    top: 0,
+    left: 2,
+    backgroundColor: '#FFFFFF',
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FFEAA7',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+    zIndex: 15,
+  },
+  charMoodEmoji: {
+    fontSize: 13,
+  },
+  mainCharEmojiBubble: {
+    width: 105,
+    height: 105,
+    borderRadius: 52.5,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3.5,
+    borderColor: '#FFFFFF',
+    shadowColor: '#FF7E82',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  charTouchArea: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
   },
   mainCharEmoji: {
-    fontSize: 70,
+    fontSize: 66,
+  },
+  mainCharImageWrapper: {
+    width: 100,
+    height: 100,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   mainCharImageContainer: {
-    width: 110,
-    height: 110,
-    borderRadius: 55,
-    overflow: 'hidden',
-    borderWidth: 3,
-    borderColor: '#FF7E82',
-    backgroundColor: '#FFFFFF',
+    width: 100,
+    height: 100,
+    backgroundColor: 'transparent',
   },
   mainCharImage: {
     width: '100%',
     height: '100%',
+    resizeMode: 'contain',
+    ...(Platform.OS === 'web' ? { mixBlendMode: 'multiply' } : {}),
   },
-  charShadow: {
+  charGroundShadow: {
     width: 70,
     height: 10,
+    borderRadius: 25,
+    backgroundColor: 'rgba(120, 80, 50, 0.16)',
+    alignSelf: 'center',
+    marginTop: -2,
+  },
+  charShadow: {
+    width: 76,
+    height: 10,
     backgroundColor: 'rgba(0,0,0,0.06)',
-    borderRadius: 35,
+    borderRadius: 38,
     position: 'absolute',
     bottom: 30,
   },
   mainCharBadge: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 14,
     alignItems: 'center',
     marginTop: 4,
     borderWidth: 1,
-    borderColor: '#EBEBEB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 2,
+    borderColor: 'rgba(255, 215, 225, 0.5)',
+    shadowColor: '#C4A882',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
     elevation: 2,
+    zIndex: 10,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  personalityTag: {
+    backgroundColor: '#FFF2F3',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  personalityTagText: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: '#FF7E82',
   },
   mainCharName: {
     fontSize: 12,
@@ -944,16 +1678,29 @@ const styles = StyleSheet.create({
     position: 'absolute',
     alignItems: 'center',
   },
+  subCharImageWrapper: {
+    width: 48,
+    height: 48,
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   subCharImage: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    borderWidth: 2,
-    borderColor: '#4A90E2',
-    backgroundColor: '#FFFFFF',
+    width: '100%',
+    height: '100%',
+    resizeMode: 'contain',
+    ...(Platform.OS === 'web' ? { mixBlendMode: 'multiply' } : {}),
   },
   subCharEmoji: {
     fontSize: 42,
+  },
+  subCharShadow: {
+    width: 38,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(90, 60, 40, 0.15)',
+    alignSelf: 'center',
+    marginTop: -2,
   },
   subCharLabelBox: {
     backgroundColor: '#FFFFFF',
@@ -1335,6 +2082,196 @@ const styles = StyleSheet.create({
   buyBtnText: {
     color: '#FFFFFF',
     fontSize: 12,
+    fontWeight: '800',
+  },
+  // Touch & Dialogue Interaction Styles (Sumone Style)
+  charTouchArea: {
+    alignItems: 'center',
+    position: 'relative',
+  },
+  speechBubbleContainer: {
+    position: 'absolute',
+    bottom: '100%',
+    marginBottom: 10,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#FF7E82',
+    maxWidth: 220,
+    minWidth: 140,
+    alignItems: 'center',
+    shadowColor: '#FF7E82',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
+    zIndex: 30,
+  },
+  speechBubbleText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#2C3E50',
+    textAlign: 'center',
+    lineHeight: 17,
+  },
+  speechBubbleArrow: {
+    position: 'absolute',
+    bottom: -6,
+    width: 10,
+    height: 10,
+    backgroundColor: '#FFFFFF',
+    borderRightWidth: 1.5,
+    borderBottomWidth: 1.5,
+    borderColor: '#FF7E82',
+    transform: [{ rotate: '45deg' }],
+  },
+  floatingHeartContainer: {
+    position: 'absolute',
+    top: -24,
+    alignItems: 'center',
+    zIndex: 40,
+  },
+  touchExpText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#FF4D6D',
+    marginTop: 2,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FFEBEB',
+  },
+  touchHintBadge: {
+    position: 'absolute',
+    top: 2,
+    right: -6,
+    backgroundColor: '#FF4D6D',
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  touchHintText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#FFFFFF',
+  },
+  levelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: 64,
+    marginTop: 2,
+  },
+  expNumberText: {
+    fontSize: 8,
+    fontWeight: '700',
+    color: '#AEAEB2',
+  },
+  subSpeechBubble: {
+    position: 'absolute',
+    bottom: '100%',
+    marginBottom: 6,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#4A90E2',
+    maxWidth: 160,
+    minWidth: 100,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    zIndex: 25,
+  },
+  subSpeechBubbleText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#2C3E50',
+    textAlign: 'center',
+    lineHeight: 14,
+  },
+  subSpeechBubbleArrow: {
+    position: 'absolute',
+    bottom: -5,
+    width: 8,
+    height: 8,
+    backgroundColor: '#FFFFFF',
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#4A90E2',
+    transform: [{ rotate: '45deg' }],
+  },
+  levelUpOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  levelUpCard: {
+    width: '100%',
+    maxWidth: 320,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  levelUpEmoji: {
+    fontSize: 48,
+    marginBottom: 10,
+  },
+  levelUpTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#FF7E82',
+    marginBottom: 6,
+  },
+  levelUpNameText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#1C1C1E',
+    marginBottom: 8,
+  },
+  levelUpDesc: {
+    fontSize: 13,
+    color: '#636E72',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 20,
+  },
+  levelUpBtn: {
+    backgroundColor: '#FF7E82',
+    paddingHorizontal: 28,
+    paddingVertical: 12,
+    borderRadius: 16,
+    width: '100%',
+    alignItems: 'center',
+  },
+  levelUpBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
     fontWeight: '800',
   },
 });

@@ -62,9 +62,11 @@ export default function SmallTalkScreen({
   const myRole = currentUserProfile?.role || currentUser;
   const hasAnswered = Boolean(
     responses && (
-      (myId && responses[myId]) ||
-      (myRole && responses[myRole]) ||
-      responses[currentUser]
+      (myId ? Boolean(responses[myId]) : false) ||
+      (!myId && (
+        (myRole && Boolean(responses[myRole])) ||
+        Boolean(responses[currentUser])
+      ))
     )
   );
 
@@ -73,17 +75,21 @@ export default function SmallTalkScreen({
   if (responses) {
     if (familyMembers && Array.isArray(familyMembers) && familyMembers.length > 0) {
       answeredCount = familyMembers.filter(m => {
-        const idKey = m.id;
-        const roleK = m.role || m;
-        return (idKey && responses[idKey]) || (roleK && responses[roleK]);
+        if (m && typeof m === 'object' && m.id) {
+          return Boolean(responses[m.id]);
+        }
+        const roleK = m?.role || m;
+        return Boolean(responses[roleK]);
       }).length;
     } else {
       answeredCount = Object.keys(responses).length;
     }
   }
 
-  const totalCount = familyMembers && Array.isArray(familyMembers) ? familyMembers.length : 4;
-  const isMissionComplete = answeredCount === totalCount;
+  const totalCount = familyMembers && Array.isArray(familyMembers) && familyMembers.length > 0
+    ? familyMembers.length
+    : 4;
+  const isMissionComplete = totalCount > 0 && answeredCount >= totalCount;
 
   const handleSubmit = () => {
     if (!answer.trim()) {
@@ -217,6 +223,23 @@ export default function SmallTalkScreen({
 
   return (
     <View style={styles.container}>
+      {/* Sub-header Bar */}
+      <View style={styles.subHeaderBar}>
+        <View>
+          <Text style={styles.subHeaderTitle}>스몰톡</Text>
+          <Text style={styles.subHeaderSub}>오늘의 소통 & 쿠폰 상점</Text>
+        </View>
+
+        <TouchableOpacity
+          style={styles.headerActionBtn}
+          onPress={() => setModalVisible(true)}
+          activeOpacity={0.8}
+        >
+          <Plus size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
+          <Text style={styles.headerActionBtnText}>쿠폰 등록</Text>
+        </TouchableOpacity>
+      </View>
+
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Points Banner */}
         <View style={styles.pointsBanner}>
@@ -244,7 +267,8 @@ export default function SmallTalkScreen({
 
           {isMissionComplete && (
             <View style={styles.completedBadge}>
-              <Text style={styles.completedBadgeText}>🎉 미션 완료! 100포인트 획득 🎉</Text>
+              <Trophy size={14} color="#196F3D" style={{ marginRight: 6 }} />
+              <Text style={styles.completedBadgeText}>미션 완료! 100포인트 획득</Text>
             </View>
           )}
         </View>
@@ -254,12 +278,12 @@ export default function SmallTalkScreen({
           <Text style={styles.sectionTitle}>가족 답변 현황</Text>
 
           {(familyMembers && Array.isArray(familyMembers) ? familyMembers : Object.keys(DEFAULT_MEMBERS)).map((item) => {
-            const isDbProfile = typeof item === 'object' && 'role' in item;
+            const isDbProfile = typeof item === 'object' && ('id' in item || 'role' in item);
             const roleKey = isDbProfile ? item.role : item;
             const memberInfo = getMemberInfo(roleKey);
             const responseText = isDbProfile
-              ? (responses && (responses[item.id] || responses[item.role]))
-              : (responses && responses[roleKey]);
+              ? (item.id ? responses?.[item.id] : responses?.[item.role])
+              : responses?.[roleKey];
             const isAnswered = !!responseText;
 
             const memberName = isDbProfile ? item.name : memberInfo.name;
@@ -267,7 +291,7 @@ export default function SmallTalkScreen({
             const memberColor = isDbProfile ? item.color : memberInfo.color;
 
             return (
-              <View key={isDbProfile ? item.id : roleKey} style={styles.memberRow}>
+              <View key={isDbProfile ? (item.id || item.role) : roleKey} style={styles.memberRow}>
                 <View style={[styles.avatarBox, { backgroundColor: memberColor + '15' }]}>
                   <Text style={styles.avatarText}>{memberAvatar}</Text>
                 </View>
@@ -320,7 +344,9 @@ export default function SmallTalkScreen({
             <Check size={24} color="#2ECC71" style={{ marginBottom: 6 }} />
             <Text style={styles.doneTitle}>오늘의 답변을 성공적으로 남겼습니다!</Text>
             <Text style={styles.doneDesc}>다른 가족들도 모두 답변하면 미션 포인트가 적립됩니다.</Text>
-            <Text style={styles.myAnswerText}>내 답변: "{responses[currentUser]}"</Text>
+            <Text style={styles.myAnswerText}>
+              내 답변: "{(myId && responses?.[myId]) || responses?.[currentUser] || (myRole && responses?.[myRole]) || ''}"
+            </Text>
           </View>
         )}
 
@@ -576,6 +602,39 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8F9FA',
   },
+  subHeaderBar: {
+    paddingHorizontal: 20,
+    height: 64,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F2F7',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  subHeaderTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1C1C1E',
+  },
+  subHeaderSub: {
+    fontSize: 12,
+    color: '#8E8E93',
+    marginTop: 2,
+  },
+  headerActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF7E82',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  headerActionBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '700',
+  },
   scrollContent: {
     padding: 16,
     paddingBottom: 40,
@@ -651,17 +710,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   topicTitle: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '800',
     color: '#1C1C1E',
-    lineHeight: 24,
+    lineHeight: 25,
     marginBottom: 10,
   },
   completedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#D4EFDF',
     borderRadius: 8,
     paddingVertical: 6,
-    alignItems: 'center',
+    paddingHorizontal: 12,
     marginTop: 4,
   },
   completedBadgeText: {
@@ -775,15 +837,15 @@ const styles = StyleSheet.create({
   submitButton: {
     flexDirection: 'row',
     backgroundColor: '#FF7E82',
-    borderRadius: 10,
-    paddingVertical: 12,
+    borderRadius: 12,
+    paddingVertical: 13,
     justifyContent: 'center',
     alignItems: 'center',
   },
   submitButtonText: {
     color: '#FFFFFF',
     fontWeight: '700',
-    fontSize: 13,
+    fontSize: 14,
   },
   actionCardDone: {
     backgroundColor: '#E8F8F5',
@@ -833,8 +895,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   shopTitle: {
-    fontSize: 14,
-    fontWeight: '800',
+    fontSize: 15,
+    fontWeight: '700',
     color: '#1C1C1E',
   },
   headerBtnGroup: {
@@ -845,9 +907,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#EBF5FB',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
     borderWidth: 0.5,
     borderColor: '#AED6F1',
     marginRight: 6,
@@ -861,9 +923,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFF2F3',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
     borderWidth: 0.5,
     borderColor: '#FFA2A5',
   },
@@ -900,15 +962,15 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   rewardProvider: {
-    fontSize: 10,
+    fontSize: 11,
     color: '#AEAEB2',
     fontWeight: '500',
   },
   redeemButton: {
     backgroundColor: '#FF7E82',
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: 7,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -955,7 +1017,7 @@ const styles = StyleSheet.create({
     color: '#1C1C1E',
   },
   modalLabel: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: '#8E8E93',
     marginBottom: 6,
@@ -965,7 +1027,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F1F2F4',
     borderRadius: 10,
     padding: 10,
-    fontSize: 13,
+    fontSize: 14,
     color: '#1C1C1E',
     marginBottom: 4,
   },
@@ -1045,8 +1107,8 @@ const styles = StyleSheet.create({
   useCouponBtn: {
     backgroundColor: '#4A90E2',
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: 7,
+    borderRadius: 10,
   },
   useCouponBtnText: {
     color: '#FFFFFF',

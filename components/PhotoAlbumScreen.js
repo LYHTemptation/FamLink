@@ -22,10 +22,23 @@ export default function PhotoAlbumScreen({ messages, familyMembers }) {
     ? messages.filter(m => m.image || m.image_url)
     : [];
 
-  const getSenderInfo = (senderKey) => {
+  const getSenderInfo = (profileId, senderRole, senderObj) => {
+    if (senderObj && typeof senderObj === 'object' && senderObj.name) {
+      return {
+        name: senderObj.name,
+        avatar: senderObj.avatar || '👦',
+        color: senderObj.color || '#4A90E2',
+      };
+    }
     if (familyMembers && Array.isArray(familyMembers)) {
-      const match = familyMembers.find(m => m && typeof m === 'object' && (m.role === senderKey || m.id === senderKey));
-      if (match) return { name: match.name, avatar: match.avatar, color: match.color };
+      if (profileId) {
+        const matchById = familyMembers.find(m => m && typeof m === 'object' && m.id === profileId);
+        if (matchById) return { name: matchById.name, avatar: matchById.avatar || '👦', color: matchById.color || '#4A90E2' };
+      }
+      if (senderRole) {
+        const matchByRole = familyMembers.find(m => m && typeof m === 'object' && (m.role === senderRole || m.id === senderRole));
+        if (matchByRole) return { name: matchByRole.name, avatar: matchByRole.avatar || '👦', color: matchByRole.color || '#4A90E2' };
+      }
     }
     const DEFAULTS = {
       mom: { name: '엄마', avatar: '👩‍🦰', color: '#FF7E82' },
@@ -33,22 +46,25 @@ export default function PhotoAlbumScreen({ messages, familyMembers }) {
       son: { name: '아들', avatar: '👦', color: '#2ECC71' },
       daughter: { name: '딸', avatar: '👧', color: '#F39C12' },
     };
-    return DEFAULTS[senderKey] || { name: senderKey, avatar: '👦', color: '#8E8E93' };
+    return DEFAULTS[senderRole] || { name: senderRole || '가족', avatar: '👦', color: '#8E8E93' };
   };
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Header Banner */}
-        <View style={styles.headerCard}>
-          <View style={styles.headerTitleRow}>
-            <ImageIcon size={22} color="#FF7E82" style={{ marginRight: 8 }} />
-            <Text style={styles.headerTitle}>가족 추억 앨범 🖼️</Text>
-          </View>
-          <Text style={styles.headerSub}>
-            메신저에서 주고받은 소중한 사진들이 자동으로 모이는 우리 가족 전원 갤러리입니다. (총 {photoMessages.length}장)
-          </Text>
+      {/* Sub-header Bar */}
+      <View style={styles.subHeaderBar}>
+        <View>
+          <Text style={styles.subHeaderTitle}>추억 앨범</Text>
+          <Text style={styles.subHeaderSub}>공유된 사진 {photoMessages.length}장</Text>
         </View>
+
+        <View style={styles.photoCountBadge}>
+          <ImageIcon size={14} color="#FF7E82" style={{ marginRight: 4 }} />
+          <Text style={styles.photoCountBadgeText}>{photoMessages.length}장</Text>
+        </View>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scrollContent}>
 
         {/* Photo Grid */}
         {photoMessages.length === 0 ? (
@@ -61,7 +77,7 @@ export default function PhotoAlbumScreen({ messages, familyMembers }) {
           <View style={styles.gridContainer}>
             {photoMessages.map((msg) => {
               const photoUri = msg.image_url || msg.image;
-              const sender = getSenderInfo(msg.sender);
+              const sender = getSenderInfo(msg.profile_id, msg.sender, msg.senderObj);
 
               return (
                 <TouchableOpacity
@@ -127,28 +143,40 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 40,
   },
-  headerCard: {
+  subHeaderBar: {
+    paddingHorizontal: 20,
+    height: 64,
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
-  },
-  headerTitleRow: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F2F7',
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
   },
-  headerTitle: {
-    fontSize: 16,
+  subHeaderTitle: {
+    fontSize: 20,
     fontWeight: '800',
     color: '#1C1C1E',
   },
-  headerSub: {
+  subHeaderSub: {
     fontSize: 12,
     color: '#8E8E93',
-    lineHeight: 18,
+    marginTop: 2,
+  },
+  photoCountBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF2F3',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FFE5E7',
+  },
+  photoCountBadgeText: {
+    fontSize: 12,
+    color: '#FF7E82',
+    fontWeight: '700',
   },
   emptyBox: {
     backgroundColor: '#FFFFFF',

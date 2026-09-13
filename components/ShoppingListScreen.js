@@ -11,7 +11,14 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { ShoppingCart, CheckSquare, Square, Plus, Trash2, X, Award, CheckCircle2 } from 'lucide-react-native';
+import { ShoppingCart, Award } from 'lucide-react-native';
+import {
+  IconPlus,
+  IconTrash,
+  IconClose,
+  IconSquare,
+  IconCheckCircle,
+} from './icons';
 
 export default function ShoppingListScreen({
   shoppingItems,
@@ -43,7 +50,7 @@ export default function ShoppingListScreen({
 
   const handleDeleteConfirm = (item) => {
     Alert.alert(
-      '항목 삭제 🗑️',
+      '항목 삭제',
       `'${item.title}' 항목을 삭제하시겠습니까?`,
       [
         { text: '취소', style: 'cancel' },
@@ -72,29 +79,26 @@ export default function ShoppingListScreen({
 
   return (
     <View style={styles.container}>
+      {/* Sub-header Bar */}
+      <View style={styles.subHeaderBar}>
+        <View>
+          <Text style={styles.subHeaderTitle}>장보기</Text>
+          <Text style={styles.subHeaderSub}>미완료 {activeItems.length}개 · 완료 {completedItems.length}개</Text>
+        </View>
+
+        <TouchableOpacity style={styles.addBtn} onPress={() => setModalVisible(true)} activeOpacity={0.8}>
+          <IconPlus size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
+          <Text style={styles.addBtnText}>품목 추가</Text>
+        </TouchableOpacity>
+      </View>
+
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Header Card */}
-        <View style={styles.headerCard}>
-          <View style={styles.headerTitleRow}>
-            <ShoppingCart size={22} color="#FF7E82" style={{ marginRight: 8 }} />
-            <Text style={styles.headerTitle}>가족 장보기 & 체크리스트</Text>
-          </View>
-          <Text style={styles.headerSub}>
-            필요한 물품이나 가사 일을 함께 공유해 보세요! 완료 시 건당 +10P가 적립됩니다.
+        {/* Daily Reward Progress Badge */}
+        <View style={styles.dailyRewardCard}>
+          <Award size={16} color="#FF7E82" style={{ marginRight: 6 }} />
+          <Text style={styles.dailyRewardText}>
+            오늘의 보상: {todayEarnedCount * 10} / 30 P ({todayEarnedCount}/3건 적립 완료)
           </Text>
-
-          {/* Daily Reward Progress Badge */}
-          <View style={styles.dailyRewardBadge}>
-            <Award size={14} color="#FF7E82" style={{ marginRight: 4 }} />
-            <Text style={styles.dailyRewardText}>
-              오늘의 보상 한도: {todayEarnedCount * 10} / 30 P ({todayEarnedCount}/3건 적립)
-            </Text>
-          </View>
-
-          <TouchableOpacity style={styles.addBtn} onPress={() => setModalVisible(true)}>
-            <Plus size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
-            <Text style={styles.addBtnText}>항목 추가하기</Text>
-          </TouchableOpacity>
         </View>
 
         {/* Active Items Section */}
@@ -110,7 +114,7 @@ export default function ShoppingListScreen({
                   style={styles.checkboxTouch}
                   onPress={() => onToggleItem(item, true)}
                 >
-                  <Square size={20} color="#8E8E93" />
+                  <IconSquare size={20} color="#8E8E93" />
                 </TouchableOpacity>
 
                 <View style={styles.itemInfo}>
@@ -124,7 +128,7 @@ export default function ShoppingListScreen({
                   style={styles.deleteBtn}
                   onPress={() => handleDeleteConfirm(item)}
                 >
-                  <Trash2 size={16} color="#AEAEB2" />
+                  <IconTrash size={16} color="#AEAEB2" />
                 </TouchableOpacity>
               </View>
             ))
@@ -141,7 +145,7 @@ export default function ShoppingListScreen({
                   style={styles.checkboxTouch}
                   onPress={() => onToggleItem(item, false)}
                 >
-                  <CheckCircle2 size={20} color="#2ECC71" />
+                  <IconCheckCircle size={20} color="#2ECC71" />
                 </TouchableOpacity>
 
                 <View style={styles.itemInfo}>
@@ -156,7 +160,7 @@ export default function ShoppingListScreen({
                   style={styles.deleteBtn}
                   onPress={() => handleDeleteConfirm(item)}
                 >
-                  <Trash2 size={16} color="#AEAEB2" />
+                  <IconTrash size={16} color="#AEAEB2" />
                 </TouchableOpacity>
               </View>
             ))}
@@ -179,7 +183,7 @@ export default function ShoppingListScreen({
             <View style={styles.modalHeaderRow}>
               <Text style={styles.modalHeader}>새 장보기/할 일 추가</Text>
               <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <X size={20} color="#8E8E93" />
+                <IconClose size={20} color="#8E8E93" />
               </TouchableOpacity>
             </View>
 
@@ -194,16 +198,21 @@ export default function ShoppingListScreen({
 
             <Text style={styles.modalLabel}>담당 가족 지정</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.assigneeScroll}>
-              {['가족 전체', ...(familyMembers ? familyMembers.map(m => m.name || m.role) : ['엄마', '아빠', '아들', '딸'])].map((name) => {
-                const isSelected = selectedAssignee === name;
+              {[
+                { key: 'all', name: '가족 전체' },
+                ...(familyMembers && Array.isArray(familyMembers) && familyMembers.length > 0
+                  ? familyMembers.map((m, idx) => ({ key: m.id || `${m.name || m.role}_${idx}`, name: m.name || m.role }))
+                  : ['엄마', '아빠', '아들', '딸'].map(r => ({ key: r, name: r })))
+              ].map((item) => {
+                const isSelected = selectedAssignee === item.name;
                 return (
                   <TouchableOpacity
-                    key={name}
+                    key={item.key}
                     style={[styles.assigneeChip, isSelected && styles.assigneeChipActive]}
-                    onPress={() => setSelectedAssignee(name)}
+                    onPress={() => setSelectedAssignee(item.name)}
                   >
                     <Text style={[styles.assigneeChipText, isSelected && styles.assigneeChipTextActive]}>
-                      {name}
+                      {item.name}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -229,56 +238,54 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingBottom: 40,
   },
-  headerCard: {
+  subHeaderBar: {
+    paddingHorizontal: 20,
+    height: 64,
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
-  },
-  headerTitleRow: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F2F7',
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
   },
-  headerTitle: {
-    fontSize: 16,
+  subHeaderTitle: {
+    fontSize: 20,
     fontWeight: '800',
     color: '#1C1C1E',
   },
-  headerSub: {
+  subHeaderSub: {
     fontSize: 12,
     color: '#8E8E93',
-    lineHeight: 18,
-    marginBottom: 10,
-  },
-  dailyRewardBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF2F3',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  dailyRewardText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#FF7E82',
+    marginTop: 2,
   },
   addBtn: {
     flexDirection: 'row',
     backgroundColor: '#FF7E82',
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 10,
-    justifyContent: 'center',
     alignItems: 'center',
   },
   addBtnText: {
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '700',
+  },
+  dailyRewardCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF2F3',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#FFE5E7',
+  },
+  dailyRewardText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FF7E82',
   },
   sectionCard: {
     backgroundColor: '#FFFFFF',
@@ -289,14 +296,14 @@ const styles = StyleSheet.create({
     borderColor: '#EBEBEB',
   },
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: '800',
+    fontSize: 15,
+    fontWeight: '700',
     color: '#1C1C1E',
     marginBottom: 14,
   },
   sectionTitleDone: {
-    fontSize: 14,
-    fontWeight: '800',
+    fontSize: 15,
+    fontWeight: '700',
     color: '#2ECC71',
     marginBottom: 14,
   },
@@ -344,7 +351,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   assigneeBadge: {
-    fontSize: 10,
+    fontSize: 11,
     color: '#FF7E82',
     backgroundColor: '#FFF2F3',
     paddingHorizontal: 6,
@@ -353,12 +360,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   completedByText: {
-    fontSize: 10,
+    fontSize: 11,
     color: '#2ECC71',
     fontWeight: '600',
   },
   deleteBtn: {
-    padding: 6,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
   },
   modalOverlay: {
     flex: 1,
@@ -383,7 +395,7 @@ const styles = StyleSheet.create({
     color: '#1C1C1E',
   },
   modalLabel: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: '#8E8E93',
     marginBottom: 6,
@@ -393,7 +405,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F1F2F4',
     borderRadius: 10,
     padding: 12,
-    fontSize: 13,
+    fontSize: 14,
     color: '#1C1C1E',
     marginBottom: 8,
   },

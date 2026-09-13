@@ -11,7 +11,26 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { Plus, Calendar as CalendarIcon, Clock, User, Tag, Trash2, ChevronLeft, ChevronRight, Gift, PartyPopper, Edit3 } from 'lucide-react-native';
+import {
+  Plus,
+  Calendar as CalendarIcon,
+  Clock,
+  User,
+  Tag,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  Gift,
+  PartyPopper,
+  Edit3,
+} from 'lucide-react-native';
+import {
+  CategoryMealIcon,
+  CategoryAnniversaryIcon,
+  CategoryTripIcon,
+  CategoryHouseworkIcon,
+  CategoryOtherIcon,
+} from './icons';
 
 const FAMILY_MEMBERS = {
   mom: { name: '엄마', avatar: '👩‍🦰', color: '#FF7E82' },
@@ -21,14 +40,45 @@ const FAMILY_MEMBERS = {
 };
 
 const CATEGORIES = {
-  dinner: { label: '가족 식사 🍕', color: '#E74C3C' },
-  anniversary: { label: '기념일/생일 🎉', color: '#9B59B6' },
-  trip: { label: '나들이/외출 🚗', color: '#2ECC71' },
-  housework: { label: '집안일 🧹', color: '#F1C40F' },
-  etc: { label: '기타 📌', color: '#95A5A6' },
+  dinner: { label: '가족 식사', icon: CategoryMealIcon, color: '#E74C3C' },
+  anniversary: { label: '기념일/생일', icon: CategoryAnniversaryIcon, color: '#9B59B6' },
+  trip: { label: '나들이/외출', icon: CategoryTripIcon, color: '#2ECC71' },
+  housework: { label: '집안일', icon: CategoryHouseworkIcon, color: '#F39C12' },
+  etc: { label: '기타', icon: CategoryOtherIcon, color: '#95A5A6' },
 };
 
-export default function CalendarScreen({ events, currentUser, onAddEvent, onUpdateEvent, onDeleteEvent }) {
+export default function CalendarScreen({
+  events,
+  currentUser,
+  currentUserProfile,
+  familyMembers,
+  onAddEvent,
+  onUpdateEvent,
+  onDeleteEvent,
+}) {
+  const getCreatorInfo = (item) => {
+    if (item?.creatorObj && typeof item.creatorObj === 'object') {
+      return {
+        name: item.creatorObj.name || item.creatorObj.role || '가족',
+        avatar: item.creatorObj.avatar || '👦',
+        color: item.creatorObj.color || '#4A90E2',
+      };
+    }
+    if (familyMembers && Array.isArray(familyMembers)) {
+      if (item?.profile_id || item?.creator) {
+        const matchById = familyMembers.find(m => m && typeof m === 'object' && (m.id === item.profile_id || m.id === item.creator));
+        if (matchById) {
+          return { name: matchById.name, avatar: matchById.avatar || '👦', color: matchById.color || '#4A90E2' };
+        }
+      }
+      const matchByName = familyMembers.find(m => m && typeof m === 'object' && m.name === item?.creator);
+      if (matchByName) {
+        return { name: matchByName.name, avatar: matchByName.avatar || '👦', color: matchByName.color || '#4A90E2' };
+      }
+    }
+    return FAMILY_MEMBERS[item?.creator] || { name: item?.creator || '가족', avatar: '👦', color: '#8E8E93' };
+  };
+
   const getTodayString = (dateObj = new Date()) => {
     const y = dateObj.getFullYear();
     const m = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -63,6 +113,12 @@ export default function CalendarScreen({ events, currentUser, onAddEvent, onUpda
 
   const handleNextMonth = () => {
     setCurrentDate(new Date(year, month, 1));
+  };
+
+  const handleToday = () => {
+    const today = new Date();
+    setCurrentDate(today);
+    setSelectedDate(getTodayString(today));
   };
 
   const handleOpenAddModal = () => {
@@ -126,7 +182,8 @@ export default function CalendarScreen({ events, currentUser, onAddEvent, onUpda
       endDate: end,
       time,
       category,
-      creator: currentUser,
+      profile_id: currentUserProfile?.id,
+      creator: currentUserProfile?.name || currentUser,
     };
 
     if (editingEventId) {
@@ -213,9 +270,27 @@ export default function CalendarScreen({ events, currentUser, onAddEvent, onUpda
   };
 
   const dDayItems = getDDayList();
+  const monthEventsCount = (events || []).filter(e => {
+    if (!e || !e.date) return false;
+    const parts = e.date.split('-');
+    return parseInt(parts[0], 10) === year && parseInt(parts[1], 10) === month;
+  }).length;
 
   return (
     <View style={styles.container}>
+      {/* Sub-header Bar */}
+      <View style={styles.calendarHeader}>
+        <View>
+          <Text style={styles.subHeaderTitle}>캘린더</Text>
+          <Text style={styles.subHeaderSub}>이번 달 가족 일정 {monthEventsCount}개</Text>
+        </View>
+
+        <TouchableOpacity style={styles.addButton} onPress={handleOpenAddModal} activeOpacity={0.8}>
+          <Plus size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
+          <Text style={styles.addButtonText}>일정 추가</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* D-Day Banner Carousel */}
       {dDayItems.length > 0 && (
         <View style={styles.dDayContainer}>
@@ -230,7 +305,7 @@ export default function CalendarScreen({ events, currentUser, onAddEvent, onUpda
                 <Text style={styles.dDayTitle}>{item.title}</Text>
                 <View style={styles.dDayBadge}>
                   <Text style={styles.dDayBadgeText}>
-                    {item.isOngoing ? '진행 중 🎉' : (item.diffDays === 0 ? 'D-Day Today 🎉' : `D-${item.diffDays}`)}
+                    {item.isOngoing ? '진행 중' : (item.diffDays === 0 ? 'D-Day' : `D-${item.diffDays}`)}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -239,20 +314,20 @@ export default function CalendarScreen({ events, currentUser, onAddEvent, onUpda
         </View>
       )}
 
-      {/* Calendar Header */}
-      <View style={styles.calendarHeader}>
-        <View style={styles.monthSelectorRow}>
-          <TouchableOpacity onPress={handlePrevMonth} style={styles.arrowBtn}>
-            <ChevronLeft size={18} color="#8E8E93" />
+      {/* Calendar Month Navigation Bar */}
+      <View style={styles.monthNavRow}>
+        <View style={styles.monthNavControls}>
+          <TouchableOpacity onPress={handlePrevMonth} style={styles.navArrowBtn} activeOpacity={0.7}>
+            <ChevronLeft size={20} color="#1C1C1E" />
           </TouchableOpacity>
-          <Text style={styles.monthTitle}>{year}년 {month}월</Text>
-          <TouchableOpacity onPress={handleNextMonth} style={styles.arrowBtn}>
-            <ChevronRight size={18} color="#8E8E93" />
+          <Text style={styles.monthNavTitle}>{year}년 {month}월</Text>
+          <TouchableOpacity onPress={handleNextMonth} style={styles.navArrowBtn} activeOpacity={0.7}>
+            <ChevronRight size={20} color="#1C1C1E" />
           </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.addButton} onPress={handleOpenAddModal}>
-          <Plus size={18} color="#FFFFFF" style={{ marginRight: 4 }} />
-          <Text style={styles.addButtonText}>일정 추가</Text>
+
+        <TouchableOpacity style={styles.todayBtn} onPress={handleToday} activeOpacity={0.7}>
+          <Text style={styles.todayBtnText}>오늘</Text>
         </TouchableOpacity>
       </View>
 
@@ -309,7 +384,8 @@ export default function CalendarScreen({ events, currentUser, onAddEvent, onUpda
           ) : (
             selectedDateEvents.map((item) => {
               const catInfo = CATEGORIES[item.category] || CATEGORIES.etc;
-              const creatorInfo = FAMILY_MEMBERS[item.creator] || { name: item.creator, avatar: '👦', color: '#8E8E93' };
+              const creatorInfo = getCreatorInfo(item);
+              const CatIcon = catInfo.icon;
 
               return (
                 <View key={item.id} style={styles.eventCard}>
@@ -323,6 +399,15 @@ export default function CalendarScreen({ events, currentUser, onAddEvent, onUpda
                           ? `${item.date} ~ ${item.endDate || item.end_date} (${item.time})`
                           : `${item.time}`}
                       </Text>
+
+                      <View style={[styles.categoryBadge, { backgroundColor: catInfo.color + '18' }]}>
+                        {CatIcon && (
+                          <CatIcon size={12} color={catInfo.color} style={{ marginRight: 4 }} />
+                        )}
+                        <Text style={[styles.categoryBadgeText, { color: catInfo.color }]}>
+                          {catInfo.label}
+                        </Text>
+                      </View>
 
                       <View style={styles.creatorTag}>
                         <Text style={styles.creatorAvatar}>{creatorInfo.avatar}</Text>
@@ -449,7 +534,7 @@ export default function CalendarScreen({ events, currentUser, onAddEvent, onUpda
             <Text style={styles.label}>일정 내용</Text>
             <TextInput
               style={styles.textInput}
-              placeholder="일정 제목을 입력하세요 (예: 엄마 생신 🎉)"
+              placeholder="일정 제목을 입력하세요 (예: 가족 식사, 기념일)"
               placeholderTextColor="#AEAEB2"
               value={title}
               onChangeText={setTitle}
@@ -468,17 +553,26 @@ export default function CalendarScreen({ events, currentUser, onAddEvent, onUpda
             <View style={styles.categoryContainer}>
               {Object.keys(CATEGORIES).map((catKey) => {
                 const isSelected = category === catKey;
+                const cat = CATEGORIES[catKey];
+                const CatIcon = cat.icon;
                 return (
                   <TouchableOpacity
                     key={catKey}
                     style={[
                       styles.categoryButton,
-                      isSelected && { backgroundColor: CATEGORIES[catKey].color, borderColor: CATEGORIES[catKey].color }
+                      isSelected && { backgroundColor: cat.color, borderColor: cat.color }
                     ]}
                     onPress={() => setCategory(catKey)}
                   >
+                    {CatIcon && (
+                      <CatIcon
+                        size={15}
+                        color={isSelected ? '#FFFFFF' : cat.color}
+                        style={{ marginRight: 6 }}
+                      />
+                    )}
                     <Text style={[styles.categoryButtonText, isSelected && { color: '#FFFFFF' }]}>
-                      {CATEGORIES[catKey].label}
+                      {cat.label}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -539,42 +633,79 @@ const styles = StyleSheet.create({
   },
   dDayBadgeText: {
     color: '#FFFFFF',
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '800',
   },
   calendarHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: 20,
+    height: 64,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F2F7',
     backgroundColor: '#FFFFFF',
   },
-  monthSelectorRow: {
+  subHeaderTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1C1C1E',
+  },
+  subHeaderSub: {
+    fontSize: 12,
+    color: '#8E8E93',
+    marginTop: 2,
+  },
+  monthNavRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F2F7',
+  },
+  monthNavControls: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  arrowBtn: {
+  navArrowBtn: {
     padding: 6,
-    marginHorizontal: 4,
+    borderRadius: 8,
+    backgroundColor: '#F8F9FA',
   },
-  monthTitle: {
-    fontSize: 18,
+  monthNavTitle: {
+    fontSize: 17,
     fontWeight: '800',
     color: '#1C1C1E',
+    marginHorizontal: 12,
+  },
+  todayBtn: {
+    backgroundColor: '#FFF2F3',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FFA2A5',
+  },
+  todayBtnText: {
+    fontSize: 12,
+    color: '#FF7E82',
+    fontWeight: '700',
   },
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FF7E82',
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 10,
   },
   addButtonText: {
     color: '#FFFFFF',
     fontWeight: '700',
-    fontSize: 12,
+    fontSize: 13,
   },
   weekdaysRow: {
     flexDirection: 'row',
@@ -702,16 +833,38 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
+  categoryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  categoryBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
   deleteButton: {
-    padding: 6,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
   },
   cardBtnGroup: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   editButton: {
-    padding: 6,
-    marginRight: 4,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F0F7FF',
+    marginRight: 6,
   },
   modalOverlay: {
     flex: 1,
@@ -723,30 +876,39 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
+    maxHeight: '90%',
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   modalHeader: {
     fontSize: 18,
     fontWeight: '800',
     color: '#1C1C1E',
   },
-  modalSubHeader: {
-    fontSize: 12,
+  modalCloseBtn: {
+    padding: 4,
+  },
+  modalCloseText: {
+    fontSize: 20,
     color: '#8E8E93',
-    marginBottom: 16,
   },
   label: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
-    color: '#8E8E93',
-    marginBottom: 6,
+    color: '#1C1C1E',
+    marginBottom: 8,
   },
-  textInput: {
+  input: {
     backgroundColor: '#F1F2F4',
     borderRadius: 10,
     padding: 12,
-    fontSize: 13,
+    fontSize: 14,
     color: '#1C1C1E',
-    marginBottom: 14,
+    marginBottom: 16,
   },
   categoryContainer: {
     flexDirection: 'row',
@@ -754,10 +916,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   categoryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: '#EBEBEB',
-    borderRadius: 8,
-    paddingHorizontal: 10,
+    borderRadius: 10,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     marginRight: 8,
     marginBottom: 8,
@@ -828,8 +992,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   subLabel: {
-    fontSize: 12,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
     color: '#8E8E93',
     marginBottom: 4,
   },

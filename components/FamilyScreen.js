@@ -10,7 +10,8 @@ import {
   TextInput,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import { Users, Copy, Share2, Heart, Award, ShieldCheck, Smile, Edit3, X } from 'lucide-react-native';
+import { Users, Heart, Award, ShieldCheck, Smile, Edit3 } from 'lucide-react-native';
+import { MoodIcon, MOOD_ITEMS, IconCopy, IconShare, IconClose } from './icons';
 
 const FAMILY_MEMBERS_STATIC = {
   mom: { name: '엄마', avatar: '👩‍🦰', color: '#FF7E82' },
@@ -18,8 +19,6 @@ const FAMILY_MEMBERS_STATIC = {
   son: { name: '아들', avatar: '👦', color: '#2ECC71' },
   daughter: { name: '딸', avatar: '👧', color: '#F39C12' },
 };
-
-const MOOD_EMOJIS = ['😊', '😄', '😴', '✏️', '🛍️', '🍗', '💪', '❤️', '🏠', '🎮'];
 
 export default function FamilyScreen({
   familyCode,
@@ -51,7 +50,25 @@ export default function FamilyScreen({
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+    <View style={styles.container}>
+      {/* Sub-header Bar */}
+      <View style={styles.subHeaderBar}>
+        <View>
+          <Text style={styles.subHeaderTitle}>가족</Text>
+          <Text style={styles.subHeaderSub}>가족 멤버 {familyMembersList.length}명</Text>
+        </View>
+
+        <TouchableOpacity
+          style={styles.headerActionBtn}
+          onPress={() => setModalVisible(true)}
+          activeOpacity={0.8}
+        >
+          <Smile size={15} color="#FF7E82" style={{ marginRight: 4 }} />
+          <Text style={styles.headerActionBtnText}>내 기분 변경</Text>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scrollContent}>
       {/* Family Code Card */}
       <View style={styles.codeCard}>
         <View style={styles.cardHeader}>
@@ -65,12 +82,12 @@ export default function FamilyScreen({
 
         <View style={styles.actionRow}>
           <TouchableOpacity style={styles.actionButton} onPress={handleCopyCode}>
-            <Copy size={14} color="#FF7E82" style={{ marginRight: 4 }} />
+            <IconCopy size={14} color="#FF7E82" style={{ marginRight: 4 }} />
             <Text style={styles.actionButtonText}>코드 복사</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.actionButton} onPress={handleCopyInviteMessage}>
-            <Share2 size={14} color="#FF7E82" style={{ marginRight: 4 }} />
+            <IconShare size={14} color="#FF7E82" style={{ marginRight: 4 }} />
             <Text style={styles.actionButtonText}>초대 링크 복사</Text>
           </TouchableOpacity>
         </View>
@@ -105,7 +122,7 @@ export default function FamilyScreen({
           const isMe = isDbProfile ? currentUserProfile && currentUserProfile.id === member.id : index === 0;
           const isOnline = onlineUsers && onlineUsers.length > 0 ? (
             isDbProfile
-              ? onlineUsers.includes(member.id) || onlineUsers.includes(member.role) || isMe
+              ? ((member.id ? onlineUsers.includes(member.id) : onlineUsers.includes(member.role)) || isMe)
               : index === 0 || onlineUsers.includes(roleKey)
           ) : isMe;
 
@@ -127,9 +144,9 @@ export default function FamilyScreen({
 
                 {/* Mood & Status Message Badge */}
                 <View style={styles.moodBadgeRow}>
-                  <Text style={styles.moodEmoji}>{moodEmoji}</Text>
+                  <MoodIcon mood={moodEmoji} size={14} style={{ marginRight: 5 }} />
                   <Text style={styles.moodStatusText}>
-                    {memberStatusText || '오늘도 화이팅! ❤️'}
+                    {memberStatusText || '오늘도 화이팅!'}
                   </Text>
                 </View>
               </View>
@@ -166,21 +183,34 @@ export default function FamilyScreen({
             <View style={styles.modalHeaderRow}>
               <Text style={styles.modalHeader}>오늘의 기분 & 한 줄 상태</Text>
               <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <X size={20} color="#8E8E93" />
+                <IconClose size={20} color="#8E8E93" />
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.modalLabel}>기분 이모지 선택</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.emojiScroll}>
-              {MOOD_EMOJIS.map((emoji) => (
-                <TouchableOpacity
-                  key={emoji}
-                  style={[styles.emojiChip, selectedMood === emoji && styles.emojiChipActive]}
-                  onPress={() => setSelectedMood(emoji)}
-                >
-                  <Text style={styles.emojiChipText}>{emoji}</Text>
-                </TouchableOpacity>
-              ))}
+            <Text style={styles.modalLabel}>오늘의 기분 스티커 선택</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.emojiScroll} contentContainerStyle={{ paddingVertical: 4 }}>
+              {MOOD_ITEMS.map((item) => {
+                const isSelected = selectedMood === item.id;
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[
+                      styles.emojiChip,
+                      isSelected && {
+                        borderColor: item.color,
+                        backgroundColor: item.color + '15',
+                        borderWidth: 2,
+                      }
+                    ]}
+                    onPress={() => setSelectedMood(item.id)}
+                  >
+                    <MoodIcon mood={item.id} size={22} color={item.color} />
+                    <Text style={[styles.moodChipLabel, isSelected && { color: item.color, fontWeight: '800' }]}>
+                      {item.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
 
             <Text style={styles.modalLabel}>한 줄 상태 메시지</Text>
@@ -199,7 +229,8 @@ export default function FamilyScreen({
           </View>
         </View>
       </Modal>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -207,6 +238,41 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8F9FA',
+  },
+  subHeaderBar: {
+    paddingHorizontal: 20,
+    height: 64,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F2F7',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  subHeaderTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1C1C1E',
+  },
+  subHeaderSub: {
+    fontSize: 12,
+    color: '#8E8E93',
+    marginTop: 2,
+  },
+  headerActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF2F3',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FFA2A5',
+  },
+  headerActionBtnText: {
+    color: '#FF7E82',
+    fontSize: 13,
+    fontWeight: '700',
   },
   scrollContent: {
     padding: 16,
@@ -239,10 +305,10 @@ const styles = StyleSheet.create({
     marginVertical: 10,
   },
   codeDesc: {
-    fontSize: 11,
-    color: '#AEAEB2',
+    fontSize: 12,
+    color: '#8E8E93',
     textAlign: 'center',
-    lineHeight: 16,
+    lineHeight: 18,
     paddingHorizontal: 20,
     marginBottom: 16,
   },
@@ -286,17 +352,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: '800',
+    fontSize: 15,
+    fontWeight: '700',
     color: '#1C1C1E',
   },
   updateMoodBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFF2F3',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
     borderWidth: 0.5,
     borderColor: '#FFA2A5',
   },
@@ -334,19 +400,19 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   memberName: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
   },
   meBadge: {
     backgroundColor: '#FF7E82',
     borderRadius: 4,
-    paddingHorizontal: 4,
+    paddingHorizontal: 5,
     paddingVertical: 1,
     marginLeft: 6,
   },
   meBadgeText: {
     color: '#FFFFFF',
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: '800',
   },
   moodBadgeRow: {
@@ -359,7 +425,7 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   moodStatusText: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#8E8E93',
     fontWeight: '500',
   },
@@ -444,7 +510,7 @@ const styles = StyleSheet.create({
     color: '#1C1C1E',
   },
   modalLabel: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: '#8E8E93',
     marginBottom: 6,
@@ -456,28 +522,32 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   emojiChip: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 52,
+    height: 58,
+    borderRadius: 14,
     borderWidth: 1.5,
     borderColor: '#EBEBEB',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 8,
     backgroundColor: '#FFFFFF',
+    paddingVertical: 4,
   },
   emojiChipActive: {
     borderColor: '#FF7E82',
     backgroundColor: '#FFF2F3',
   },
-  emojiChipText: {
-    fontSize: 22,
+  moodChipLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#8E8E93',
+    marginTop: 3,
   },
   modalInput: {
     backgroundColor: '#F1F2F4',
     borderRadius: 10,
     padding: 12,
-    fontSize: 13,
+    fontSize: 14,
     color: '#1C1C1E',
     marginBottom: 16,
   },

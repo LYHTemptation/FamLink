@@ -3,7 +3,6 @@ import {
   StyleSheet,
   Text,
   View,
-  SafeAreaView,
   TouchableOpacity,
   Modal,
   StatusBar,
@@ -14,8 +13,17 @@ import {
 } from 'react-native';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { MessageSquare, Calendar, Award, Users, Trophy, LogOut, ShoppingCart, Image as ImageIcon, Heart } from 'lucide-react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { MessageSquare, Calendar, Award, Users, Trophy, LogOut, ShoppingCart, Image as ImageIcon, Heart, RotateCcw } from 'lucide-react-native';
+import {
+  TabChatIcon,
+  TabCalendarIcon,
+  TabSmallTalkIcon,
+  TabShoppingIcon,
+  TabAlbumIcon,
+  TabPetIcon,
+  TabFamilyIcon,
+} from './components/icons';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 // Import Screens & Libs
 import ChatScreen from './components/ChatScreen';
@@ -207,6 +215,15 @@ export default function App() {
     };
 
     initializeAuth();
+
+    AsyncStorage.getItem('FAMLINK_CUSTOM_ROOMS').then(val => {
+      if (val) {
+        try {
+          const parsed = JSON.parse(val);
+          if (Array.isArray(parsed)) setCustomRooms(parsed);
+        } catch (e) {}
+      }
+    });
   }, []);
 
   // 2. Real Database Sync (Supabase Real-time Subscription)
@@ -221,8 +238,13 @@ export default function App() {
     // Setup real-time postgres channels for family updates
     const messagesChannel = supabase
       .channel(`realtime-messages-${familyId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `family_id=eq.${familyId}` }, () => {
-        fetchRealMessages(familyId);
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `family_id=eq.${familyId}` }, (payload) => {
+        if (payload.eventType === 'UPDATE' && payload.new) {
+          // Instantly sync read receipts without full table refetch
+          setMessages(prev => prev.map(m => m.id === payload.new.id ? { ...m, readBy: payload.new.read_by || [] } : m));
+        } else {
+          fetchRealMessages(familyId);
+        }
       })
       .subscribe();
 
@@ -275,6 +297,13 @@ export default function App() {
       })
       .subscribe();
 
+    const petmongChannel = supabase
+      .channel(`realtime-petmong-${familyId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'petmong_characters', filter: `family_id=eq.${familyId}` }, () => {
+        fetchRealPetmongCharacters(familyId);
+      })
+      .subscribe();
+
     // Supabase Realtime Presence Channel (Online Status)
     const currentKey = session?.user?.id || profile?.id || profile?.role || currentUser;
     const presenceChannel = supabase.channel(`presence-${familyId}`, {
@@ -308,6 +337,7 @@ export default function App() {
       supabase.removeChannel(rewardsChannel);
       supabase.removeChannel(couponsChannel);
       supabase.removeChannel(shoppingChannel);
+      supabase.removeChannel(petmongChannel);
       supabase.removeChannel(presenceChannel);
     };
   }, [session, profile]);
@@ -465,7 +495,8 @@ export default function App() {
       .from('messages')
       .select('*, profiles(name, avatar, color, role)')
       .eq('family_id', familyId)
-      .order('created_at', { ascending: true });
+      .order('created_at', { ascending: true })
+      .limit(200);
 
     if (data) {
       const formatted = data.map(m => {
@@ -478,6 +509,8 @@ export default function App() {
           id: m.id,
           sender: m.profiles?.role || 'son',
           profile_id: m.profile_id,
+          senderObj: m.profiles || null,
+          senderName: m.profiles?.name || null,
           text: m.text || '',
           image: m.image_url || null,
           image_url: m.image_url || null,
@@ -486,25 +519,34 @@ export default function App() {
           readBy: m.read_by || [],
         };
       });
-      setMessages(formatted);
+      setMessages(prev => {
+        // Retain any pending optimistic messages that haven't landed in DB yet
+        const pending = prev.filter(m => m.isSending);
+        if (pending.length === 0) return formatted;
+        const dbIds = new Set(formatted.map(d => d.id));
+        const stillPending = pending.filter(m => !dbIds.has(m.id));
+        return [...formatted, ...stillPending];
+      });
     }
   };
 
   const fetchRealEvents = async (familyId) => {
     const { data } = await supabase
       .from('events')
-      .select('*, profiles(role)')
+      .select('*, profiles(id, name, avatar, color, role)')
       .eq('family_id', familyId);
 
     if (data) {
       const formatted = data.map(e => ({
         id: e.id,
+        profile_id: e.profile_id,
+        creatorObj: e.profiles,
         title: e.title,
         date: e.date,
         endDate: e.end_date || e.date,
         time: e.time,
         category: e.category,
-        creator: e.profiles?.role || 'mom',
+        creator: e.profiles?.name || e.profiles?.role || 'mom',
       }));
       setEvents(formatted);
     }
@@ -539,26 +581,31 @@ export default function App() {
 
   const fetchRealSmallTalk = async (familyId) => {
     const todayTopic = getTopicForToday();
-    const { data } = await supabase
-      .from('small_talk_responses')
-      .select('*, profiles(role)')
-      .eq('family_id', familyId)
-      .eq('topic', todayTopic);
+    const [{ data: respData }, { count: memberCount }] = await Promise.all([
+      supabase
+        .from('small_talk_responses')
+        .select('*')
+        .eq('family_id', familyId)
+        .eq('topic', todayTopic)
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('family_id', familyId),
+    ]);
 
     const responsesMap = {};
-    if (data) {
-      data.forEach(resp => {
+    if (respData) {
+      respData.forEach(resp => {
         if (resp.profile_id) {
           responsesMap[resp.profile_id] = resp.text;
-        }
-        if (resp.profiles?.role) {
-          responsesMap[resp.profiles.role] = resp.text;
         }
       });
     }
 
-    const totalMembers = familyMembersList.length || 4;
-    const complete = Object.keys(responsesMap).length > 0 && Object.keys(responsesMap).length === totalMembers;
+    const totalMembers = memberCount || familyMembersList.length || 4;
+    const answeredCount = Object.keys(responsesMap).length;
+    const complete = totalMembers > 0 && answeredCount >= totalMembers;
 
     setSmallTalk({
       topic: todayTopic,
@@ -695,14 +742,16 @@ export default function App() {
           .eq('id', profile.id);
         if (error) throw error;
         setProfile({ ...profile, mood: moodEmoji, status_text: statusTextStr });
+        setFamilyMembersList(prev => prev.map(m => m.id === profile.id ? { ...m, mood: moodEmoji, status_text: statusTextStr } : m));
       } catch (e) {
         showError(e, '기분 업데이트에 실패했습니다.');
       }
     } else {
       const updatedProfile = { ...profile, mood: moodEmoji, status_text: statusTextStr };
       setProfile(updatedProfile);
+      const myIdentifier = profile?.id || currentUser;
       const updatedMembers = familyMembersList.map(m =>
-        m.role === currentUser ? { ...m, mood: moodEmoji, status_text: statusTextStr } : m
+        (m.id === myIdentifier || (m.role === myIdentifier && !m.id)) ? { ...m, mood: moodEmoji, status_text: statusTextStr } : m
       );
       setFamilyMembersList(updatedMembers);
     }
@@ -745,6 +794,55 @@ export default function App() {
     }
   };
 
+  const handleAwardPetmongExp = async (targetUserId, expGain, reason = '') => {
+    const targetChar = petmongCharacters.find(c => c.user_id === targetUserId) ||
+      (petmongCharacters.length > 0 ? petmongCharacters[0] : null);
+
+    if (!targetChar) return;
+
+    let newExp = (targetChar.exp || 0) + expGain;
+    let newLevel = targetChar.level || 1;
+    let leveledUp = false;
+
+    while (newExp >= 100) {
+      newExp -= 100;
+      newLevel += 1;
+      leveledUp = true;
+    }
+
+    const updatedChar = { ...targetChar, exp: newExp, level: newLevel };
+
+    setPetmongCharacters(prev => prev.map(c => 
+      c.id === targetChar.id ? updatedChar : c
+    ));
+
+    if (isSupabaseReady && targetChar.id) {
+      try {
+        await supabase
+          .from('petmong_characters')
+          .update({ exp: newExp, level: newLevel })
+          .eq('id', targetChar.id);
+
+        if (reason && profile?.family_id) {
+          await supabase.from('petmong_activities').insert({
+            family_id: profile.family_id,
+            actor_id: targetChar.id,
+            action_type: reason,
+          });
+        }
+      } catch (err) {
+        console.log('Error updating petmong exp:', err);
+      }
+    }
+
+    if (leveledUp) {
+      Alert.alert(
+        '🎊 반려몽 레벨업! 🎊',
+        `우리 가족 ${targetChar.name}의 레벨이 Lv.${newLevel}로 올랐습니다! 무럭무럭 자라고 있어요! 🌱`
+      );
+    }
+  };
+
   const handleToggleItem = async (item, isCompleted) => {
     const completedByStr = isCompleted ? (profile ? profile.name : currentUser) : null;
     const todayStr = getTodayString();
@@ -754,6 +852,9 @@ export default function App() {
 
     // Proposal 1 & 2: Check if points should be awarded
     if (isCompleted) {
+      // Award EXP to petmong
+      handleAwardPetmongExp(session?.user?.id || profile?.id, 10, '집안일/장보기 완료 (+10 EXP)');
+
       if (!item.points_earned) {
         const todayEarnedCount = shoppingItems.filter(
           i => i.points_earned && i.completed_date === todayStr
@@ -762,9 +863,9 @@ export default function App() {
         if (todayEarnedCount < 3) {
           newPoints += 10;
           willEarnPoints = true;
-          Alert.alert('미션 완료 🎉', `+10 포인트가 적립되었습니다! (오늘 보상: ${(todayEarnedCount + 1) * 10}/30P)`);
+          Alert.alert('미션 완료 🎉', `+10 포인트와 함께 반려몽이 +10 EXP를 획득했어요! (오늘 보상: ${(todayEarnedCount + 1) * 10}/30P)`);
         } else {
-          Alert.alert('완료 처리 됨 ✅', '오늘의 장보기 포인트 한도(하루 30P / 3건)를 모두 채웠습니다. 항목 완료 상태로만 변경됩니다.');
+          Alert.alert('완료 처리 됨 ✅', '오늘의 장보기 포인트 한도(하루 30P / 3건)를 모두 채웠습니다. 반려몽이 +10 EXP를 획득했어요!');
         }
       }
     }
@@ -924,15 +1025,40 @@ export default function App() {
     }
   };
 
-  // Messaging Action
+  // Messaging Action (Optimistic 0ms UI Rendering + Background Sync)
   const handleSendMessage = async (messageData) => {
+    const now = new Date();
+    const isPm = now.getHours() >= 12;
+    const hours = now.getHours() % 12 || 12;
+    const minutes = now.getMinutes() < 10 ? `0${now.getMinutes()}` : now.getMinutes();
+    const timestamp = `${isPm ? '오후' : '오전'} ${hours}:${minutes}`;
+
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+    const optimisticMsg = {
+      id: tempId,
+      sender: profile?.role || currentUser,
+      profile_id: session?.user?.id || profile?.id || null,
+      senderObj: profile || null,
+      senderName: profile?.name || null,
+      text: messageData.text || '',
+      image: messageData.image || null,
+      image_url: messageData.image || null,
+      room_id: messageData.roomId || 'family-group',
+      timestamp,
+      readBy: [profile?.id || currentUser],
+      isSending: true,
+    };
+
+    // 🚀 Optimistic Instant Render: message appears in UI immediately (0ms delay)
+    setMessages(prev => [...prev, optimisticMsg]);
+
     if (isSupabaseReady) {
       try {
         let imageUrl = null;
 
         if (messageData.image) {
           const fileUri = messageData.image;
-          const fileName = `${profile.family_id}/${Date.now()}_${fileUri.split('/').pop()}`;
+          const fileName = `${profile.family_id}/${Date.now()}_photo.jpg`;
 
           try {
             const response = await fetch(fileUri);
@@ -947,9 +1073,19 @@ export default function App() {
               });
 
             if (uploadError) {
-              console.warn('⚠️ Supabase Storage 업로드 안내:', uploadError.message);
-              // Storage 버킷이 미생성된 경우 로컬 이미지 URI를 대신 사용하여 메시지 전송 차단 방지
-              imageUrl = fileUri;
+              console.warn('⚠️ Supabase Storage 업로드 안내 (Base64 전송):', uploadError.message);
+              // Storage 버킷이 미생성된 경우에도 다른 가족 브라우저/새로고침 시 사진이 정상 표시되도록 Base64 Data URL로 변환
+              try {
+                const base64Data = await new Promise((resolve) => {
+                  const reader = new FileReader();
+                  reader.onloadend = () => resolve(reader.result);
+                  reader.onerror = () => resolve(fileUri);
+                  reader.readAsDataURL(blob);
+                });
+                imageUrl = base64Data;
+              } catch (b64Err) {
+                imageUrl = fileUri;
+              }
             } else {
               const { data: { publicUrl } } = supabase.storage
                 .from('family-photos')
@@ -962,7 +1098,7 @@ export default function App() {
           }
         }
 
-        const { error } = await supabase
+        const { data: insertedData, error } = await supabase
           .from('messages')
           .insert({
             family_id: profile.family_id,
@@ -971,38 +1107,104 @@ export default function App() {
             image_url: imageUrl,
             room_id: messageData.roomId || 'family-group',
             read_by: [profile.id],
-          });
+          })
+          .select()
+          .single();
+
         if (error) throw error;
 
+        // Reconcile optimistic message with real server record
+        if (insertedData) {
+          setMessages(prev => prev.map(m => m.id === tempId ? {
+            ...m,
+            id: insertedData.id,
+            image: insertedData.image_url || m.image,
+            image_url: insertedData.image_url || m.image_url,
+            isSending: false,
+          } : m));
+        }
+
+        const isDirect = messageData.roomId?.startsWith('direct-');
+        const notifTitle = isDirect ? `${profile ? profile.name : currentUser}님의 1:1 메시지 💬` : '가족 단톡방 💬';
         notifyFamilyMembers(
-          '가족 단톡방 💬',
+          notifTitle,
           `${profile ? profile.name : currentUser}: ${messageData.text || '사진을 보냈습니다.'}`,
           'chat'
         );
       } catch (e) {
+        // Rollback optimistic message if failed
+        setMessages(prev => prev.filter(m => m.id !== tempId));
         showError(e, '메시지 전송에 실패했습니다. 사진 크기가 너무 크거나 네트워크 문제가 발생했을 수 있습니다.');
       }
     } else {
-      const now = new Date();
-      const isPm = now.getHours() >= 12;
-      const hours = now.getHours() % 12 || 12;
-      const minutes = now.getMinutes() < 10 ? `0${now.getMinutes()}` : now.getMinutes();
-      const timestamp = `${isPm ? '오후' : '오전'} ${hours}:${minutes}`;
+      setMessages(prev => prev.map(m => m.id === tempId ? { ...m, isSending: false } : m));
+      saveLocalState(points, [...messages, { ...optimisticMsg, isSending: false }], events, smallTalk);
+    }
+  };
 
-      const newMsg = {
-        id: String(Date.now()),
-        sender: currentUser,
-        profile_id: session?.user?.id || profile?.id || null,
-        text: messageData.text || '',
-        image: messageData.image || null,
-        room_id: messageData.roomId || 'family-group',
-        timestamp,
-        readBy: [currentUser],
-      };
+  const handleMarkMessagesAsRead = async (roomId) => {
+    const targetRoomId = roomId || 'family-group';
+    const myId = profile?.id || currentUser;
 
-      const updated = [...messages, newMsg];
-      setMessages(updated);
-      saveLocalState(points, updated, events, smallTalk);
+    const checkRoomMatch = (msgRoom) => {
+      const mRoom = msgRoom || 'family-group';
+      if (mRoom === targetRoomId) return true;
+      if (targetRoomId.startsWith('direct-') && mRoom.startsWith('direct-')) {
+        const targetParts = targetRoomId.replace('direct-', '').split('-');
+        const msgParts = mRoom.replace('direct-', '').split('-');
+        return msgParts.every(p => targetParts.includes(p));
+      }
+      return false;
+    };
+
+    const unreadMsgs = messages.filter(m => {
+      if (!checkRoomMatch(m.room_id)) return false;
+      const readList = m.readBy || [];
+      const hasRead = readList.includes(myId) || (profile?.id && readList.includes(profile.id)) || readList.includes(currentUser);
+      return !hasRead;
+    });
+
+    if (unreadMsgs.length === 0) return;
+
+    // Immediately update local state for snappy UI
+    const updatedMessages = messages.map(m => {
+      if (checkRoomMatch(m.room_id)) {
+        const readList = m.readBy || [];
+        if (!readList.includes(myId)) {
+          return { ...m, readBy: [...readList, myId] };
+        }
+      }
+      return m;
+    });
+    setMessages(updatedMessages);
+
+    if (isSupabaseReady && profile?.id) {
+      try {
+        for (const msg of unreadMsgs) {
+          const currentReadBy = Array.isArray(msg.readBy) ? msg.readBy : [];
+          if (!currentReadBy.includes(profile.id)) {
+            const newReadBy = [...currentReadBy, profile.id];
+            await supabase
+              .from('messages')
+              .update({ read_by: newReadBy })
+              .eq('id', msg.id);
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to update read_by in Supabase:', e);
+      }
+    } else {
+      saveLocalState(points, updatedMessages, events, smallTalk);
+    }
+  };
+
+  const handleCreateCustomRoom = async (newRoom) => {
+    const updated = [newRoom, ...customRooms];
+    setCustomRooms(updated);
+    try {
+      await AsyncStorage.setItem('FAMLINK_CUSTOM_ROOMS', JSON.stringify(updated));
+    } catch (e) {
+      console.error('Failed to save custom room', e);
     }
   };
 
@@ -1109,26 +1311,31 @@ export default function App() {
   const handleAddResponse = async (user, answerText) => {
     if (isSupabaseReady) {
       try {
+        const myId = session?.user?.id || profile?.id;
         const { error } = await supabase
           .from('small_talk_responses')
           .insert({
             family_id: profile.family_id,
-            profile_id: session.user.id,
+            profile_id: myId,
             topic: smallTalk.topic,
             text: answerText,
           });
         if (error) throw error;
 
-        const myId = session?.user?.id || profile?.id;
-        const myRole = profile?.role || currentUser;
+        // Award +20 EXP for answering small talk
+        if (myId) {
+          handleAwardPetmongExp(myId, 20, '스몰톡 답변 완료 (+20 EXP)');
+        }
 
         const updatedResponses = {
           ...smallTalk.responses,
-          ...(myId ? { [myId]: answerText } : {}),
-          ...(myRole ? { [myRole]: answerText } : {}),
+          ...(myId ? { [myId]: answerText } : { [user]: answerText }),
         };
         const totalMembers = familyMembersList.length || 4;
-        const complete = Object.keys(updatedResponses).length === totalMembers;
+        const answeredCount = familyMembersList.length > 0
+          ? familyMembersList.filter(m => updatedResponses[m.id]).length
+          : Object.keys(updatedResponses).length;
+        const complete = totalMembers > 0 && answeredCount >= totalMembers;
 
         if (complete && !smallTalk.pointsAwarded) {
           const { error: ptsError } = await supabase
@@ -1138,8 +1345,18 @@ export default function App() {
 
           if (!ptsError) {
             setCelebrationVisible(true);
+            // Award +50 EXP bonus to all petmong characters for complete family participation!
+            petmongCharacters.forEach(char => {
+              handleAwardPetmongExp(char.user_id, 50, '스몰톡 가족 전원 완료 보너스 (+50 EXP)');
+            });
           }
         }
+
+        setSmallTalk(prev => ({
+          ...prev,
+          responses: updatedResponses,
+          pointsAwarded: complete,
+        }));
       } catch (e) {
         showError(e, '답변 등록에 실패했습니다.');
       }
@@ -1148,6 +1365,9 @@ export default function App() {
         ...smallTalk.responses,
         [user]: answerText,
       };
+
+      // Local mock mode award exp
+      handleAwardPetmongExp(user, 20, '스몰톡 답변 완료 (+20 EXP)');
 
       const totalMembers = familyMembersList.length || 4;
       const answeredCount = Object.keys(updatedResponses).length;
@@ -1160,6 +1380,9 @@ export default function App() {
         pointsEarned = 100;
         pointsAwardedStatus = true;
         setCelebrationVisible(true);
+        petmongCharacters.forEach(char => {
+          handleAwardPetmongExp(char.user_id, 50, '스몰톡 가족 전원 완료 보너스 (+50 EXP)');
+        });
       }
 
       const updatedSmallTalk = {
@@ -1264,8 +1487,19 @@ export default function App() {
     );
   };
 
-  const switchUser = (memberKey) => {
-    setCurrentUser(memberKey);
+  const switchUser = (memberOrKey) => {
+    if (typeof memberOrKey === 'object' && memberOrKey !== null) {
+      setCurrentUser(memberOrKey.id || memberOrKey.role || 'mom');
+      if (memberOrKey.name) {
+        setProfile(prev => prev ? { ...prev, ...memberOrKey } : memberOrKey);
+      }
+    } else {
+      setCurrentUser(memberOrKey);
+      const match = familyMembersList.find(m => m.id === memberOrKey || m.role === memberOrKey);
+      if (match) {
+        setProfile(prev => prev ? { ...prev, ...match } : match);
+      }
+    }
     setUserModalVisible(false);
   };
 
@@ -1278,12 +1512,13 @@ export default function App() {
             currentUser={currentUser}
             currentUserProfile={profile}
             onSendMessage={handleSendMessage}
+            onMarkAsRead={handleMarkMessagesAsRead}
             memberCount={familyMembersList.length}
             familyMembers={familyMembersList}
             smallTalk={smallTalk}
             onNavigateScreen={setCurrentScreen}
             customRooms={customRooms}
-            onCreateCustomRoom={(newRoom) => setCustomRooms(prev => [newRoom, ...prev])}
+            onCreateCustomRoom={handleCreateCustomRoom}
           />
         );
       case 'calendar':
@@ -1291,6 +1526,8 @@ export default function App() {
           <CalendarScreen
             events={events}
             currentUser={currentUser}
+            currentUserProfile={profile}
+            familyMembers={familyMembersList}
             onAddEvent={handleAddEvent}
             onUpdateEvent={handleUpdateEvent}
             onDeleteEvent={handleDeleteEvent}
@@ -1344,6 +1581,7 @@ export default function App() {
             familyId={profile.family_id}
             petmongCharacters={petmongCharacters}
             setPetmongCharacters={setPetmongCharacters}
+            onAwardExp={handleAwardPetmongExp}
           />
         );
       case 'family':
@@ -1377,23 +1615,28 @@ export default function App() {
   if (!session || !profile) {
     return (
       <SafeAreaProvider>
-        <AuthScreen onAuthComplete={handleAuthComplete} />
+        <SafeAreaView style={styles.container} edges={['top', 'bottom', 'left', 'right']}>
+          <AuthScreen onAuthComplete={handleAuthComplete} />
+        </SafeAreaView>
       </SafeAreaProvider>
     );
   }
 
-  const activeMember = familyMembersList.find(m => m.role === currentUser) || { name: currentUser, avatar: '👦', color: '#8E8E93' };
+  const activeMember = profile
+    || (profile?.id && familyMembersList.find(m => m.id === profile.id))
+    || familyMembersList.find(m => m.id === currentUser)
+    || familyMembersList.find(m => m.role === currentUser) 
+    || { name: currentUser, avatar: '👦', color: '#8E8E93' };
 
   return (
     <SafeAreaProvider>
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom', 'left', 'right']}>
         <ExpoStatusBar style="dark" />
 
         {/* Top Navbar */}
         <View style={styles.topNavbar}>
           <View style={styles.logoRow}>
             <Text style={styles.logoText}>FamLink</Text>
-            <Text style={styles.familyCodeBadge}>{profile.family_code}</Text>
           </View>
 
           <View style={styles.topRightControls}>
@@ -1436,13 +1679,13 @@ export default function App() {
             {renderActiveScreen()}
           </View>
 
-          {/* Custom Tabbar (6 Tabs) */}
+          {/* Custom Tabbar (7 Tabs) */}
           <View style={styles.tabbar}>
             <TouchableOpacity
               style={[styles.tabItem, currentScreen === 'chat' && styles.tabItemActive]}
               onPress={() => setCurrentScreen('chat')}
             >
-              <MessageSquare size={19} color={currentScreen === 'chat' ? '#FF7E82' : '#8E8E93'} />
+              <TabChatIcon size={19} color={currentScreen === 'chat' ? '#FF7E82' : '#8E8E93'} focused={currentScreen === 'chat'} />
               <Text style={[styles.tabLabel, currentScreen === 'chat' && styles.tabLabelActive]}>메신저</Text>
             </TouchableOpacity>
 
@@ -1450,7 +1693,7 @@ export default function App() {
               style={[styles.tabItem, currentScreen === 'calendar' && styles.tabItemActive]}
               onPress={() => setCurrentScreen('calendar')}
             >
-              <Calendar size={19} color={currentScreen === 'calendar' ? '#FF7E82' : '#8E8E93'} />
+              <TabCalendarIcon size={19} color={currentScreen === 'calendar' ? '#FF7E82' : '#8E8E93'} focused={currentScreen === 'calendar'} />
               <Text style={[styles.tabLabel, currentScreen === 'calendar' && styles.tabLabelActive]}>캘린더</Text>
             </TouchableOpacity>
 
@@ -1458,7 +1701,7 @@ export default function App() {
               style={[styles.tabItem, currentScreen === 'smalltalk' && styles.tabItemActive]}
               onPress={() => setCurrentScreen('smalltalk')}
             >
-              <Award size={19} color={currentScreen === 'smalltalk' ? '#FF7E82' : '#8E8E93'} />
+              <TabSmallTalkIcon size={19} color={currentScreen === 'smalltalk' ? '#FF7E82' : '#8E8E93'} focused={currentScreen === 'smalltalk'} />
               <Text style={[styles.tabLabel, currentScreen === 'smalltalk' && styles.tabLabelActive]}>스몰톡</Text>
             </TouchableOpacity>
 
@@ -1466,7 +1709,7 @@ export default function App() {
               style={[styles.tabItem, currentScreen === 'shopping' && styles.tabItemActive]}
               onPress={() => setCurrentScreen('shopping')}
             >
-              <ShoppingCart size={19} color={currentScreen === 'shopping' ? '#FF7E82' : '#8E8E93'} />
+              <TabShoppingIcon size={19} color={currentScreen === 'shopping' ? '#FF7E82' : '#8E8E93'} focused={currentScreen === 'shopping'} />
               <Text style={[styles.tabLabel, currentScreen === 'shopping' && styles.tabLabelActive]}>장보기</Text>
             </TouchableOpacity>
 
@@ -1474,7 +1717,7 @@ export default function App() {
               style={[styles.tabItem, currentScreen === 'album' && styles.tabItemActive]}
               onPress={() => setCurrentScreen('album')}
             >
-              <ImageIcon size={19} color={currentScreen === 'album' ? '#FF7E82' : '#8E8E93'} />
+              <TabAlbumIcon size={19} color={currentScreen === 'album' ? '#FF7E82' : '#8E8E93'} focused={currentScreen === 'album'} />
               <Text style={[styles.tabLabel, currentScreen === 'album' && styles.tabLabelActive]}>앨범</Text>
             </TouchableOpacity>
 
@@ -1482,7 +1725,7 @@ export default function App() {
               style={[styles.tabItem, currentScreen === 'interior' && styles.tabItemActive]}
               onPress={() => setCurrentScreen('interior')}
             >
-              <Heart size={19} color={currentScreen === 'interior' ? '#FF7E82' : '#8E8E93'} />
+              <TabPetIcon size={19} color={currentScreen === 'interior' ? '#FF7E82' : '#8E8E93'} focused={currentScreen === 'interior'} />
               <Text style={[styles.tabLabel, currentScreen === 'interior' && styles.tabLabelActive]}>반려몽</Text>
             </TouchableOpacity>
 
@@ -1490,7 +1733,7 @@ export default function App() {
               style={[styles.tabItem, currentScreen === 'family' && styles.tabItemActive]}
               onPress={() => setCurrentScreen('family')}
             >
-              <Users size={19} color={currentScreen === 'family' ? '#FF7E82' : '#8E8E93'} />
+              <TabFamilyIcon size={19} color={currentScreen === 'family' ? '#FF7E82' : '#8E8E93'} focused={currentScreen === 'family'} />
               <Text style={[styles.tabLabel, currentScreen === 'family' && styles.tabLabelActive]}>가족</Text>
             </TouchableOpacity>
           </View>
@@ -1515,7 +1758,9 @@ export default function App() {
 
               <View style={styles.membersGrid}>
                 {familyMembersList.map((member) => {
-                  const isCurrent = currentUser === member.role;
+                  const isCurrent = (profile?.id && member.id)
+                    ? profile.id === member.id
+                    : (currentUser === member.id || currentUser === member.role);
                   return (
                     <TouchableOpacity
                       key={member.id || member.role}
@@ -1524,7 +1769,7 @@ export default function App() {
                         { borderColor: isCurrent ? member.color : '#EBEBEB' },
                         isCurrent && { backgroundColor: member.color + '10' }
                       ]}
-                      onPress={() => switchUser(member.role)}
+                      onPress={() => switchUser(member)}
                     >
                       <Text style={styles.memberSelectAvatar}>{member.avatar}</Text>
                       <Text style={[styles.memberSelectName, isCurrent && { fontWeight: 'bold', color: member.color }]}>
@@ -1536,7 +1781,8 @@ export default function App() {
               </View>
 
               <TouchableOpacity style={styles.resetButton} onPress={handleResetData}>
-                <Text style={styles.resetButtonText}>목업 데이터 리셋 🔄</Text>
+                <RotateCcw size={13} color="#E74C3C" style={{ marginRight: 6 }} />
+                <Text style={styles.resetButtonText}>목업 데이터 리셋</Text>
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.closeButton} onPress={() => setUserModalVisible(false)}>
@@ -1579,7 +1825,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   loadingContainer: {
     flex: 1,
@@ -1601,7 +1846,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#F2F2F7',
@@ -1684,14 +1929,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8F9FA',
   },
   tabbar: {
-    height: 60,
+    height: 56,
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#F2F2F7',
     justifyContent: 'space-around',
     alignItems: 'center',
-    paddingBottom: Platform.OS === 'ios' ? 10 : 0,
   },
   tabItem: {
     flex: 1,
@@ -1760,6 +2004,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   resetButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 10,
@@ -1767,7 +2014,6 @@ const styles = StyleSheet.create({
     borderColor: '#FFEBEB',
     backgroundColor: '#FFF8F8',
     width: '100%',
-    alignItems: 'center',
     marginBottom: 12,
   },
   resetButtonText: {
@@ -1776,7 +2022,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   closeButton: {
-    paddingVertical: 12,
+    paddingVertical: 13,
     width: '100%',
     alignItems: 'center',
     backgroundColor: '#F1F2F4',
@@ -1830,9 +2076,9 @@ const styles = StyleSheet.create({
   },
   celebrationCloseButton: {
     backgroundColor: '#FF7E82',
-    paddingVertical: 12,
+    paddingVertical: 13,
     paddingHorizontal: 36,
-    borderRadius: 20,
+    borderRadius: 12,
   },
   celebrationCloseText: {
     color: '#FFFFFF',
