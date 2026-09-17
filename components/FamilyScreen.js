@@ -10,8 +10,9 @@ import {
   TextInput,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import { Users, Heart, Award, ShieldCheck, Smile, Edit3 } from 'lucide-react-native';
-import { MoodIcon, MOOD_ITEMS, IconCopy, IconShare, IconClose } from './icons';
+import { Users, Heart, Award, ShieldCheck, Smile, Edit3, LogOut, Sparkles } from 'lucide-react-native';
+import { MoodIcon, MOOD_ITEMS, IconCopy, IconShare, IconClose, IconChevronRight } from './icons';
+import { colors, typography, commonStyles } from '../theme';
 
 const FAMILY_MEMBERS_STATIC = {
   mom: { name: '엄마', avatar: '👩‍🦰', color: '#FF7E82' },
@@ -26,17 +27,29 @@ export default function FamilyScreen({
   currentUserProfile,
   onUpdateMood,
   onlineUsers,
+  onLogout,
+  onNavigateScreen,
 }) {
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedMood, setSelectedMood] = useState(currentUserProfile?.mood || '😊');
   const [statusText, setStatusText] = useState(currentUserProfile?.status_text || '');
 
+  const isFamilyFull = (familyMembersList?.length || 0) >= 10;
+
   const handleCopyCode = async () => {
+    if (isFamilyFull) {
+      Alert.alert('정원 마감 안내', '우리 가족의 최대 정원(10명)이 모두 찼습니다. 추가 가입이 제한됩니다.');
+      return;
+    }
     await Clipboard.setStringAsync(familyCode);
     Alert.alert('복사 완료', '가족 코드가 클립보드에 복사되었습니다. 다른 가족에게 보내 가입하도록 하세요!');
   };
 
   const handleCopyInviteMessage = async () => {
+    if (isFamilyFull) {
+      Alert.alert('정원 마감 안내', '우리 가족의 최대 정원(10명)이 모두 찼습니다. 추가 가입이 제한됩니다.');
+      return;
+    }
     const inviteMsg = `[FamLink] 우리 가족만의 소통 공간에 당신을 초대합니다! ❤️\n\n앱을 설치하고 가입하실 때 아래 가족 코드를 입력하시면 같이 채팅과 일정을 공유할 수 있어요.\n\n가족 코드: ${familyCode}`;
     await Clipboard.setStringAsync(inviteMsg);
     Alert.alert('초대문구 복사', '초대 메시지가 복사되었습니다. 카카오톡이나 메시지로 가족에게 전송해 보세요!');
@@ -53,19 +66,28 @@ export default function FamilyScreen({
     <View style={styles.container}>
       {/* Sub-header Bar */}
       <View style={styles.subHeaderBar}>
-        <View>
-          <Text style={styles.subHeaderTitle}>가족</Text>
-          <Text style={styles.subHeaderSub}>가족 멤버 {familyMembersList.length}명</Text>
+        <View style={styles.subHeaderLeftGroup}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={styles.subHeaderTitle}>가족</Text>
+            {isFamilyFull && (
+              <View style={styles.limitFullBadge}>
+                <Text style={styles.limitFullBadgeText}>정원 마감 (10/10)</Text>
+              </View>
+            )}
+          </View>
+          <Text style={styles.subHeaderSub}>가족 멤버 {familyMembersList.length} / 10명</Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.headerActionBtn}
-          onPress={() => setModalVisible(true)}
-          activeOpacity={0.8}
-        >
-          <Smile size={15} color="#FF7E82" style={{ marginRight: 4 }} />
-          <Text style={styles.headerActionBtnText}>내 기분 변경</Text>
-        </TouchableOpacity>
+        <View style={styles.subHeaderRightGroup}>
+          <TouchableOpacity
+            style={styles.headerActionBtn}
+            onPress={() => setModalVisible(true)}
+            activeOpacity={0.8}
+          >
+            <Smile size={15} color="#FF7E82" style={{ marginRight: 4 }} />
+            <Text style={styles.headerActionBtnText}>내 기분 변경</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -77,7 +99,9 @@ export default function FamilyScreen({
         </View>
         <Text style={styles.codeText}>{familyCode}</Text>
         <Text style={styles.codeDesc}>
-          다른 가족들이 가입 시 이 코드를 입력하면 이 방으로 자동 연결됩니다.
+          {isFamilyFull
+            ? '⚠️ 현재 최대 정원(10명)이 모두 찼습니다. 새 멤버 가입이 제한됩니다.'
+            : '다른 가족들이 가입 시 이 코드를 입력하면 이 방으로 자동 연결됩니다. (최대 10명)'}
         </Text>
 
         <View style={styles.actionRow}>
@@ -93,19 +117,41 @@ export default function FamilyScreen({
         </View>
       </View>
 
+      {/* Family Mission Promotion Banner */}
+      <TouchableOpacity
+        style={styles.inviteGuideCard}
+        onPress={() => onNavigateScreen && onNavigateScreen('smalltalk')}
+        activeOpacity={0.85}
+      >
+        <View style={styles.guideIconWrap}>
+          <Award size={22} color="#FF7E82" />
+        </View>
+
+        <View style={styles.guideTextCol}>
+          <View style={styles.guideTitleRow}>
+            <Text style={styles.guideTitle}>가족 단합 미션 시작하기!</Text>
+            <View style={styles.guideTag}>
+              <Sparkles size={10} color="#FF7E82" style={{ marginRight: 2 }} />
+              <Text style={styles.guideTagText}>포인트 적립</Text>
+            </View>
+          </View>
+          <Text style={styles.guideDesc}>
+            가족이 함께 스몰톡·장보기 미션을 수행할수록 보너스 포인트가 쑥쑥 쌓여요.
+          </Text>
+        </View>
+
+        <View style={styles.guideActionBtn}>
+          <IconChevronRight size={16} color="#FF7E82" />
+        </View>
+      </TouchableOpacity>
+
       {/* Member List Section */}
       <View style={styles.sectionCard}>
-        <View style={styles.sectionHeaderRow}>
-          <View style={styles.sectionHeader}>
-            <Heart size={18} color="#FF7E82" fill="#FF7E82" style={{ marginRight: 6 }} />
-            <Text style={styles.sectionTitle}>가입된 가족 멤버 ({familyMembersList.length}명)</Text>
-          </View>
-
-          {/* Update My Mood Button */}
-          <TouchableOpacity style={styles.updateMoodBtn} onPress={() => setModalVisible(true)}>
-            <Smile size={14} color="#FF7E82" style={{ marginRight: 4 }} />
-            <Text style={styles.updateMoodBtnText}>내 기분 변경</Text>
-          </TouchableOpacity>
+        <View style={styles.sectionHeader}>
+          <Heart size={18} color="#FF7E82" fill="#FF7E82" style={{ marginRight: 6 }} />
+          <Text style={styles.sectionTitle}>
+            가입된 가족 멤버 ({familyMembersList.length} / 10명)
+          </Text>
         </View>
 
         {familyMembersList.map((member, index) => {
@@ -162,13 +208,36 @@ export default function FamilyScreen({
         })}
       </View>
 
-      {/* Invite Guide Box */}
-      <View style={styles.inviteGuideCard}>
-        <Award size={22} color="#FF7E82" style={{ marginBottom: 8 }} />
-        <Text style={styles.guideTitle}>가족 단합 미션 시작하기!</Text>
-        <Text style={styles.guideDesc}>
-          더 많은 가족이 가입하여 미션을 수행할수록 스몰톡 포인트가 더 빨리 쌓입니다. 모은 포인트로 포인트 상점에서 다양한 쿠폰을 획득해 보세요!
-        </Text>
+      {/* Account & Logout Card */}
+      <View style={styles.accountCard}>
+        <View style={styles.accountHeader}>
+          <Users size={16} color="#8E8E93" style={{ marginRight: 6 }} />
+          <Text style={styles.accountHeaderTitle}>내 계정 정보</Text>
+        </View>
+        <View style={styles.accountContentRow}>
+          <View style={styles.accountInfoCol}>
+            <Text style={styles.accountAvatar}>{currentUserProfile?.avatar || '👦'}</Text>
+            <View>
+              <Text style={styles.accountNameText}>
+                {currentUserProfile?.name || '내 계정'} ({currentUserProfile?.role || '가족'})
+              </Text>
+              {currentUserProfile?.email ? (
+                <Text style={styles.accountEmailText}>{currentUserProfile.email}</Text>
+              ) : null}
+            </View>
+          </View>
+
+          {onLogout && (
+            <TouchableOpacity
+              style={styles.accountLogoutBtn}
+              onPress={onLogout}
+              activeOpacity={0.8}
+            >
+              <LogOut size={14} color="#FF3B30" style={{ marginRight: 4 }} />
+              <Text style={styles.accountLogoutBtnText}>로그아웃</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {/* Mood Edit Modal */}
@@ -235,19 +304,23 @@ export default function FamilyScreen({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8F9FA',
-  },
+  container: commonStyles.screenContainer,
   subHeaderBar: {
-    paddingHorizontal: 20,
-    height: 64,
-    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    minHeight: 64,
+    backgroundColor: colors.card,
     borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
+    borderBottomColor: colors.divider,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 12,
+  },
+  subHeaderLeftGroup: {
+    flex: 1,
+    minWidth: 110,
+    marginRight: 8,
   },
   subHeaderTitle: {
     fontSize: 20,
@@ -259,15 +332,36 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
     marginTop: 2,
   },
+  limitFullBadge: {
+    backgroundColor: '#FFF1F0',
+    borderColor: '#FFA39E',
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  limitFullBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#FF4D4F',
+  },
+  subHeaderRightGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 0,
+  },
   headerActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFF2F3',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#FFA2A5',
+    flexShrink: 0,
   },
   headerActionBtnText: {
     color: '#FF7E82',
@@ -341,35 +435,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#EBEBEB',
   },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 16,
   },
   sectionTitle: {
     fontSize: 15,
     fontWeight: '700',
     color: '#1C1C1E',
-  },
-  updateMoodBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF2F3',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
-    borderWidth: 0.5,
-    borderColor: '#FFA2A5',
-  },
-  updateMoodBtnText: {
-    fontSize: 11,
-    color: '#FF7E82',
-    fontWeight: '700',
   },
   memberItem: {
     flexDirection: 'row',
@@ -468,47 +542,132 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
   },
   inviteGuideCard: {
-    backgroundColor: '#FFF8F8',
+    backgroundColor: '#FFF7F7',
     borderWidth: 1,
     borderColor: '#FFEBEB',
-    borderRadius: 20,
-    padding: 18,
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 16,
+    flexDirection: 'row',
     alignItems: 'center',
+  },
+  guideIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#FFE5E7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  guideTextCol: {
+    flex: 1,
+    paddingRight: 6,
+  },
+  guideTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 3,
+    flexWrap: 'wrap',
+    gap: 6,
   },
   guideTitle: {
     fontSize: 14,
     fontWeight: '800',
+    color: '#1C1C1E',
+  },
+  guideTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF0F1',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 0.5,
+    borderColor: '#FFD4D7',
+  },
+  guideTagText: {
+    fontSize: 10,
+    fontWeight: '700',
     color: '#FF7E82',
-    marginBottom: 4,
   },
   guideDesc: {
     fontSize: 11,
     color: '#8E8E93',
-    lineHeight: 16,
-    textAlign: 'center',
+    lineHeight: 15,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalView: {
+  guideActionBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-  },
-  modalHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#FFE5E7',
   },
-  modalHeader: {
-    fontSize: 18,
+  accountCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: '#EBEBEB',
+  },
+  accountHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  accountHeaderTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#8E8E93',
+  },
+  accountContentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  accountInfoCol: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  accountAvatar: {
+    fontSize: 26,
+    marginRight: 10,
+  },
+  accountNameText: {
+    fontSize: 14,
     fontWeight: '800',
     color: '#1C1C1E',
   },
+  accountEmailText: {
+    fontSize: 11,
+    color: '#8E8E93',
+    marginTop: 2,
+  },
+  accountLogoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF1F0',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FFA39E',
+  },
+  accountLogoutBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FF3B30',
+  },
+  modalOverlay: commonStyles.modalOverlay,
+  modalView: commonStyles.modalBottomSheet,
+  modalHeaderRow: commonStyles.modalHeaderRow,
+  modalHeader: commonStyles.modalHeaderTitle,
   modalLabel: {
     fontSize: 13,
     fontWeight: '700',

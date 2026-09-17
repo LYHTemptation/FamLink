@@ -328,3 +328,42 @@ export function IconShare({ size = 20, color = '#8E8E93', strokeWidth = 2, ...pr
     </Svg>
   );
 }
+
+/**
+ * 14. 반복 아이콘 (IconRepeat)
+ * 매일/정기 반복 할 일을 나타내는 듀얼 순환 화살표 SVG
+ */
+export function IconRepeat({ size = 20, color = '#FF7E82', strokeWidth = 2, ...props }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
+      <Path
+        d="M17 2L21 6L17 10"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M3 11V10C3 7.79086 4.79086 6 7 6H21"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M7 22L3 18L7 14"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M21 13V14C21 16.2091 19.2091 18 17 18H3"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}

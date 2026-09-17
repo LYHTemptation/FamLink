@@ -1,3 +1,4 @@
+import styles from './InteriorStyles';
 import React, { useState, useRef, useEffect } from 'react';
 import {
   StyleSheet,
@@ -17,8 +18,10 @@ import {
   KeyboardAvoidingView,
   TouchableWithoutFeedback,
   Keyboard,
+  Easing,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../lib/supabase';
 import {
@@ -31,26 +34,183 @@ import {
   Heart,
   Gift,
   Smile,
-  List,
   ChevronRight,
   Camera,
   MessageCircle,
   Plus,
+  Users,
+  Sun,
+  Moon,
+  Lock,
+  Check,
+  Layers,
+  Palette,
+  BookOpen,
 } from 'lucide-react-native';
+import { MoodIcon } from './icons';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BASE_CANVAS_SIZE = SCREEN_WIDTH - 64; // Account for scrollContent padding 32 + canvasCard padding 32
+const MAX_DAILY_TOUCH = 10; // Daily touch EXP reward limit (10 times = +30 EXP)
+const MAX_ACTIVE_ROAMING = 3; // Maximum active wandering family pets simultaneously
 
-// Cute Room Furniture Catalog (FamLink Palette Style)
+// High-Res 3 Sumone-Style Empty Room Shell Backgrounds & Classic Day/Night
+const ROOM_BACKGROUNDS = {
+  cottage: require('../assets/petmong/empty_room_cottage.jpg'),
+  pastel: require('../assets/petmong/empty_room_pastel.jpg'),
+  midnight: require('../assets/petmong/empty_room_midnight.jpg'),
+  day: require('../assets/petmong/room_day.jpg'),
+  night: require('../assets/petmong/room_night.jpg'),
+};
+
+const ROOM_THEMES = [
+  { id: 'cottage', name: '코티지 원목', emoji: '🏡', desc: '따스한 햇살과 원목 바닥' },
+  { id: 'pastel', name: '파스텔 핑크', emoji: '🌸', desc: '사랑스럽고 화사한 핑크 룸' },
+  { id: 'midnight', name: '미드나잇 다락방', emoji: '🌌', desc: '신비롭고 아늑한 인디고 밤' },
+];
+
+// Sumone-Style Fixed Room Hotspot Slots (Adjusted for harmonious room perspective)
+const ROOM_SLOTS = [
+  { id: 'window', name: '벽면 창문/아트', category: 'wall', x: 28, y: 15, width: 110, height: 110, label: '+ 창문 자리', defaultEmoji: '🪟', desc: '벽면에 따뜻한 햇살과 바깥 풍경을 담는 창문' },
+  { id: 'sofa', name: '휴식 소파/침대', category: 'rest', x: 8, y: 46, width: 130, height: 105, label: '+ 소파 자리', defaultEmoji: '🛋️', desc: '반려몽이 올라가 낮잠을 즐기는 아늑한 자리' },
+  { id: 'rug', name: '바닥 러그', category: 'floor', x: 30, y: 68, width: 140, height: 95, label: '+ 러그 자리', defaultEmoji: '☁️', desc: '방 중앙 바닥을 포근하게 받쳐주는 러그' },
+  { id: 'lamp', name: '스탠드 조명', category: 'deco', x: 74, y: 35, width: 70, height: 120, label: '+ 조명 자리', defaultEmoji: '💡', desc: '방 안을 은은하고 따뜻하게 밝혀주는 플로어 스탠드' },
+  { id: 'plant', name: '식물 화분/소품', category: 'deco', x: 70, y: 55, width: 80, height: 90, label: '+ 화분 자리', defaultEmoji: '🪴', desc: '싱그러운 초록빛 감성을 더해주는 화분' },
+];
+
+// Sumone-Style Furniture Objects Catalog per Slot (Unlockable with Family Points & Real Illustration Assets)
 const FURNITURE_CATALOG = [
-  { id: 'f1', category: 'living', name: '폭신폭신 구름 러그', emoji: '☁️', cost: 100, desc: '발이 편안해지는 부드러운 구름 모양 러그' },
-  { id: 'f2', category: 'living', name: '아늑한 미니 소파', emoji: '🛋️', cost: 200, desc: '반려몽이 낮잠 자기 좋은 작은 소파' },
-  { id: 'f3', category: 'living', name: '레트로 TV', emoji: '📺', cost: 250, desc: '재미있는 영상이 나오는 귀여운 TV' },
-  { id: 'f4', category: 'deco', name: '따뜻한 별빛 무드등', emoji: '🌟', cost: 120, desc: '방 안을 은은하게 비춰주는 조명' },
-  { id: 'f5', category: 'deco', name: '초록초록 화분', emoji: '🪴', cost: 80, desc: '상쾌한 기분을 주는 작은 식물' },
-  { id: 'f6', category: 'deco', name: '장난감 곰인형', emoji: '🧸', cost: 150, desc: '반려몽의 영원한 단짝 친구' },
-  { id: 'f7', category: 'living', name: '맛있는 간식 바구니', emoji: '🧺', cost: 90, desc: '언제든 꺼내 먹을 수 있는 간식들' },
-  { id: 'f8', category: 'deco', name: '미니 오디오', emoji: '📻', cost: 180, desc: '신나는 음악이 흘러나오는 오디오' },
+  // 1. Window Slot (wall)
+  {
+    id: 'f_win_1',
+    slotId: 'window',
+    category: 'wall',
+    name: '햇살 가득 원목 창문',
+    emoji: '🪟',
+    cost: 150,
+    desc: '살랑이는 커튼 사이로 따스한 햇살이 비추는 감성 창문',
+    image: require('../assets/petmong/obj_window_sunshine.png'),
+  },
+  {
+    id: 'f_win_2',
+    slotId: 'window',
+    category: 'wall',
+    name: '별빛 밤하늘 창문',
+    emoji: '🌌',
+    cost: 220,
+    desc: '달콤한 밤하늘과 별똥별이 내다보이는 로맨틱 창문',
+  },
+
+  // 2. Sofa/Bed Slot (rest)
+  {
+    id: 'f_sofa_1',
+    slotId: 'sofa',
+    category: 'rest',
+    name: '머스터드 패브릭 소파',
+    emoji: '🛋️',
+    cost: 200,
+    desc: '반려몽이 뒹굴거리며 낮잠 자기 좋은 포근한 2인용 소파',
+    image: require('../assets/petmong/obj_sofa_yellow.png'),
+  },
+  {
+    id: 'f_sofa_2',
+    slotId: 'sofa',
+    category: 'rest',
+    name: '구름 솜털 침대',
+    emoji: '🛏️',
+    cost: 260,
+    desc: '누우면 바로 꿀잠에 빠져드는 마법의 폭신 침대',
+  },
+  {
+    id: 'f_sofa_3',
+    slotId: 'sofa',
+    category: 'rest',
+    name: '원목 흔들의자',
+    emoji: '🪑',
+    cost: 320,
+    desc: '살랑살랑 흔들리며 피로를 풀어주는 빈티지 흔들의자',
+  },
+
+  // 3. Rug Slot (floor)
+  {
+    id: 'f_rug_1',
+    slotId: 'rug',
+    category: 'floor',
+    name: '몽실몽실 구름 러그',
+    emoji: '☁️',
+    cost: 100,
+    desc: '발이 편안해지는 부드럽고 폭신한 크림화이트 구름 카펫',
+    image: require('../assets/petmong/obj_rug_cloud.png'),
+  },
+  {
+    id: 'f_rug_2',
+    slotId: 'rug',
+    category: 'floor',
+    name: '체크 파스텔 러그',
+    emoji: '🧇',
+    cost: 160,
+    desc: '북유럽 감성이 물씬 풍기는 따뜻한 와플 러그',
+  },
+  {
+    id: 'f_rug_3',
+    slotId: 'rug',
+    category: 'floor',
+    name: '포근한 꽃잎 원형 러그',
+    emoji: '🌸',
+    cost: 220,
+    desc: '봄날 벚꽃이 핀 듯 향긋한 원형 러그',
+  },
+
+  // 4. Floor Lamp Slot (deco)
+  {
+    id: 'f_lamp_1',
+    slotId: 'lamp',
+    category: 'deco',
+    name: '클래식 빈티지 조명',
+    emoji: '💡',
+    cost: 130,
+    desc: '고즈넉한 원목 기둥과 플리츠 갓의 아늑한 플로어 램프',
+    image: require('../assets/petmong/obj_lamp_vintage.png'),
+  },
+  {
+    id: 'f_lamp_2',
+    slotId: 'lamp',
+    category: 'deco',
+    name: '따뜻한 별빛 무드등',
+    emoji: '🌟',
+    cost: 180,
+    desc: '방 안을 은은하고 따뜻하게 비춰주는 수면등',
+  },
+
+  // 5. Plant & Shelf Slot (deco)
+  {
+    id: 'f_plant_1',
+    slotId: 'plant',
+    category: 'deco',
+    name: '몬스테라 테라코타 화분',
+    emoji: '🪴',
+    cost: 140,
+    desc: '피톤치드가 뿜어져 나오는 싱그럽고 생기 넘치는 관엽식물',
+    image: require('../assets/petmong/obj_plant_pot.png'),
+  },
+  {
+    id: 'f_plant_2',
+    slotId: 'plant',
+    category: 'deco',
+    name: '장난감 곰인형',
+    emoji: '🧸',
+    cost: 160,
+    desc: '반려몽이 잘 때 꼭 껴안고 자는 영원한 단짝 친구',
+  },
+  {
+    id: 'f_plant_3',
+    slotId: 'plant',
+    category: 'deco',
+    name: '감성 레트로 LP 오디오',
+    emoji: '📻',
+    cost: 240,
+    desc: '잔잔한 재즈와 클래식이 흘러나오는 미니 턴테이블',
+  },
 ];
 
 const EMOJI_OPTIONS = ['🐶', '🐱', '🐰', '🐼', '🦊', '🐻', '🐹', '🐥'];
@@ -74,7 +234,7 @@ const PETMONG_DIALOGUES = {
     '우다다다! 방 안을 10바퀴 돌고 올게요! 💨',
   ],
   '잠꾸러기': [
-    '쿠울... 푹신한 러그 위에서 5분만 더 잘래요... zZ 💤',
+    '쿠울... 푹신한 가구 위에서 5분만 더 잘래요... zZ 💤',
     '하아암~ 졸린데 배는 고프다 몽... 🥐',
     '세상에서 제일 좋은 건 소파에 누워 뒹굴거리기야...',
     '눈이 솔솔 감겨요... 가족들 모두 좋은 꿈 꿔요 🌙',
@@ -128,75 +288,65 @@ const getRandomDialogue = (personality) => {
   return list[Math.floor(Math.random() * list.length)];
 };
 
-// Draggable Item Component (FamLink Unified Design)
-const DraggableFurniture = React.memo(({ item, isSelected, canvasWidth, onSelect, onMove, onRotate, onDelete }) => {
-  const [pos, setPos] = useState({ x: item.x, y: item.y });
-  const startPos = useRef({ x: item.x, y: item.y });
-
-  useEffect(() => {
-    setPos({ x: item.x, y: item.y });
-  }, [item.x, item.y]);
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
-        onSelect(item.id);
-        startPos.current = { x: item.x, y: item.y };
-      },
-      onPanResponderMove: (evt, gestureState) => {
-        const deltaX = (gestureState.dx / canvasWidth) * 100;
-        const deltaY = (gestureState.dy / canvasWidth) * 100;
-
-        const newX = Math.max(0, Math.min(84, startPos.current.x + deltaX));
-        const newY = Math.max(0, Math.min(84, startPos.current.y + deltaY));
-
-        setPos({ x: newX, y: newY });
-      },
-      onPanResponderRelease: (evt, gestureState) => {
-        if (Math.abs(gestureState.dx) < 3 && Math.abs(gestureState.dy) < 3) {
-          onSelect(item.id);
-          return;
-        }
-
-        const deltaX = (gestureState.dx / canvasWidth) * 100;
-        const deltaY = (gestureState.dy / canvasWidth) * 100;
-
-        const finalX = Math.max(0, Math.min(84, startPos.current.x + deltaX));
-        const finalY = Math.max(0, Math.min(84, startPos.current.y + deltaY));
-
-        onMove(item.id, finalX, finalY);
-      },
-    })
-  ).current;
+// Sumone-Style Fixed Slot Object Component (Renders only equipped objects in normal room view)
+const RoomSlotObject = React.memo(({
+  slot,
+  equippedItem,
+  onPressSlot,
+  styles,
+}) => {
+  // If no item is equipped in this slot, keep the room background clean (no plus badges)
+  if (!equippedItem) {
+    return null;
+  }
 
   return (
-    <View
-      {...panResponder.panHandlers}
+    <TouchableOpacity
+      activeOpacity={0.85}
+      onPress={() => onPressSlot(slot)}
       style={[
-        styles.furnitureWrapper,
+        styles.slotObjectWrapper,
         {
-          left: `${pos.x}%`,
-          top: `${pos.y}%`,
-          transform: [{ rotate: `${item.rotation}deg` }],
+          left: `${slot.x}%`,
+          top: `${slot.y}%`,
         },
-        isSelected && styles.furnitureWrapperSelected,
       ]}
     >
-      <Text style={styles.furnitureEmoji}>{item.emoji}</Text>
-
-      {isSelected && (
-        <View style={styles.furnitureControlOverlay}>
-          <TouchableOpacity style={styles.controlBtn} onPress={() => onRotate(item)}>
-            <RotateCw size={12} color="#FFFFFF" />
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.controlBtn, styles.controlBtnDelete]} onPress={() => onDelete(item)}>
-            <Trash2 size={12} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
+      <View style={styles.slotEquippedContainer}>
+        {equippedItem.image ? (
+          <View
+            style={[
+              styles.slotItemImageWrapper,
+              slot.width ? { width: slot.width, height: slot.height } : null,
+            ]}
+          >
+            {Platform.OS === 'web' ? (
+              <img
+                src={equippedItem.image}
+                alt={equippedItem.name}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain',
+                  mixBlendMode: 'multiply',
+                  display: 'block',
+                  pointerEvents: 'none',
+                  userSelect: 'none',
+                }}
+              />
+            ) : (
+              <Image
+                source={equippedItem.image}
+                style={styles.slotItemImage}
+                resizeMode="contain"
+              />
+            )}
+          </View>
+        ) : (
+          <Text style={styles.slotEquippedEmoji}>{equippedItem.emoji}</Text>
+        )}
+      </View>
+    </TouchableOpacity>
   );
 });
 
@@ -285,34 +435,288 @@ function makeBackgroundTransparent(imageUrl, threshold = 232) {
   });
 }
 
+// Roaming Family Member's Petmong Component (Wandering AI Engine for up to 9 members)
+const SPAWN_ZONES = [
+  { x: 14, y: 38 }, // Zone 0: Left-Top
+  { x: 70, y: 38 }, // Zone 1: Right-Top
+  { x: 10, y: 50 }, // Zone 2: Far-Left Mid
+  { x: 76, y: 48 }, // Zone 3: Far-Right Mid
+  { x: 22, y: 56 }, // Zone 4: Left-Bottom
+  { x: 66, y: 58 }, // Zone 5: Right-Bottom
+  { x: 44, y: 35 }, // Zone 6: Center-Upper
+  { x: 28, y: 36 }, // Zone 7: Left-Upper
+  { x: 58, y: 35 }, // Zone 8: Right-Upper
+];
+
+const RESTING_FURNITURE_EMOJIS = ['🛋️', '☁️', '🧸', '📻', '🧺'];
+
+const RoamingFamilyPetmong = React.memo(({
+  char,
+  owner,
+  index,
+  placedFurniture = [],
+  onPress,
+  subBubbleCharId,
+  subBubbleText,
+}) => {
+  // Stagger initial spawn positions across 9 distinct room zones to avoid clustering
+  const spawn = SPAWN_ZONES[index % SPAWN_ZONES.length];
+  const initialX = spawn.x + (index % 3) * 2;
+  const initialY = spawn.y + (index % 2) * 2;
+
+  const currentX = useRef(initialX);
+  const currentY = useRef(initialY);
+
+  const posAnim = useRef(new Animated.ValueXY({ x: initialX, y: initialY })).current;
+  const scaleXAnim = useRef(new Animated.Value(1)).current;
+  const bobAnim = useRef(new Animated.Value(0)).current;
+  const tapBounceAnim = useRef(new Animated.Value(0)).current;
+  const [idleEmote, setIdleEmote] = useState(null);
+  const [isRestingOnFurniture, setIsRestingOnFurniture] = useState(false);
+  const [restingFurnitureName, setRestingFurnitureName] = useState(null);
+  const isMountedRef = useRef(true);
+  const walkTimerRef = useRef(null);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    // Bobbing loop for footstep vibration
+    const bobLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(bobAnim, { toValue: -3.5, duration: 220, useNativeDriver: true }),
+        Animated.timing(bobAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
+      ])
+    );
+
+    const wander = () => {
+      if (!isMountedRef.current) return;
+
+      // Furniture interaction: check if cozy furniture is placed on floor
+      const cozyFurnitureList = (placedFurniture || []).filter(f => 
+        RESTING_FURNITURE_EMOJIS.includes(f.emoji) && f.y >= 20 && f.y <= 75
+      );
+
+      // 30% chance to target a cozy placed furniture item if available
+      const shouldTargetFurniture = cozyFurnitureList.length > 0 && Math.random() < 0.35;
+      let nextX, nextY;
+      let targetFurniture = null;
+
+      if (shouldTargetFurniture) {
+        targetFurniture = cozyFurnitureList[Math.floor(Math.random() * cozyFurnitureList.length)];
+        // Slightly offset so the pet looks like sitting right on/beside the furniture
+        nextX = Math.max(6, Math.min(84, Math.round(targetFurniture.x + 2)));
+        nextY = Math.max(34, Math.min(68, Math.round(targetFurniture.y + 4)));
+      } else {
+        // Pick a random target within open floor areas (preferring sides & upper back area)
+        const isSide = Math.random() > 0.3;
+        if (isSide) {
+          nextX = Math.random() > 0.5 
+            ? Math.round(8 + Math.random() * 24)    // 8% ~ 32% (Left open floor)
+            : Math.round(62 + Math.random() * 22);  // 62% ~ 84% (Right open floor)
+          nextY = Math.round(38 + Math.random() * 22); // 38% ~ 60%
+        } else {
+          nextX = Math.round(12 + Math.random() * 70); // 12% ~ 82% (Upper back floor)
+          nextY = Math.round(34 + Math.random() * 8);  // 34% ~ 42%
+        }
+      }
+
+      const dx = nextX - currentX.current;
+      const dy = nextY - currentY.current;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      // Face direction of walk
+      if (dx < -2) {
+        Animated.timing(scaleXAnim, { toValue: -1, duration: 160, useNativeDriver: true }).start();
+      } else if (dx > 2) {
+        Animated.timing(scaleXAnim, { toValue: 1, duration: 160, useNativeDriver: true }).start();
+      }
+
+      const duration = Math.max(2000, Math.min(4500, dist * 70));
+
+      setIdleEmote(null);
+      setIsRestingOnFurniture(false);
+      setRestingFurnitureName(null);
+      bobLoop.start();
+
+      Animated.timing(posAnim, {
+        toValue: { x: nextX, y: nextY },
+        duration,
+        easing: Easing.inOut(Easing.sin),
+        useNativeDriver: false,
+      }).start(({ finished }) => {
+        if (!isMountedRef.current) return;
+        currentX.current = nextX;
+        currentY.current = nextY;
+        bobLoop.stop();
+        bobAnim.setValue(0);
+
+        if (finished) {
+          if (targetFurniture) {
+            // Settled on cozy furniture! Show cute snoozing/relaxed state
+            setIsRestingOnFurniture(true);
+            setRestingFurnitureName(targetFurniture.name || '가구');
+            const sleepEmotes = ['💤', '💤', '✨', '🥰', '☕'];
+            setIdleEmote(sleepEmotes[Math.floor(Math.random() * sleepEmotes.length)]);
+
+            // Longer resting duration on comfortable furniture
+            const restDuration = 6000 + Math.random() * 5000;
+            walkTimerRef.current = setTimeout(wander, restDuration);
+          } else {
+            // Normal arrival emotion bubble
+            if (Math.random() < 0.6) {
+              const ownerMood = owner?.mood || '😊';
+              const emotes = [ownerMood, '💤', '❤️', '🐾', '✨', '🎵', '🌿'];
+              const chosen = emotes[Math.floor(Math.random() * emotes.length)];
+              setIdleEmote(chosen);
+              setTimeout(() => {
+                if (isMountedRef.current && !targetFurniture) setIdleEmote(null);
+              }, 2600);
+            }
+
+            // Staggered pacing: only 2-3 characters wander simultaneously, others rest
+            const nextDelay = 4500 + (index % 3) * 2500 + Math.random() * 4000;
+            walkTimerRef.current = setTimeout(wander, nextDelay);
+          }
+        }
+      });
+    };
+
+    // Stagger initial start times across all family members
+    const initialDelay = 1200 + index * 1600;
+    walkTimerRef.current = setTimeout(wander, initialDelay);
+
+    return () => {
+      isMountedRef.current = false;
+      if (walkTimerRef.current) clearTimeout(walkTimerRef.current);
+      bobLoop.stop();
+    };
+  }, [index, owner?.mood, placedFurniture]);
+
+  const handlePress = () => {
+    // Tap reaction: happy jump
+    Animated.sequence([
+      Animated.timing(tapBounceAnim, { toValue: -12, duration: 120, useNativeDriver: true }),
+      Animated.spring(tapBounceAnim, { toValue: 0, friction: 3, tension: 60, useNativeDriver: true }),
+    ]).start();
+    onPress(char);
+  };
+
+  const isBubbleShowing = subBubbleCharId === char.id;
+
+  return (
+    <Animated.View
+      style={[
+        styles.roamingCharWrapper,
+        {
+          left: posAnim.x.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] }),
+          top: posAnim.y.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] }),
+          zIndex: posAnim.y.interpolate({ inputRange: [0, 100], outputRange: [4, 25] }),
+        },
+      ]}
+    >
+      {/* Speech Bubble when tapped */}
+      {isBubbleShowing && (
+        <View style={styles.subSpeechBubble}>
+          <Text style={styles.subSpeechBubbleText}>{subBubbleText}</Text>
+          <View style={styles.subSpeechBubbleArrow} />
+        </View>
+      )}
+
+      {/* Idle Emote Bubble (e.g. 💤, ❤️, owner's mood) */}
+      {!isBubbleShowing && idleEmote && (
+        <View style={styles.idleEmoteBadge}>
+          <Text style={styles.idleEmoteText}>{idleEmote}</Text>
+        </View>
+      )}
+
+      <TouchableOpacity
+        activeOpacity={0.8}
+        onPress={handlePress}
+        style={styles.roamingCharTouch}
+      >
+        <Animated.View
+          style={{
+            transform: [
+              { scaleX: scaleXAnim },
+              { translateY: Animated.add(bobAnim, tapBounceAnim) },
+            ],
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {char.image_url ? (
+            <View style={styles.subCharImageWrapper}>
+              {Platform.OS === 'web' ? (
+                <img
+                  src={char.image_url}
+                  alt={char.name}
+                  style={{
+                    width: 34,
+                    height: 34,
+                    objectFit: 'contain',
+                    mixBlendMode: 'multiply',
+                    display: 'block',
+                    pointerEvents: 'none',
+                    userSelect: 'none',
+                  }}
+                />
+              ) : (
+                <Image source={{ uri: char.image_url }} style={styles.subCharImage} resizeMode="contain" />
+              )}
+            </View>
+          ) : (
+            <Text style={styles.subCharEmoji}>{char.emoji || '🐱'}</Text>
+          )}
+        </Animated.View>
+
+        {/* Footstep shadow on floor */}
+        <View style={styles.subCharShadow} />
+
+        {/* Owner & Pet Name Tag */}
+        <View style={styles.subCharLabelBox}>
+          <View style={styles.subCharOwnerRow}>
+            <Text style={styles.subCharOwnerAvatar}>{owner?.avatar || '👦'}</Text>
+            <Text style={styles.subCharOwnerName}>{owner?.name || '가족'}의</Text>
+          </View>
+          <Text style={styles.subCharLabelText}>{char.name} (Lv.{char.level || 1})</Text>
+          {isRestingOnFurniture && restingFurnitureName && (
+            <View style={styles.restingBadge}>
+              <Text style={styles.restingBadgeText}>{restingFurnitureName}에서 휴식 중 💤</Text>
+            </View>
+          )}
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+});
+
 export default function InteriorScreen({
   points,
   onDeductPoints,
   placedFurniture,
   onUpdatePlacedFurniture,
+  floorPlanUrl,
+  onUpdateFloorPlan,
   currentUser,
   currentUserProfile,
   familyId,
   petmongCharacters = [],
   setPetmongCharacters,
   onAwardExp,
+  familyMembers = [],
 }) {
   const insets = useSafeAreaInsets();
   
   // UI States
   const [shopModalVisible, setShopModalVisible] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState('living');
-  const [selectedFurnitureId, setSelectedFurnitureId] = useState(null);
+  const [selectedSlotId, setSelectedSlotId] = useState('sofa'); // Currently selected slot in shop modal: 'rug', 'sofa', 'shelf', 'play'
+  const [unlockedFurnitureIds, setUnlockedFurnitureIds] = useState(['f_sofa_1', 'f_rug_1']); // Default starting unlocked items
   
   // Petmong States (Linked with Supabase)
   const [myCharacter, setMyCharacter] = useState(null);
   const [mainCharTransparentUrl, setMainCharTransparentUrl] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [familyCharacters, setFamilyCharacters] = useState([]);
-  const [activities, setActivities] = useState([
-    { id: 'act1', text: '엄마 냥이님이 아빠 멍뭉이님에게 다정하게 인사했습니다! 👋', time: '10분 전' },
-    { id: 'act2', text: '동생 삐약이님이 새 러그 위에서 낮잠을 잤습니다. 💤', time: '1시간 전' },
-  ]);
   
   // Creation Modal State
   const [createModalVisible, setCreateModalVisible] = useState(false);
@@ -341,9 +745,13 @@ export default function InteriorScreen({
   // Interaction Modal State
   const [interactionModalVisible, setInteractionModalVisible] = useState(false);
   const [selectedTargetChar, setSelectedTargetChar] = useState(null);
-  
-  // Activity Log Modal State
-  const [activityLogVisible, setActivityLogVisible] = useState(false);
+
+  // Family Petmong Book / Roster Modal State
+  const [familyBookModalVisible, setFamilyBookModalVisible] = useState(false);
+
+  // Sumone-Style 3 Room Theme State (Default: cottage 빈 방)
+  const [roomTheme, setRoomTheme] = useState('cottage');
+  const [themeModalVisible, setThemeModalVisible] = useState(false);
 
   // Main Character Float Animation
   const floatAnim = useRef(new Animated.Value(0)).current;
@@ -401,6 +809,53 @@ export default function InteriorScreen({
     ).start();
   }, [floatAnim]);
 
+  // Load daily touch count for today from DB (Supabase petmong_activities) & AsyncStorage
+  useEffect(() => {
+    if (!currentUserProfile?.id) return;
+    const today = new Date().toISOString().split('T')[0];
+    const key = `PETMONG_TOUCH_${currentUserProfile.id}_${today}`;
+
+    // 1. Initial quick load from local storage
+    AsyncStorage.getItem(key).then(val => {
+      if (val !== null) {
+        setDailyTouchCount(parseInt(val, 10) || 0);
+      } else {
+        setDailyTouchCount(0);
+      }
+    }).catch(err => console.log('Error loading daily touch count:', err));
+
+    // Load unlocked furniture items
+    AsyncStorage.getItem('PETMONG_UNLOCKED_FURNITURE').then(val => {
+      if (val) {
+        try {
+          const parsed = JSON.parse(val);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setUnlockedFurnitureIds(prev => Array.from(new Set([...prev, ...parsed])));
+          }
+        } catch (e) {}
+      }
+    }).catch(() => {});
+
+    // 2. Fetch ground-truth count from Supabase petmong_activities for cross-device sync (e.g. mobile <-> PC)
+    if (myCharacter?.id) {
+      const todayStart = `${today}T00:00:00.000Z`;
+      supabase
+        .from('petmong_activities')
+        .select('action_type')
+        .eq('actor_id', myCharacter.id)
+        .ilike('action_type', '%반려몽 쓰다듬기%')
+        .gte('created_at', todayStart)
+        .then(({ data, error }) => {
+          if (data && !error) {
+            const dbCount = data.length;
+            setDailyTouchCount(prev => Math.max(prev, dbCount));
+            AsyncStorage.setItem(key, String(dbCount)).catch(() => {});
+          }
+        })
+        .catch(err => console.log('Error syncing touch count with DB:', err));
+    }
+  }, [currentUserProfile?.id, myCharacter?.id]);
+
   // Handle Tap Interaction on My Petmong (Sumone Style)
   const handlePetTap = () => {
     if (!myCharacter) return;
@@ -421,7 +876,10 @@ export default function InteriorScreen({
     }).start(() => setHeartVisible(false));
 
     // 3. Speech bubble with personality & time-based quote
-    const quote = getRandomDialogue(myCharacter.personality);
+    const isLimitReached = dailyTouchCount >= MAX_DAILY_TOUCH;
+    const quote = isLimitReached
+      ? '오늘 사랑은 듬뿍 받았어요! 내일 또 쓰다듬어주세요 🥰'
+      : getRandomDialogue(myCharacter.personality);
     setBubbleText(quote);
     setBubbleVisible(true);
     bubbleAnim.setValue(0);
@@ -441,12 +899,19 @@ export default function InteriorScreen({
       }).start(() => setBubbleVisible(false));
     }, 4500);
 
-    // 4. Award EXP on touch (up to 5 times per day)
-    if (dailyTouchCount < 5) {
-      setDailyTouchCount(prev => prev + 1);
+    // 4. Award EXP on touch (up to 10 times per day)
+    if (!isLimitReached) {
+      const nextCount = dailyTouchCount + 1;
+      setDailyTouchCount(nextCount);
+
+      if (currentUserProfile?.id) {
+        const today = new Date().toISOString().split('T')[0];
+        const key = `PETMONG_TOUCH_${currentUserProfile.id}_${today}`;
+        AsyncStorage.setItem(key, String(nextCount)).catch(e => console.log(e));
+      }
 
       if (onAwardExp && currentUserProfile?.id) {
-        onAwardExp(currentUserProfile.id, 3, '반려몽 쓰다듬기 (+3 EXP)');
+        onAwardExp(currentUserProfile.id, 3, `반려몽 쓰다듬기 (${nextCount}/${MAX_DAILY_TOUCH})`);
       } else {
         setMyCharacter(prev => {
           let newExp = (prev.exp || 0) + 3;
@@ -460,12 +925,6 @@ export default function InteriorScreen({
           return { ...prev, exp: newExp, level: newLevel };
         });
       }
-
-      setActivities(prev => [{
-        id: `act-${Date.now()}`,
-        text: `${currentUserProfile?.name || '나'}님이 ${myCharacter.name}을(를) 다정하게 쓰다듬어 주었습니다 (+3 EXP) 💕`,
-        time: '방금 전'
-      }, ...prev]);
     }
   };
 
@@ -537,7 +996,6 @@ export default function InteriorScreen({
         setMyCharacter(insertedChar);
         setCreateModalVisible(false);
         setPetmongCharacters(prev => [...prev, insertedChar]);
-        setActivities(prev => [{ id: `act-${Date.now()}`, text: `${newName}님이 우리 집 방에 놀러왔어요! 🎉`, time: '방금 전' }, ...prev]);
         
         Alert.alert('탄생 완료! 🎉', '나를 똑닮은 귀여운 반려몽이 부화했어요!');
       } catch (err) {
@@ -548,96 +1006,147 @@ export default function InteriorScreen({
     }
   };
 
+  // Handle Quick Character Creation with Emoji
+  const handleCreateWithEmoji = async () => {
+    if (!newName.trim()) {
+      Alert.alert('알림', '반려몽의 이름을 지어주세요!');
+      return;
+    }
+    try {
+      setIsGenerating(true);
+      const newCharData = {
+        user_id: currentUserProfile.id,
+        family_id: familyId,
+        name: newName.trim(),
+        emoji: newEmoji || '🐶',
+        image_url: null,
+        personality: newPersonality,
+        level: 1,
+        exp: 0,
+      };
+
+      const { data: insertedChar, error: insertError } = await supabase
+        .from('petmong_characters')
+        .insert(newCharData)
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
+      setIsGenerating(false);
+      setMyCharacter(insertedChar);
+      setCreateModalVisible(false);
+      setPetmongCharacters(prev => [...prev, insertedChar]);
+      Alert.alert('탄생 완료! 🎉', `${newName.trim()}(이)가 우리 집에 입주했습니다!`);
+    } catch (err) {
+      setIsGenerating(false);
+      console.error('Emoji character creation error:', err);
+      Alert.alert('오류 발생', '반려몽 생성에 실패했습니다. 다시 시도해주세요.');
+    }
+  };
+
   // Handle Interaction
   const handleInteract = (actionType) => {
     if (!selectedTargetChar || !myCharacter) return;
     
-    const actionText = actionType === 'greet' ? '반갑게 인사했습니다! 👋' : 
-                       actionType === 'gift' ? '예쁜 선물을 주었습니다! 🎁' : 
-                       '다정하게 쓰다듬어 주었습니다! ✨';
-    
     const expGain = actionType === 'gift' ? 15 : 5;
-    
-    setActivities(prev => [{
-      id: `act-${Date.now()}`,
-      text: `${myCharacter.name}님이 ${selectedTargetChar.name}님에게 ${actionText}`,
-      time: '방금 전'
-    }, ...prev]);
 
-    setMyCharacter(prev => {
-      let newExp = prev.exp + expGain;
-      let newLevel = prev.level;
-      if (newExp >= 100) {
-        newExp -= 100;
-        newLevel += 1;
-        Alert.alert('레벨업! 🎉', `${prev.name}의 레벨이 ${newLevel}이 되었습니다!`);
-      }
-      return { ...prev, exp: newExp, level: newLevel };
-    });
+    if (onAwardExp && currentUserProfile?.id) {
+      onAwardExp(currentUserProfile.id, expGain, `가족 반려몽과 상호작용 (+${expGain} EXP)`);
+    } else {
+      setMyCharacter(prev => {
+        let newExp = (prev.exp || 0) + expGain;
+        let newLevel = prev.level || 1;
+        if (newExp >= 100) {
+          newExp -= 100;
+          newLevel += 1;
+          Alert.alert('레벨업! 🎉', `${prev.name}의 레벨이 ${newLevel}이 되었습니다!`);
+        }
+        return { ...prev, exp: newExp, level: newLevel };
+      });
+    }
 
     setInteractionModalVisible(false);
   };
 
-  const handleBuyFurniture = (item) => {
+  // Sumone-Style Slot & Object Unlock/Equip Handlers
+  const handleUnlockAndEquip = (item) => {
     if (points < item.cost) {
-      Alert.alert('포인트 부족 ⚠️', `[${item.name}] 구매에는 ${item.cost}P가 필요합니다. 스몰톡 및 장보기로 포인트를 모아보세요!`);
+      Alert.alert('포인트 부족 ⚠️', `[${item.name}] 잠금 해제에는 ${item.cost}P가 필요합니다. 스몰톡 및 장보기로 포인트를 모아보세요!`);
       return;
     }
 
     Alert.alert(
-      '가구 구매',
-      `[${item.name}]을(를) ${item.cost} 포인트로 구매하여 배치하시겠습니까?`,
+      '오브젝트 잠금 해제 & 장착',
+      `[${item.name}]을(를) ${item.cost} 포인트로 해금하여 방에 바로 장착하시겠습니까?`,
       [
         { text: '취소', style: 'cancel' },
         {
-          text: '구매 & 배치',
+          text: '해금 & 장착 💖',
           onPress: () => {
             if (onDeductPoints) onDeductPoints(item.cost);
 
-            const newItem = {
-              id: `placed-${Date.now()}`,
+            // 1. Mark as unlocked
+            const newUnlocked = Array.from(new Set([...unlockedFurnitureIds, item.id]));
+            setUnlockedFurnitureIds(newUnlocked);
+            AsyncStorage.setItem('PETMONG_UNLOCKED_FURNITURE', JSON.stringify(newUnlocked)).catch(() => {});
+
+            // 2. Equip to the designated slot
+            const otherSlots = (placedFurniture || []).filter(f => f.slotId !== item.slotId);
+            const targetSlot = ROOM_SLOTS.find(s => s.id === item.slotId);
+            const newPlacedItem = {
+              id: `placed-${item.id}`,
               catalogId: item.id,
+              slotId: item.slotId,
               name: item.name,
               emoji: item.emoji,
-              x: 42,
-              y: 42,
-              rotation: 0,
+              x: targetSlot ? targetSlot.x : 42,
+              y: targetSlot ? targetSlot.y : 55,
             };
 
-            const updated = [...(placedFurniture || []), newItem];
+            const updated = [...otherSlots, newPlacedItem];
             if (onUpdatePlacedFurniture) onUpdatePlacedFurniture(updated);
 
             setShopModalVisible(false);
-            Alert.alert('가구 추가 완료 🎉', '방 중심에 가구가 배치되었습니다. 손가락으로 드래그하여 원하는 위치로 옮겨보세요!');
+            Alert.alert('장착 완료! ✨', `[${item.name}]이(가) 방에 예쁘게 배치되었습니다!`);
           },
         },
       ]
     );
   };
 
-  const handleRotateFurniture = (item) => {
-    const updated = (placedFurniture || []).map((f) =>
-      f.id === item.id ? { ...f, rotation: (f.rotation + 45) % 360 } : f
-    );
+  const handleEquipUnlocked = (item) => {
+    const otherSlots = (placedFurniture || []).filter(f => f.slotId !== item.slotId);
+    const targetSlot = ROOM_SLOTS.find(s => s.id === item.slotId);
+    const newPlacedItem = {
+      id: `placed-${item.id}`,
+      catalogId: item.id,
+      slotId: item.slotId,
+      name: item.name,
+      emoji: item.emoji,
+      x: targetSlot ? targetSlot.x : 42,
+      y: targetSlot ? targetSlot.y : 55,
+    };
+
+    const updated = [...otherSlots, newPlacedItem];
     if (onUpdatePlacedFurniture) onUpdatePlacedFurniture(updated);
+    setShopModalVisible(false);
+    Alert.alert('교체 완료! 🛋️', `[${item.name}]으로 방 배치를 변경했습니다.`);
   };
 
-  const handleDeleteFurniture = (item) => {
-    Alert.alert('가구 철거', `[${item.name}]을(를) 철거하시겠습니까?`, [
-      { text: '취소', style: 'cancel' },
-      {
-        text: '철거하기',
-        style: 'destructive',
-        onPress: () => {
-          const updated = (placedFurniture || []).filter((f) => f.id !== item.id);
-          if (onUpdatePlacedFurniture) onUpdatePlacedFurniture(updated);
-          setSelectedFurnitureId(null);
-        },
-      },
-    ]);
+  const handleUnequipSlot = (slotId) => {
+    const updated = (placedFurniture || []).filter(f => f.slotId !== slotId);
+    if (onUpdatePlacedFurniture) onUpdatePlacedFurniture(updated);
+    setShopModalVisible(false);
+    Alert.alert('해제 완료 🧹', '해당 슬롯의 가구를 보관함에 넣었습니다.');
   };
 
-  const filteredCatalog = FURNITURE_CATALOG.filter((f) => f.category === selectedCategory);
+  const handlePressSlot = (slot) => {
+    setSelectedSlotId(slot.id);
+    setShopModalVisible(true);
+  };
+
+  const filteredCatalog = FURNITURE_CATALOG.filter((f) => f.slotId === selectedSlotId);
 
   return (
     <View style={styles.container}>
@@ -655,8 +1164,8 @@ export default function InteriorScreen({
           onPress={() => setShopModalVisible(true)}
           activeOpacity={0.8}
         >
-          <ShoppingBag size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
-          <Text style={styles.openShopBtnText}>가구 상점</Text>
+          <Layers size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
+          <Text style={styles.openShopBtnText}>방 꾸미기</Text>
         </TouchableOpacity>
       </View>
 
@@ -672,33 +1181,80 @@ export default function InteriorScreen({
 
         {/* Main Pet Room Interactive Canvas */}
         <View style={styles.canvasCard}>
+          {/* Room Header & Quick Action Toolbar */}
           <View style={styles.canvasHeader}>
             <View style={styles.canvasTitleGroup}>
-              <Text style={styles.canvasTitle}>가족 아늑한 방</Text>
+              <Text style={styles.canvasTitle}>우리 가족 아늑한 방</Text>
               <Text style={styles.canvasAreaSubtitle}>
-                {myCharacter ? `${myCharacter.name} (${myCharacter.personality})` : '반려몽 생성 필요'}
+                {myCharacter ? `${myCharacter.name}와 함께하는 공간` : '반려몽 생성 필요'}
               </Text>
             </View>
 
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              {!myCharacter && (
-                <TouchableOpacity
-                  style={[styles.logBtn, { backgroundColor: '#FFEBEB', marginRight: 6 }]}
-                  onPress={() => setCreateModalVisible(true)}
-                >
-                  <Sparkles size={13} color="#FF7E82" style={{ marginRight: 4 }} />
-                  <Text style={[styles.logBtnText, { color: '#FF7E82' }]}>반려몽 만들기</Text>
-                </TouchableOpacity>
-              )}
-
+            {!myCharacter && (
               <TouchableOpacity
-                style={styles.logBtn}
-                onPress={() => setActivityLogVisible(true)}
+                style={[styles.logBtn, { backgroundColor: '#FFEBEB' }]}
+                onPress={() => setCreateModalVisible(true)}
               >
-                <List size={14} color="#4A90E2" style={{ marginRight: 4 }} />
-                <Text style={styles.logBtnText}>활동 로그</Text>
+                <Sparkles size={13} color="#FF7E82" style={{ marginRight: 4 }} />
+                <Text style={[styles.logBtnText, { color: '#FF7E82' }]}>반려몽 만들기</Text>
               </TouchableOpacity>
-            </View>
+            )}
+          </View>
+
+          {/* Quick Control Toolbar (Room Theme, Family Book, Daily Touch) */}
+          <View style={styles.roomActionBar}>
+            {/* Room Theme Selector Button */}
+            <TouchableOpacity
+              style={styles.roomActionBtn}
+              onPress={() => setThemeModalVisible(true)}
+              activeOpacity={0.8}
+            >
+              <Palette size={14} color="#D9534F" style={{ marginRight: 4 }} />
+              <Text style={styles.roomActionBtnEmoji}>
+                {ROOM_THEMES.find(t => t.id === roomTheme)?.emoji || '🏡'}
+              </Text>
+              <Text style={styles.roomActionBtnText}>
+                {ROOM_THEMES.find(t => t.id === roomTheme)?.name || '테마 변경'}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Family Petmong Book Button */}
+            <TouchableOpacity
+              style={[styles.roomActionBtn, styles.roomActionBtnBlue]}
+              onPress={() => setFamilyBookModalVisible(true)}
+              activeOpacity={0.8}
+            >
+              <BookOpen size={14} color="#3B82F6" style={{ marginRight: 4 }} />
+              <Text style={[styles.roomActionBtnText, { color: '#2563EB' }]}>
+                도감 ({petmongCharacters.length})
+              </Text>
+            </TouchableOpacity>
+
+            {/* Daily Pet Touch Progress Chip */}
+            {myCharacter && (
+              <View
+                style={[
+                  styles.roomTouchChip,
+                  dailyTouchCount >= MAX_DAILY_TOUCH
+                    ? styles.roomTouchChipDone
+                    : styles.roomTouchChipProgress,
+                ]}
+              >
+                {dailyTouchCount >= MAX_DAILY_TOUCH ? (
+                  <>
+                    <Sparkles size={13} color="#059669" style={{ marginRight: 4 }} />
+                    <Text style={styles.roomTouchChipTextDone}>오늘 완료 🎉</Text>
+                  </>
+                ) : (
+                  <>
+                    <Heart size={13} color="#FF4D6D" fill="#FF4D6D" style={{ marginRight: 4 }} />
+                    <Text style={styles.roomTouchChipTextProgress}>
+                      쓰다듬기 {dailyTouchCount}/{MAX_DAILY_TOUCH}
+                    </Text>
+                  </>
+                )}
+              </View>
+            )}
           </View>
 
           {/* Interactive Room Canvas */}
@@ -707,106 +1263,50 @@ export default function InteriorScreen({
             onPress={() => setSelectedFurnitureId(null)}
             style={styles.canvasContainer}
           >
-            {/* 2-Tone Cozy Room Wall & Floor Background */}
-            <View style={styles.roomWallArea}>
-              {/* Cozy Window */}
-              <View style={styles.cozyWindow}>
-                <View style={styles.curtainTop} />
-                <View style={styles.windowGlass}>
-                  <Text style={styles.windowSunMoon}>
-                    {new Date().getHours() >= 6 && new Date().getHours() < 19 ? '☀️' : '🌙'}
-                  </Text>
-                  <View style={styles.windowFrameCrossH} />
-                  <View style={styles.windowFrameCrossV} />
-                </View>
-              </View>
+            {/* High-Resolution Game Art Room Background Image */}
+            <Image
+              source={ROOM_BACKGROUNDS[roomTheme]}
+              style={styles.roomBgImage}
+              resizeMode="cover"
+            />
 
-              {/* Cute wall photo frame */}
-              <View style={styles.wallPhotoFrame}>
-                <Heart size={10} color="#FF7E82" fill="#FF7E82" />
-                <Text style={styles.wallPhotoText}>FamLink</Text>
-              </View>
-            </View>
+            {/* Sumone-Style Fixed Room Slots & Equipped Objects */}
+            {ROOM_SLOTS.map((slot) => {
+              const equipped = (placedFurniture || []).find(f => f.slotId === slot.id);
+              // Enrich equipped item with full catalog definition (e.g. image asset)
+              const catalogItem = equipped ? FURNITURE_CATALOG.find(c => c.id === equipped.catalogId) : null;
+              const mergedEquipped = equipped
+                ? { ...equipped, image: catalogItem?.image || equipped.image }
+                : null;
 
-            {/* Baseboard Moulding */}
-            <View style={styles.roomMoulding} />
+              return (
+                <RoomSlotObject
+                  key={slot.id}
+                  slot={slot}
+                  equippedItem={mergedEquipped}
+                  onPressSlot={handlePressSlot}
+                  styles={styles}
+                />
+              );
+            })}
 
-            {/* Cozy Wooden Floor Area */}
-            <View style={styles.roomFloorArea}>
-              <View style={[styles.floorPlankLine, { top: '33%' }]} />
-              <View style={[styles.floorPlankLine, { top: '66%' }]} />
-              <View style={styles.floorPlankLineVertical1} />
-              <View style={styles.floorPlankLineVertical2} />
-              <View style={styles.floorPlankLineVertical3} />
-            </View>
-
-            {/* Grounded Living Room Oval Rug on the Floor */}
-            <View style={styles.floorRug}>
-              <View style={styles.floorRugPattern} />
-            </View>
-
-            {/* Placed Furniture Items */}
-            {(placedFurniture || []).map((item) => (
-              <DraggableFurniture
-                key={item.id}
-                item={item}
-                isSelected={selectedFurnitureId === item.id}
-                canvasWidth={BASE_CANVAS_SIZE}
-                onSelect={setSelectedFurnitureId}
-                onMove={(id, x, y) => {
-                  const updated = (placedFurniture || []).map(f => f.id === id ? { ...f, x, y } : f);
-                  if (onUpdatePlacedFurniture) onUpdatePlacedFurniture(updated);
-                }}
-                onRotate={handleRotateFurniture}
-                onDelete={handleDeleteFurniture}
-                styles={styles}
-              />
-            ))}
-
-            {/* Other Family Petmong Characters Standing on Floor */}
-            {familyCharacters.map((char) => (
-              <TouchableOpacity
-                key={char.id}
-                activeOpacity={0.8}
-                style={[styles.subCharContainer, { left: `${char.x}%`, top: `${char.y}%` }]}
-                onPress={() => handleSubCharPress(char)}
-              >
-                {subBubbleCharId === char.id && (
-                  <View style={styles.subSpeechBubble}>
-                    <Text style={styles.subSpeechBubbleText}>{subBubbleText}</Text>
-                    <View style={styles.subSpeechBubbleArrow} />
-                  </View>
-                )}
-                {char.image_url ? (
-                  <View style={styles.subCharImageWrapper}>
-                    {Platform.OS === 'web' ? (
-                      <img
-                        src={char.image_url}
-                        alt={char.name}
-                        style={{
-                          width: 48,
-                          height: 48,
-                          objectFit: 'contain',
-                          mixBlendMode: 'multiply',
-                          display: 'block',
-                          pointerEvents: 'none',
-                          userSelect: 'none',
-                        }}
-                      />
-                    ) : (
-                      <Image source={{ uri: char.image_url }} style={styles.subCharImage} resizeMode="contain" />
-                    )}
-                  </View>
-                ) : (
-                  <Text style={styles.subCharEmoji}>{char.emoji || '🐱'}</Text>
-                )}
-                {/* Natural Ground Shadow */}
-                <View style={styles.subCharShadow} />
-                <View style={styles.subCharLabelBox}>
-                  <Text style={styles.subCharLabelText}>{char.name} (Lv.{char.level || 1})</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
+            {/* Autonomous Roaming Family Petmongs in Background (Optimized for up to MAX_ACTIVE_ROAMING concurrent pets) */}
+            {familyCharacters.slice(0, MAX_ACTIVE_ROAMING).map((char, index) => {
+              const owner = familyMembers.find(m => m.id === char.user_id);
+              return (
+                <RoamingFamilyPetmong
+                  key={char.id}
+                  char={char}
+                  owner={owner}
+                  index={index}
+                  placedFurniture={placedFurniture}
+                  subBubbleCharId={subBubbleCharId}
+                  subBubbleText={subBubbleText}
+                  onPress={() => handleSubCharPress(char)}
+                  styles={styles}
+                />
+              );
+            })}
 
             {/* My Main Petmong Character (Standing naturally in the room) */}
             {myCharacter && (
@@ -850,7 +1350,18 @@ export default function InteriorScreen({
                     ]}
                   >
                     <Heart size={26} color="#FF4D6D" fill="#FF4D6D" />
-                    <Text style={styles.touchExpText}>+3 EXP</Text>
+                    <Text
+                      style={[
+                        styles.touchExpText,
+                        dailyTouchCount >= MAX_DAILY_TOUCH && styles.touchExpTextDone,
+                      ]}
+                    >
+                      {dailyTouchCount < MAX_DAILY_TOUCH
+                        ? `+3 EXP (${dailyTouchCount}/${MAX_DAILY_TOUCH})`
+                        : dailyTouchCount === MAX_DAILY_TOUCH
+                        ? `+3 EXP (${MAX_DAILY_TOUCH}/${MAX_DAILY_TOUCH} 완료)`
+                        : '❤️ 애정 가득 (오늘 완료)'}
+                    </Text>
                   </Animated.View>
                 )}
 
@@ -859,6 +1370,16 @@ export default function InteriorScreen({
                   onPress={handlePetTap}
                   style={styles.charTouchArea}
                 >
+                  {/* Foreground Owner Badge: [내 기분] [이름] 반려몽 */}
+                  <View style={styles.myCharOwnerBadge}>
+                    <View style={styles.myCharMoodWrap}>
+                      <MoodIcon mood={currentUserProfile?.mood || '😊'} size={13} />
+                    </View>
+                    <Text style={styles.myCharOwnerBadgeText}>
+                      {currentUserProfile?.name || '내'} 반려몽
+                    </Text>
+                  </View>
+
                   {/* Character Sprite directly in room */}
                   {myCharacter.image_url ? (
                     <View style={styles.mainCharImageWrapper}>
@@ -896,44 +1417,53 @@ export default function InteriorScreen({
                   {/* Soft Natural Ground Contact Shadow under feet */}
                   <View style={styles.charGroundShadow} />
 
-                  {/* Character Mood Indicator */}
-                  <View style={styles.charMoodBadge}>
-                    <Text style={styles.charMoodEmoji}>
-                      {myCharacter.personality === '잠꾸러기' ? '💤' : 
-                       myCharacter.personality === '장난꾸러기' ? '😜' : 
-                       myCharacter.personality === '애교쟁이' ? '🥰' : 
-                       myCharacter.personality === '호기심많은' ? '🧐' : '😊'}
-                    </Text>
-                  </View>
-
-                  {/* Cute Touch Hint */}
-                  <View style={styles.touchHintBadge}>
-                    <Sparkles size={9} color="#FFFFFF" style={{ marginRight: 2 }} />
-                    <Text style={styles.touchHintText}>톡톡!</Text>
-                  </View>
-                </TouchableOpacity>
-
-                <View style={styles.mainCharBadge}>
-                  <View style={styles.nameRow}>
-                    <Text style={styles.mainCharName}>{myCharacter.name}</Text>
-                    <View style={styles.personalityTag}>
-                      <Text style={styles.personalityTagText}>{myCharacter.personality || '다정한'}</Text>
+                  {/* Cute Touch Hint (shown while daily touch is active) */}
+                  {dailyTouchCount < MAX_DAILY_TOUCH && (
+                    <View style={styles.touchHintBadge}>
+                      <Sparkles size={9} color="#FFFFFF" style={{ marginRight: 2 }} />
+                      <Text style={styles.touchHintText}>톡톡!</Text>
                     </View>
-                  </View>
-                  <View style={styles.expBarBg}>
-                    <View style={[styles.expBarFill, { width: `${Math.min(100, myCharacter.exp || 0)}%` }]} />
-                  </View>
-                  <View style={styles.levelRow}>
-                    <Text style={styles.levelText}>Lv.{myCharacter.level || 1}</Text>
-                    <Text style={styles.expNumberText}>{myCharacter.exp || 0}/100</Text>
-                  </View>
-                </View>
+                  )}
+                </TouchableOpacity>
               </Animated.View>
             )}
           </TouchableOpacity>
 
+          {/* Dedicated My Petmong Status & Growth Card below Canvas */}
+          {myCharacter && (
+            <View style={styles.petStatusCardBelow}>
+              <View style={styles.petStatusCardLeft}>
+                <View style={styles.petStatusMoodWrap}>
+                  <MoodIcon mood={currentUserProfile?.mood || '😊'} size={15} />
+                </View>
+                <View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={styles.petStatusCardName}>{myCharacter.name}</Text>
+                    <View style={styles.personalityTag}>
+                      <Text style={styles.personalityTagText}>{myCharacter.personality || '다정한'}</Text>
+                    </View>
+                    <Text style={styles.petStatusCardLevel}>Lv.{myCharacter.level || 1}</Text>
+                  </View>
+                  <Text style={styles.petStatusCardSub}>
+                    {currentUserProfile?.name || '내'} 반려몽 • {myCharacter.species || '반려동물'}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.petStatusCardRight}>
+                <View style={styles.petStatusExpRow}>
+                  <Text style={styles.petStatusExpLabel}>경험치</Text>
+                  <Text style={styles.petStatusExpVal}>{myCharacter.exp || 0} / 100</Text>
+                </View>
+                <View style={styles.petStatusExpBarBg}>
+                  <View style={[styles.petStatusExpBarFill, { width: `${Math.min(100, myCharacter.exp || 0)}%` }]} />
+                </View>
+              </View>
+            </View>
+          )}
+
           <Text style={styles.canvasGuideText}>
-            💡 반려몽을 톡톡 터치하면 애정 대사와 함께 +3 EXP를 획득합니다!
+            💡 반려몽을 톡톡 터치하면 애정 대사와 함께 +3 EXP를 획득합니다! (오늘: {Math.min(dailyTouchCount, MAX_DAILY_TOUCH)}/{MAX_DAILY_TOUCH}회, 매일 자정 초기화)
           </Text>
         </View>
       </ScrollView>
@@ -996,14 +1526,48 @@ export default function InteriorScreen({
               ))}
             </ScrollView>
 
-            <TouchableOpacity
-              style={styles.modalConfirmBtn}
-              onPress={handlePickImageAndCreate}
-              activeOpacity={0.8}
-            >
-              <Camera size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.modalConfirmBtnText}>내 사진 찍고/선택해서 생성하기</Text>
-            </TouchableOpacity>
+            <Text style={styles.modalLabel}>캐릭터 선택 (기본 캐릭터 또는 AI 사진 생성)</Text>
+            <View style={styles.emojiPickerRow}>
+              {['🐶', '🐱', '🐰', '🐻', '🦊', '🐥', '🐼', '🐨'].map((em) => (
+                <TouchableOpacity
+                  key={em}
+                  style={[
+                    styles.emojiPickBtn,
+                    newEmoji === em && styles.emojiPickBtnActive,
+                  ]}
+                  onPress={() => setNewEmoji(em)}
+                >
+                  <Text style={{ fontSize: 24 }}>{em}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={styles.creationBtnGroup}>
+              <TouchableOpacity
+                style={styles.modalEmojiConfirmBtn}
+                onPress={handleCreateWithEmoji}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalEmojiConfirmBtnText}>
+                  {newEmoji} 캐릭터로 바로 입주하기
+                </Text>
+              </TouchableOpacity>
+
+              <View style={styles.orDividerRow}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>또는 AI로 특별하게</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              <TouchableOpacity
+                style={styles.modalConfirmBtn}
+                onPress={handlePickImageAndCreate}
+                activeOpacity={0.8}
+              >
+                <Camera size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.modalConfirmBtnText}>내 사진으로 AI 반려몽 그리기</Text>
+              </TouchableOpacity>
+            </View>
 
             {/* AI Generation Loading Overlay */}
             {isGenerating && (
@@ -1068,41 +1632,7 @@ export default function InteriorScreen({
         </View>
       </Modal>
 
-      {/* Activity Log Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={activityLogVisible}
-        onRequestClose={() => setActivityLogVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalView}>
-            <View style={styles.modalHeaderRow}>
-              <View style={styles.modalHeaderTitleRow}>
-                <List size={20} color="#4A90E2" style={{ marginRight: 6 }} />
-                <Text style={styles.modalHeader}>가족 소통 활동 로그</Text>
-              </View>
-              <TouchableOpacity onPress={() => setActivityLogVisible(false)}>
-                <X size={20} color="#8E8E93" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={{ maxHeight: 350 }}>
-              {activities.map((act) => (
-                <View key={act.id} style={styles.logItemCard}>
-                  <View style={styles.logDot} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.logText}>{act.text}</Text>
-                    <Text style={styles.logTime}>{act.time}</Text>
-                  </View>
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Furniture Shop Modal */}
+      {/* Sumone-Style Room Object Shop Modal (슬롯별 오브젝트 잠금 해제 및 장착) */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -1113,62 +1643,146 @@ export default function InteriorScreen({
           <View style={styles.modalView}>
             <View style={styles.modalHeaderRow}>
               <View style={styles.modalHeaderTitleRow}>
-                <ShoppingBag size={20} color="#FF7E82" style={{ marginRight: 6 }} />
-                <Text style={styles.modalHeader}>가족 가구 상점</Text>
+                <Layers size={20} color="#FF7E82" style={{ marginRight: 6 }} />
+                <Text style={styles.modalHeader}>우리 가족 방 꾸미기 🛋️</Text>
               </View>
               <TouchableOpacity onPress={() => setShopModalVisible(false)}>
                 <X size={20} color="#8E8E93" />
               </TouchableOpacity>
             </View>
 
-            {/* Category Tabs */}
+            {/* Slot Tabs */}
             <View style={styles.categoryTabRow}>
-              {[
-                { id: 'living', name: '거실 🛋️' },
-                { id: 'deco', name: '데코 🪴' },
-              ].map((cat) => (
-                <TouchableOpacity
-                  key={cat.id}
-                  style={[
-                    styles.categoryTab,
-                    selectedCategory === cat.id && styles.categoryTabActive,
-                  ]}
-                  onPress={() => setSelectedCategory(cat.id)}
-                >
-                  <Text
+              {ROOM_SLOTS.map((slot) => {
+                const isEquippedInSlot = (placedFurniture || []).some(f => f.slotId === slot.id);
+                return (
+                  <TouchableOpacity
+                    key={slot.id}
                     style={[
-                      styles.categoryTabText,
-                      selectedCategory === cat.id && styles.categoryTabTextActive,
+                      styles.categoryTab,
+                      selectedSlotId === slot.id && styles.categoryTabActive,
                     ]}
+                    onPress={() => setSelectedSlotId(slot.id)}
+                    activeOpacity={0.8}
                   >
-                    {cat.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <Text
+                      style={[
+                        styles.categoryTabText,
+                        selectedSlotId === slot.id && styles.categoryTabTextActive,
+                      ]}
+                    >
+                      {slot.name} {isEquippedInSlot ? '✨' : ''}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
 
-            {/* Catalog Grid */}
-            <ScrollView style={styles.catalogList}>
-              {filteredCatalog.map((item) => (
-                <View key={item.id} style={styles.catalogCard}>
-                  <View style={styles.catalogEmojiBox}>
-                    <Text style={styles.catalogEmoji}>{item.emoji}</Text>
-                  </View>
+            {/* Active Slot Header & Unequip Button */}
+            {(() => {
+              const currentSlotObj = ROOM_SLOTS.find(s => s.id === selectedSlotId);
+              const equippedInCurrentSlot = (placedFurniture || []).find(f => f.slotId === selectedSlotId);
 
-                  <View style={styles.catalogInfo}>
-                    <Text style={styles.catalogName}>{item.name}</Text>
-                    <Text style={styles.catalogDesc}>{item.desc}</Text>
-                    <Text style={styles.catalogPrice}>{item.cost} P</Text>
+              return (
+                <View style={styles.slotCurrentBanner}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.slotBannerTitle}>{currentSlotObj?.name || '슬롯'}</Text>
+                    <Text style={styles.slotBannerSub}>
+                      {equippedInCurrentSlot ? `현재 장착: ${equippedInCurrentSlot.emoji} ${equippedInCurrentSlot.name}` : '현재 비어 있음 (미배치)'}
+                    </Text>
                   </View>
-
-                  <TouchableOpacity
-                    style={styles.buyBtn}
-                    onPress={() => handleBuyFurniture(item)}
-                  >
-                    <Text style={styles.buyBtnText}>구매</Text>
-                  </TouchableOpacity>
+                  {equippedInCurrentSlot && (
+                    <TouchableOpacity
+                      style={styles.unequipBtn}
+                      onPress={() => handleUnequipSlot(selectedSlotId)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.unequipBtnText}>슬롯 비우기</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
-              ))}
+              );
+            })()}
+
+            {/* Catalog Grid for Current Slot */}
+            <ScrollView style={styles.catalogList} showsVerticalScrollIndicator={false}>
+              {filteredCatalog.map((item) => {
+                const isUnlocked = unlockedFurnitureIds.includes(item.id);
+                const isEquipped = (placedFurniture || []).some(f => f.catalogId === item.id || f.id === `placed-${item.id}`);
+
+                return (
+                  <View key={item.id} style={[styles.catalogCard, isEquipped && styles.catalogCardEquipped]}>
+                    <View style={styles.catalogEmojiBox}>
+                      {item.image ? (
+                        Platform.OS === 'web' ? (
+                          <img
+                            src={item.image}
+                            alt={item.name}
+                            style={{
+                              width: 38,
+                              height: 38,
+                              objectFit: 'contain',
+                              mixBlendMode: 'multiply',
+                              display: 'block',
+                            }}
+                          />
+                        ) : (
+                          <Image
+                            source={item.image}
+                            style={{ width: 38, height: 38 }}
+                            resizeMode="contain"
+                          />
+                        )
+                      ) : (
+                        <Text style={styles.catalogEmoji}>{item.emoji}</Text>
+                      )}
+                    </View>
+
+                    <View style={styles.catalogInfo}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={styles.catalogName}>{item.name}</Text>
+                        {isEquipped ? (
+                          <View style={styles.equippedBadge}>
+                            <Text style={styles.equippedBadgeText}>장착 중</Text>
+                          </View>
+                        ) : isUnlocked ? (
+                          <View style={styles.unlockedBadge}>
+                            <Text style={styles.unlockedBadgeText}>보유 중</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <Text style={styles.catalogDesc}>{item.desc}</Text>
+                      {!isUnlocked && (
+                        <Text style={styles.catalogPrice}>{item.cost} P</Text>
+                      )}
+                    </View>
+
+                    {isEquipped ? (
+                      <View style={styles.alreadyEquippedBtn}>
+                        <Check size={14} color="#059669" style={{ marginRight: 2 }} />
+                        <Text style={styles.alreadyEquippedBtnText}>배치됨</Text>
+                      </View>
+                    ) : isUnlocked ? (
+                      <TouchableOpacity
+                        style={styles.equipBtn}
+                        onPress={() => handleEquipUnlocked(item)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.equipBtnText}>장착하기</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.buyBtn}
+                        onPress={() => handleUnlockAndEquip(item)}
+                        activeOpacity={0.8}
+                      >
+                        <Lock size={12} color="#FFFFFF" style={{ marginRight: 4 }} />
+                        <Text style={styles.buyBtnText}>해금</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                );
+              })}
             </ScrollView>
           </View>
         </View>
@@ -1200,1078 +1814,163 @@ export default function InteriorScreen({
           </View>
         </View>
       </Modal>
+
+      {/* Family Petmong Book / Roster Modal (가족 반려몽 도감) */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={familyBookModalVisible}
+        onRequestClose={() => setFamilyBookModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalView, { maxHeight: '85%' }]}>
+            <View style={styles.modalHeaderRow}>
+              <View style={styles.modalHeaderTitleRow}>
+                <Users size={20} color="#4A90E2" style={{ marginRight: 6 }} />
+                <Text style={styles.modalHeader}>우리 가족 반려몽 도감 ({petmongCharacters.length}마리)</Text>
+              </View>
+              <TouchableOpacity onPress={() => setFamilyBookModalVisible(false)}>
+                <X size={20} color="#8E8E93" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalSubDesc}>
+              온 가족의 반려몽 현황을 한눈에 보고 마음을 전해보세요! 방 안에는 쾌적한 환경을 위해 최대 {MAX_ACTIVE_ROAMING}마리가 번갈아 산책하고 가구에서 쉬어갑니다.
+            </Text>
+
+            <ScrollView style={{ marginTop: 8 }} showsVerticalScrollIndicator={false}>
+              {petmongCharacters.map((char) => {
+                const owner = familyMembers.find(m => m.id === char.user_id);
+                const isMine = char.user_id === currentUserProfile?.id;
+                const isRoaming = !isMine && familyCharacters.slice(0, MAX_ACTIVE_ROAMING).some(c => c.id === char.id);
+
+                return (
+                  <View key={char.id} style={[styles.bookPetCard, isMine && styles.bookPetCardMine]}>
+                    <View style={styles.bookPetAvatarBox}>
+                      {char.image_url ? (
+                        <Image source={{ uri: char.image_url }} style={styles.bookPetImg} resizeMode="contain" />
+                      ) : (
+                        <Text style={{ fontSize: 32 }}>{char.emoji || '🐶'}</Text>
+                      )}
+                    </View>
+
+                    <View style={styles.bookPetInfo}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                        <Text style={styles.bookPetOwnerName}>
+                          {owner?.avatar || '👤'} {owner?.name || '가족'} {isMine ? '(나)' : ''}
+                        </Text>
+                        {isMine ? (
+                          <View style={styles.bookTagMine}>
+                            <Text style={styles.bookTagMineText}>내 반려몽</Text>
+                          </View>
+                        ) : isRoaming ? (
+                          <View style={styles.bookTagRoaming}>
+                            <Text style={styles.bookTagRoamingText}>방에서 배회 중 🐾</Text>
+                          </View>
+                        ) : (
+                          <View style={styles.bookTagResting}>
+                            <Text style={styles.bookTagRestingText}>가구에서 휴식 중 💤</Text>
+                          </View>
+                        )}
+                      </View>
+
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={styles.bookPetName}>{char.name}</Text>
+                        <Text style={styles.bookPetLevel}>Lv.{char.level || 1}</Text>
+                        <View style={styles.bookPetPersonalityTag}>
+                          <Text style={styles.bookPetPersonalityText}>{char.personality || '다정한'}</Text>
+                        </View>
+                      </View>
+
+                      {/* Small Exp Bar */}
+                      <View style={styles.bookExpBarBg}>
+                        <View style={[styles.bookExpBarFill, { width: `${Math.min(100, char.exp || 0)}%` }]} />
+                      </View>
+                    </View>
+
+                    {!isMine && (
+                      <TouchableOpacity
+                        style={styles.bookInteractBtn}
+                        onPress={() => {
+                          setFamilyBookModalVisible(false);
+                          handleSubCharPress(char);
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Heart size={14} color="#FF4D6D" fill="#FF4D6D" style={{ marginRight: 4 }} />
+                        <Text style={styles.bookInteractBtnText}>마음 전하기</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Sumone-Style Empty Room Theme Selection Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={themeModalVisible}
+        onRequestClose={() => setThemeModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalView}>
+            <View style={styles.modalHeaderRow}>
+              <View style={styles.modalHeaderTitleRow}>
+                <Layers size={20} color="#FF7E82" style={{ marginRight: 6 }} />
+                <Text style={styles.modalHeader}>방 테마 선택</Text>
+              </View>
+              <TouchableOpacity onPress={() => setThemeModalVisible(false)}>
+                <X size={20} color="#8E8E93" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalSubDesc}>
+              원하는 분위기의 빈 방을 선택하고, 가구와 소품을 자유롭게 장착해보세요!
+            </Text>
+
+            <View style={{ gap: 12, marginTop: 4 }}>
+              {ROOM_THEMES.map((theme) => {
+                const isSelected = roomTheme === theme.id;
+                return (
+                  <TouchableOpacity
+                    key={theme.id}
+                    style={[
+                      styles.themeCardItem,
+                      isSelected && styles.themeCardItemActive,
+                    ]}
+                    onPress={() => {
+                      setRoomTheme(theme.id);
+                      setThemeModalVisible(false);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.themeCardIconWrap}>
+                      <Text style={{ fontSize: 28 }}>{theme.emoji}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={styles.themeCardTitle}>{theme.name}</Text>
+                        {isSelected && (
+                          <View style={styles.themeSelectedBadge}>
+                            <Check size={11} color="#FFFFFF" style={{ marginRight: 2 }} />
+                            <Text style={styles.themeSelectedBadgeText}>사용 중</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.themeCardDesc}>{theme.desc}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8F9FA',
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 40,
-  },
-  subHeaderBar: {
-    height: 64,
-    paddingHorizontal: 20,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerTextGroup: {
-    flex: 1,
-  },
-  subHeaderTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#1C1C1E',
-  },
-  subHeaderSub: {
-    fontSize: 12,
-    color: '#8E8E93',
-    marginTop: 2,
-  },
-  openShopBtn: {
-    backgroundColor: '#FF7E82',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  openShopBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  pointsBarCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#FFF9E6',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: '#FFEAA7',
-    marginBottom: 16,
-  },
-  pointsBarLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  pointsBarLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#D4AC0D',
-  },
-  pointsBarValue: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: '#B7950B',
-  },
-  canvasCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
-  },
-  canvasHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  canvasTitleGroup: {
-    flex: 1,
-  },
-  canvasTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#1C1C1E',
-  },
-  canvasAreaSubtitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#FF7E82',
-    marginTop: 2,
-  },
-  logBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#EBF5FF',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 14,
-  },
-  logBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#4A90E2',
-  },
-  canvasContainer: {
-    width: '100%',
-    aspectRatio: 1,
-    borderRadius: 20,
-    overflow: 'hidden',
-    position: 'relative',
-    backgroundColor: '#F8ECE0',
-    borderWidth: 1.5,
-    borderColor: '#EFE0D0',
-    shadowColor: '#C4A882',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 10,
-    elevation: 3,
-  },
-  // 2-Tone Cozy Room Wall & Floor
-  roomWallArea: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: '56%',
-    backgroundColor: '#F8ECE0',
-    borderBottomWidth: 1,
-    borderBottomColor: '#EADBCB',
-  },
-  cozyWindow: {
-    position: 'absolute',
-    top: 14,
-    left: 18,
-    width: 60,
-    height: 68,
-    backgroundColor: '#EAF6FF',
-    borderRadius: 10,
-    borderWidth: 2.5,
-    borderColor: '#E8D7C3',
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-  },
-  curtainTop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 10,
-    backgroundColor: '#FFAAA6',
-    borderBottomLeftRadius: 5,
-    borderBottomRightRadius: 5,
-    zIndex: 2,
-  },
-  windowGlass: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#EBF6FF',
-    position: 'relative',
-  },
-  windowSunMoon: {
-    fontSize: 18,
-  },
-  windowFrameCrossH: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: '50%',
-    height: 1.5,
-    backgroundColor: '#E8D7C3',
-  },
-  windowFrameCrossV: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: '50%',
-    width: 1.5,
-    backgroundColor: '#E8D7C3',
-  },
-  wallPhotoFrame: {
-    position: 'absolute',
-    top: 16,
-    right: 18,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: '#E8D7C3',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-  },
-  wallPhotoText: {
-    fontSize: 8,
-    fontWeight: '800',
-    color: '#FF7E82',
-    marginTop: 2,
-  },
-  roomMoulding: {
-    position: 'absolute',
-    top: '56%',
-    left: 0,
-    right: 0,
-    height: 8,
-    backgroundColor: '#EAD7C1',
-    borderTopWidth: 1,
-    borderTopColor: '#DEC5AC',
-    borderBottomWidth: 1,
-    borderBottomColor: '#DEC5AC',
-    zIndex: 1,
-  },
-  roomFloorArea: {
-    position: 'absolute',
-    top: '56%',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#F8EEDB',
-  },
-  floorPlankLine: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: 'rgba(212, 185, 155, 0.45)',
-  },
-  floorPlankLineVertical1: {
-    position: 'absolute',
-    top: 0,
-    height: '33%',
-    left: '28%',
-    width: 1,
-    backgroundColor: 'rgba(212, 185, 155, 0.35)',
-  },
-  floorPlankLineVertical2: {
-    position: 'absolute',
-    top: '33%',
-    height: '33%',
-    left: '68%',
-    width: 1,
-    backgroundColor: 'rgba(212, 185, 155, 0.35)',
-  },
-  floorPlankLineVertical3: {
-    position: 'absolute',
-    top: '66%',
-    height: '34%',
-    left: '42%',
-    width: 1,
-    backgroundColor: 'rgba(212, 185, 155, 0.35)',
-  },
-  floorRug: {
-    position: 'absolute',
-    top: '60%',
-    left: '50%',
-    marginLeft: -90,
-    width: 180,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: '#FFE4E9',
-    borderWidth: 2,
-    borderColor: '#FFCCD6',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 2,
-    shadowColor: '#BCA188',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-  },
-  floorRugPattern: {
-    width: 158,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 126, 130, 0.35)',
-    borderStyle: 'dashed',
-  },
-  mainCharContainer: {
-    position: 'absolute',
-    left: '50%',
-    marginLeft: -65,
-    width: 130,
-    top: '40%',
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  charGlow: {
-    position: 'absolute',
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: 'rgba(255, 230, 235, 0.75)',
-    top: -8,
-    alignSelf: 'center',
-    zIndex: 0,
-  },
-  charRugPedestal: {
-    position: 'absolute',
-    bottom: 30,
-    width: 120,
-    height: 40,
-    borderRadius: 60,
-    backgroundColor: '#FFE4E8',
-    alignSelf: 'center',
-    borderWidth: 2,
-    borderColor: '#FFCCD4',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 1,
-    shadowColor: '#FF7E82',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 5,
-  },
-  charRugInner: {
-    width: 104,
-    height: 28,
-    borderRadius: 52,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 126, 130, 0.3)',
-    borderStyle: 'dashed',
-  },
-  charMoodBadge: {
-    position: 'absolute',
-    top: 0,
-    left: 2,
-    backgroundColor: '#FFFFFF',
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#FFEAA7',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 3,
-    zIndex: 15,
-  },
-  charMoodEmoji: {
-    fontSize: 13,
-  },
-  mainCharEmojiBubble: {
-    width: 105,
-    height: 105,
-    borderRadius: 52.5,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3.5,
-    borderColor: '#FFFFFF',
-    shadowColor: '#FF7E82',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  charTouchArea: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  mainCharEmoji: {
-    fontSize: 66,
-  },
-  mainCharImageWrapper: {
-    width: 100,
-    height: 100,
-    backgroundColor: 'transparent',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  mainCharImageContainer: {
-    width: 100,
-    height: 100,
-    backgroundColor: 'transparent',
-  },
-  mainCharImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'contain',
-    ...(Platform.OS === 'web' ? { mixBlendMode: 'multiply' } : {}),
-  },
-  charGroundShadow: {
-    width: 70,
-    height: 10,
-    borderRadius: 25,
-    backgroundColor: 'rgba(120, 80, 50, 0.16)',
-    alignSelf: 'center',
-    marginTop: -2,
-  },
-  charShadow: {
-    width: 76,
-    height: 10,
-    backgroundColor: 'rgba(0,0,0,0.06)',
-    borderRadius: 38,
-    position: 'absolute',
-    bottom: 30,
-  },
-  mainCharBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.85)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 14,
-    alignItems: 'center',
-    marginTop: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 215, 225, 0.5)',
-    shadowColor: '#C4A882',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
-    zIndex: 10,
-  },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  personalityTag: {
-    backgroundColor: '#FFF2F3',
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 6,
-  },
-  personalityTagText: {
-    fontSize: 8,
-    fontWeight: '800',
-    color: '#FF7E82',
-  },
-  mainCharName: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#1C1C1E',
-  },
-  expBarBg: {
-    width: 64,
-    height: 5,
-    backgroundColor: '#F1F2F4',
-    borderRadius: 3,
-    overflow: 'hidden',
-    marginVertical: 3,
-  },
-  expBarFill: {
-    height: '100%',
-    backgroundColor: '#FF7E82',
-  },
-  levelText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#8E8E93',
-  },
-  subCharContainer: {
-    position: 'absolute',
-    alignItems: 'center',
-  },
-  subCharImageWrapper: {
-    width: 48,
-    height: 48,
-    backgroundColor: 'transparent',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  subCharImage: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'contain',
-    ...(Platform.OS === 'web' ? { mixBlendMode: 'multiply' } : {}),
-  },
-  subCharEmoji: {
-    fontSize: 42,
-  },
-  subCharShadow: {
-    width: 38,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(90, 60, 40, 0.15)',
-    alignSelf: 'center',
-    marginTop: -2,
-  },
-  subCharLabelBox: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-    marginTop: 2,
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
-  },
-  subCharLabelText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#1C1C1E',
-  },
-  canvasGuideText: {
-    fontSize: 11,
-    color: '#8E8E93',
-    marginTop: 10,
-    lineHeight: 15,
-  },
-  inventoryCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
-  },
-  inventoryTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#1C1C1E',
-    marginBottom: 10,
-  },
-  emptyInventoryText: {
-    fontSize: 12,
-    color: '#8E8E93',
-    fontStyle: 'italic',
-    textAlign: 'center',
-    paddingVertical: 12,
-  },
-  inventoryList: {
-    flexDirection: 'row',
-  },
-  inventoryItemChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
-  },
-  inventoryItemChipActive: {
-    backgroundColor: '#FFEBEB',
-    borderColor: '#FF7E82',
-  },
-  inventoryItemEmoji: {
-    fontSize: 18,
-    marginRight: 6,
-  },
-  inventoryItemName: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#1C1C1E',
-  },
-  furnitureWrapper: {
-    position: 'absolute',
-    padding: 6,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  furnitureWrapperSelected: {
-    borderWidth: 2,
-    borderColor: '#FF7E82',
-    backgroundColor: 'rgba(255,126,130,0.2)',
-  },
-  furnitureEmoji: {
-    fontSize: 32,
-  },
-  furnitureControlOverlay: {
-    position: 'absolute',
-    top: -24,
-    flexDirection: 'row',
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    borderRadius: 12,
-    padding: 3,
-  },
-  controlBtn: {
-    padding: 4,
-    marginHorizontal: 2,
-  },
-  controlBtnDelete: {
-    backgroundColor: '#E74C3C',
-    borderRadius: 6,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalOverlayCenter: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalView: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 20,
-    maxHeight: '85%',
-  },
-  modalHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  modalHeaderTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  modalHeader: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#1C1C1E',
-  },
-  modalSubDesc: {
-    fontSize: 12,
-    color: '#8E8E93',
-    marginBottom: 16,
-    lineHeight: 18,
-  },
-  inputGroup: {
-    marginBottom: 14,
-  },
-  modalLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#8E8E93',
-    marginBottom: 6,
-  },
-  modalInput: {
-    backgroundColor: '#F1F2F4',
-    borderRadius: 10,
-    padding: 10,
-    fontSize: 13,
-    color: '#1C1C1E',
-  },
-  traitSelectBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 14,
-    backgroundColor: '#F1F2F4',
-    marginRight: 6,
-  },
-  traitSelectBtnActive: {
-    backgroundColor: '#FF7E82',
-  },
-  traitSelectText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#1C1C1E',
-  },
-  traitSelectTextActive: {
-    color: '#FFFFFF',
-  },
-  modalConfirmBtn: {
-    backgroundColor: '#FF7E82',
-    padding: 14,
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 16,
-  },
-  modalConfirmBtnText: {
-    fontSize: 14,
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  generatingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 24,
-    padding: 20,
-    zIndex: 100,
-  },
-  generatingText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1C1C1E',
-    textAlign: 'center',
-    marginTop: 14,
-    lineHeight: 20,
-  },
-  interactModalBox: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 20,
-    width: '85%',
-    alignItems: 'center',
-  },
-  interactAvatarBox: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#F8F9FA',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-    borderWidth: 2,
-    borderColor: '#EBEBEB',
-  },
-  interactTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#1C1C1E',
-    marginBottom: 4,
-  },
-  interactDesc: {
-    fontSize: 11,
-    color: '#8E8E93',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  interactBtnRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
-    marginBottom: 16,
-  },
-  interactBtnItem: {
-    alignItems: 'center',
-  },
-  interactIconBox: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  interactBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#1C1C1E',
-  },
-  closeInteractBtn: {
-    backgroundColor: '#F1F2F4',
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 12,
-  },
-  closeInteractText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#8E8E93',
-  },
-  logItemCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#F8F9FA',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
-  },
-  logDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#4A90E2',
-    marginTop: 4,
-    marginRight: 10,
-  },
-  logText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#1C1C1E',
-    lineHeight: 16,
-  },
-  logTime: {
-    fontSize: 10,
-    color: '#8E8E93',
-    marginTop: 2,
-  },
-  categoryTabRow: {
-    flexDirection: 'row',
-    backgroundColor: '#F1F2F4',
-    borderRadius: 10,
-    padding: 3,
-    marginBottom: 10,
-  },
-  categoryTab: {
-    flex: 1,
-    paddingVertical: 7,
-    alignItems: 'center',
-    borderRadius: 8,
-  },
-  categoryTabActive: {
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  categoryTabText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#8E8E93',
-  },
-  categoryTabTextActive: {
-    color: '#1C1C1E',
-    fontWeight: '800',
-  },
-  catalogList: {
-    maxHeight: 380,
-  },
-  catalogCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 16,
-    padding: 12,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
-  },
-  catalogEmojiBox: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
-  },
-  catalogEmoji: {
-    fontSize: 26,
-  },
-  catalogInfo: {
-    flex: 1,
-  },
-  catalogName: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#1C1C1E',
-  },
-  catalogDesc: {
-    fontSize: 11,
-    color: '#8E8E93',
-    marginTop: 2,
-  },
-  catalogPrice: {
-    fontSize: 13,
-    fontWeight: '900',
-    color: '#FF7E82',
-    marginTop: 4,
-  },
-  buyBtn: {
-    backgroundColor: '#4A90E2',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
-  },
-  buyBtnText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  // Touch & Dialogue Interaction Styles (Sumone Style)
-  charTouchArea: {
-    alignItems: 'center',
-    position: 'relative',
-  },
-  speechBubbleContainer: {
-    position: 'absolute',
-    bottom: '100%',
-    marginBottom: 10,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: '#FF7E82',
-    maxWidth: 220,
-    minWidth: 140,
-    alignItems: 'center',
-    shadowColor: '#FF7E82',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 5,
-    zIndex: 30,
-  },
-  speechBubbleText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#2C3E50',
-    textAlign: 'center',
-    lineHeight: 17,
-  },
-  speechBubbleArrow: {
-    position: 'absolute',
-    bottom: -6,
-    width: 10,
-    height: 10,
-    backgroundColor: '#FFFFFF',
-    borderRightWidth: 1.5,
-    borderBottomWidth: 1.5,
-    borderColor: '#FF7E82',
-    transform: [{ rotate: '45deg' }],
-  },
-  floatingHeartContainer: {
-    position: 'absolute',
-    top: -24,
-    alignItems: 'center',
-    zIndex: 40,
-  },
-  touchExpText: {
-    fontSize: 11,
-    fontWeight: '900',
-    color: '#FF4D6D',
-    marginTop: 2,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#FFEBEB',
-  },
-  touchHintBadge: {
-    position: 'absolute',
-    top: 2,
-    right: -6,
-    backgroundColor: '#FF4D6D',
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  touchHintText: {
-    fontSize: 9,
-    fontWeight: '900',
-    color: '#FFFFFF',
-  },
-  levelRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    width: 64,
-    marginTop: 2,
-  },
-  expNumberText: {
-    fontSize: 8,
-    fontWeight: '700',
-    color: '#AEAEB2',
-  },
-  subSpeechBubble: {
-    position: 'absolute',
-    bottom: '100%',
-    marginBottom: 6,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#4A90E2',
-    maxWidth: 160,
-    minWidth: 100,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    zIndex: 25,
-  },
-  subSpeechBubbleText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#2C3E50',
-    textAlign: 'center',
-    lineHeight: 14,
-  },
-  subSpeechBubbleArrow: {
-    position: 'absolute',
-    bottom: -5,
-    width: 8,
-    height: 8,
-    backgroundColor: '#FFFFFF',
-    borderRightWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#4A90E2',
-    transform: [{ rotate: '45deg' }],
-  },
-  levelUpOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  levelUpCard: {
-    width: '100%',
-    maxWidth: 320,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 24,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-  levelUpEmoji: {
-    fontSize: 48,
-    marginBottom: 10,
-  },
-  levelUpTitle: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: '#FF7E82',
-    marginBottom: 6,
-  },
-  levelUpNameText: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#1C1C1E',
-    marginBottom: 8,
-  },
-  levelUpDesc: {
-    fontSize: 13,
-    color: '#636E72',
-    textAlign: 'center',
-    lineHeight: 18,
-    marginBottom: 20,
-  },
-  levelUpBtn: {
-    backgroundColor: '#FF7E82',
-    paddingHorizontal: 28,
-    paddingVertical: 12,
-    borderRadius: 16,
-    width: '100%',
-    alignItems: 'center',
-  },
-  levelUpBtnText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '800',
-  },
-});

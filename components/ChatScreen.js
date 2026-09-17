@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MessageSquare, Sparkles, Users, Lightbulb, Trophy, Flame } from 'lucide-react-native';
+import { MessageSquare, Sparkles, Users, Lightbulb, Trophy, Flame, Ticket } from 'lucide-react-native';
 import {
   IconSend,
   IconImage,
@@ -26,6 +26,7 @@ import {
   IconCheck,
   IconClose,
 } from './icons';
+import { colors, typography, commonStyles } from '../theme';
 
 export default function ChatScreen({
   messages,
@@ -479,6 +480,26 @@ export default function ChatScreen({
     const unreadCountForMsg = Math.max(0, totalOthers - uniqueWhoRead.length);
     const isReadByAll = unreadCountForMsg === 0;
 
+    // Special Announcement Card for Coupon Usage
+    if (item.text && item.text.includes('[쿠폰 사용 알림]')) {
+      return (
+        <View key={item.id || item.timestamp} style={styles.couponAnnouncementRow}>
+          <View style={styles.couponAnnouncementCard}>
+            <View style={styles.couponAnnouncementHeader}>
+              <View style={styles.couponIconCircle}>
+                <Ticket size={15} color="#FF6B6B" />
+              </View>
+              <Text style={styles.couponAnnouncementBadge}>쿠폰 사용 알림</Text>
+              <Text style={styles.couponAnnouncementTime}>{item.timestamp}</Text>
+            </View>
+            <Text style={styles.couponAnnouncementText}>
+              {item.text.replace(/^📢\s*\[쿠폰 사용 알림\]\s*/, '')}
+            </Text>
+          </View>
+        </View>
+      );
+    }
+
     return (
       <View style={[styles.messageRow, isMe ? styles.myRow : styles.otherRow]}>
         {!isMe && (
@@ -801,18 +822,15 @@ export default function ChatScreen({
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8F9FA',
-  },
+  container: commonStyles.screenContainer,
   chatHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
     height: 64,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.card,
     borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
+    borderBottomColor: colors.divider,
   },
   backBtn: {
     paddingRight: 8,
@@ -1339,5 +1357,55 @@ const styles = StyleSheet.create({
   },
   sendActive: {
     backgroundColor: '#FF7E82',
+  },
+  couponAnnouncementRow: {
+    alignItems: 'center',
+    marginVertical: 10,
+    paddingHorizontal: 16,
+    width: '100%',
+  },
+  couponAnnouncementCard: {
+    backgroundColor: '#FFF9F5',
+    borderWidth: 1.5,
+    borderColor: '#FFD8C4',
+    borderRadius: 16,
+    padding: 14,
+    width: '100%',
+    maxWidth: 380,
+    shadowColor: '#FF7E82',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  couponAnnouncementHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  couponIconCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FFEBE6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+  },
+  couponAnnouncementBadge: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FF6B6B',
+    flex: 1,
+  },
+  couponAnnouncementTime: {
+    fontSize: 11,
+    color: '#AEAEB2',
+  },
+  couponAnnouncementText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#2C3E50',
+    lineHeight: 18,
   },
 });

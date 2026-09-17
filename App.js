@@ -23,6 +23,39 @@ import {
   TabPetIcon,
   TabFamilyIcon,
 } from './components/icons';
+
+// Web Polyfill for Alert.alert (react-native-web has empty stub alert() {})
+if (Platform.OS === 'web') {
+  Alert.alert = (title, message, buttons) => {
+    const text = [title, message].filter(Boolean).join('\n\n');
+    if (!buttons || buttons.length === 0) {
+      if (typeof window !== 'undefined' && window.alert) {
+        window.alert(text);
+      }
+      return;
+    }
+    if (buttons.length === 1) {
+      if (typeof window !== 'undefined' && window.alert) {
+        window.alert(text);
+      }
+      if (buttons[0].onPress) buttons[0].onPress();
+      return;
+    }
+    const cancelBtn = buttons.find(b => b.style === 'cancel');
+    const confirmBtn = buttons.find(b => b.style !== 'cancel') || buttons[buttons.length - 1];
+
+    if (typeof window !== 'undefined' && window.confirm) {
+      const confirmed = window.confirm(text);
+      if (confirmed) {
+        if (confirmBtn && confirmBtn.onPress) confirmBtn.onPress();
+      } else {
+        if (cancelBtn && cancelBtn.onPress) cancelBtn.onPress();
+      }
+    } else {
+      if (confirmBtn && confirmBtn.onPress) confirmBtn.onPress();
+    }
+  };
+}
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 // Import Screens & Libs
@@ -47,37 +80,46 @@ const FAMILY_MEMBERS = {
   daughter: { name: '딸', avatar: '👧', color: '#F39C12' },
 };
 
-const INITIAL_MOCK_REWARDS = [
-  {
-    id: 'r1',
-    title: '설거지 1회 면제권 🧼',
-    cost: 150,
-    desc: '가장 하기 싫은 설거지를 다른 가족에게 양도합니다.',
-    provider: '엄마',
-  },
-  {
-    id: 'r2',
-    title: '어깨 안마 15분 💆‍♂️',
-    cost: 100,
-    desc: '원할 때 언제든 시원한 등/어깨 마사지를 제공합니다.',
-    provider: '아들',
-  },
-  {
-    id: 'r3',
-    title: '치킨 기프티콘 교환권 🍗',
-    cost: 300,
-    desc: '주말 저녁에 치킨을 쏠 수 있는 황금 쿠폰입니다.',
-    provider: '아빠',
-  },
-];
+const INITIAL_MOCK_REWARDS = [];
 
-const INITIAL_MOCK_USER_COUPONS = [
-  { id: 'uc1', title: '설거지 1회 면제권 🧼', cost: 150, provider: '엄마', status: 'available' },
-];
+const INITIAL_MOCK_USER_COUPONS = [];
 
 const INITIAL_MOCK_SHOPPING = [
-  { id: 's1', title: '우유 2팩 사오기 🥛', assignee: '아들', is_completed: false, completed_by: null, points_earned: false },
-  { id: 's2', title: '주말 음식물 쓰레기 버리기 🧹', assignee: '가족 전체', is_completed: true, completed_by: '엄마', points_earned: true, completed_date: '2026-08-03' },
+  { id: 's1', title: '우유 2팩 사오기 🥛', assignee: '아들', is_completed: false, completed_by: null, points_earned: false, repeat_type: 'none' },
+  { id: 's2', title: '음식물 쓰레기 버리기 🧹', assignee: '가족 전체', is_completed: false, completed_by: null, points_earned: false, repeat_type: 'daily' },
+];
+
+const INITIAL_MOCK_POINT_HISTORY = [
+  {
+    id: 'ph-1',
+    type: 'earn',
+    amount: 100,
+    balance: 100,
+    title: '스몰톡 소통 미션 가족 전원 완료',
+    category: 'smalltalk',
+    date: '2026-09-12 21:00',
+    user: '가족 전체',
+  },
+  {
+    id: 'ph-2',
+    type: 'earn',
+    amount: 10,
+    balance: 110,
+    title: '장보기 완료 (우유 2팩 사오기)',
+    category: 'shopping',
+    date: '2026-09-13 11:30',
+    user: '아들',
+  },
+  {
+    id: 'ph-3',
+    type: 'earn',
+    amount: 10,
+    balance: 120,
+    title: '장보기 완료 (주말 음식물 쓰레기 버리기)',
+    category: 'shopping',
+    date: '2026-09-13 14:15',
+    user: '엄마',
+  },
 ];
 
 // Initial Mock Data (for Local Mock Sandbox Mode)
@@ -131,6 +173,32 @@ const INITIAL_MOCK_DATA = {
   },
 };
 
+const getTodayString = (dateObj = new Date()) => {
+  const y = dateObj.getFullYear();
+  const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const d = String(dateObj.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
+const addDaysToDateStr = (dateStr, days) => {
+  if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + days);
+  const ry = dt.getFullYear();
+  const rm = String(dt.getMonth() + 1).padStart(2, '0');
+  const rd = String(dt.getDate()).padStart(2, '0');
+  return `${ry}-${rm}-${rd}`;
+};
+
+const INITIAL_COOP_GOAL = {
+  id: 'g1',
+  title: '주말 패밀리 맛집 외식 데이',
+  targetPoints: 3000,
+  category: 'dinner',
+  desc: '온 가족이 다 함께 먹고 싶은 메뉴 자유 외식',
+};
+
 export default function App() {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -145,10 +213,12 @@ export default function App() {
   const [rewardsList, setRewardsList] = useState([]);
   const [userCoupons, setUserCoupons] = useState([]);
   const [shoppingItems, setShoppingItems] = useState([]);
+  const [pointHistory, setPointHistory] = useState(INITIAL_MOCK_POINT_HISTORY);
   const [customRooms, setCustomRooms] = useState([]);
   const [placedFurniture, setPlacedFurniture] = useState([]);
   const [floorPlanUrl, setFloorPlanUrl] = useState(null);
   const [petmongCharacters, setPetmongCharacters] = useState([]);
+  const [coopGoal, setCoopGoal] = useState(INITIAL_COOP_GOAL);
 
   const [smallTalk, setSmallTalk] = useState({
     topic: getTopicForToday(),
@@ -221,6 +291,15 @@ export default function App() {
         try {
           const parsed = JSON.parse(val);
           if (Array.isArray(parsed)) setCustomRooms(parsed);
+        } catch (e) {}
+      }
+    });
+
+    AsyncStorage.getItem('FAMLINK_COOP_GOAL').then(val => {
+      if (val) {
+        try {
+          const parsed = JSON.parse(val);
+          if (parsed && parsed.title) setCoopGoal(parsed);
         } catch (e) {}
       }
     });
@@ -570,13 +649,54 @@ export default function App() {
     if (data) setUserCoupons(data);
   };
 
+  const normalizeRecurringItems = (items) => {
+    if (!items || !Array.isArray(items)) return items;
+    const todayStr = getTodayString();
+    return items.map(item => {
+      if (item.repeat_type === 'daily' && item.is_completed) {
+        const compDate = item.completed_date || (item.completed_at ? item.completed_at.slice(0, 10) : null);
+        if (compDate && compDate !== todayStr) {
+          return {
+            ...item,
+            is_completed: false,
+            completed_by: null,
+            points_earned: false,
+            completed_date: null,
+            completed_at: null,
+          };
+        }
+      } else if (item.repeat_type === 'weekly' && item.is_completed) {
+        const compDateStr = item.completed_date || (item.completed_at ? item.completed_at.slice(0, 10) : null);
+        if (compDateStr) {
+          const compDate = new Date(compDateStr);
+          const now = new Date();
+          const diffDays = (now.getTime() - compDate.getTime()) / (1000 * 3600 * 24);
+          if (diffDays >= 7) {
+            return {
+              ...item,
+              is_completed: false,
+              completed_by: null,
+              points_earned: false,
+              completed_date: null,
+              completed_at: null,
+            };
+          }
+        }
+      }
+      return item;
+    });
+  };
+
   const fetchRealShoppingItems = async (familyId) => {
     const { data } = await supabase
       .from('shopping_items')
       .select('*')
       .eq('family_id', familyId)
       .order('created_at', { ascending: false });
-    if (data) setShoppingItems(data);
+    if (data) {
+      const normalized = normalizeRecurringItems(data);
+      setShoppingItems(normalized);
+    }
   };
 
   const fetchRealSmallTalk = async (familyId) => {
@@ -624,9 +744,12 @@ export default function App() {
         setPoints(parsed.points ?? INITIAL_MOCK_DATA.points);
         setMessages(parsed.messages ?? INITIAL_MOCK_DATA.messages);
         setEvents(parsed.events ?? INITIAL_MOCK_DATA.events);
-        setRewardsList(parsed.rewardsList ?? INITIAL_MOCK_REWARDS);
-        setUserCoupons(parsed.userCoupons ?? INITIAL_MOCK_USER_COUPONS);
-        setShoppingItems(parsed.shoppingItems ?? INITIAL_MOCK_SHOPPING);
+        const filteredRewards = (parsed.rewardsList ?? []).filter(r => r && r.id !== 'r1' && r.id !== 'r2' && r.id !== 'r3' && !r.title?.includes('설거지') && !r.title?.includes('안마') && !r.title?.includes('치킨'));
+        const filteredUserCoupons = (parsed.userCoupons ?? []).filter(c => c && c.id !== 'uc1' && !c.title?.includes('설거지'));
+        setRewardsList(filteredRewards);
+        setUserCoupons(filteredUserCoupons);
+        setShoppingItems(normalizeRecurringItems(parsed.shoppingItems ?? INITIAL_MOCK_SHOPPING));
+        setPointHistory(parsed.pointHistory ?? INITIAL_MOCK_POINT_HISTORY);
 
         let loadedSmallTalk = parsed.smallTalk ?? INITIAL_MOCK_DATA.smallTalk;
         if (loadedSmallTalk.topic !== todayTopic) {
@@ -643,7 +766,8 @@ export default function App() {
         setEvents(INITIAL_MOCK_DATA.events);
         setRewardsList(INITIAL_MOCK_REWARDS);
         setUserCoupons(INITIAL_MOCK_USER_COUPONS);
-        setShoppingItems(INITIAL_MOCK_SHOPPING);
+        setShoppingItems(normalizeRecurringItems(INITIAL_MOCK_SHOPPING));
+        setPointHistory(INITIAL_MOCK_POINT_HISTORY);
         setSmallTalk({
           topic: todayTopic,
           responses: {},
@@ -714,7 +838,8 @@ export default function App() {
     updatedSmallTalk,
     updatedRewards = rewardsList,
     updatedCoupons = userCoupons,
-    updatedShopping = shoppingItems
+    updatedShopping = shoppingItems,
+    updatedHistory = pointHistory
   ) => {
     try {
       const dataToSave = {
@@ -725,11 +850,35 @@ export default function App() {
         rewardsList: updatedRewards,
         userCoupons: updatedCoupons,
         shoppingItems: updatedShopping,
+        pointHistory: updatedHistory,
       };
       await AsyncStorage.setItem('FAMLINK_STATE', JSON.stringify(dataToSave));
     } catch (err) {
       console.log('Failed to save state:', err);
     }
+  };
+
+  const logPointTransaction = async (type, amount, title, newBalance, category = 'etc') => {
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const actorName = profile?.name || (familyMembersList.find(m => m.id === currentUser)?.name) || '가족';
+
+    const newTx = {
+      id: `ph-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      type, // 'earn' or 'spend'
+      amount,
+      balance: newBalance,
+      title,
+      category,
+      date: dateStr,
+      user: actorName,
+    };
+
+    setPointHistory(prev => {
+      const updated = [newTx, ...prev];
+      saveLocalState(newBalance, messages, events, smallTalk, rewardsList, userCoupons, shoppingItems, updated);
+      return updated;
+    });
   };
 
   // Feature Action Handlers
@@ -758,13 +907,17 @@ export default function App() {
   };
 
   const handleAddItem = async (itemData) => {
+    const nowIso = new Date().toISOString();
+    const repType = itemData.repeat_type || 'none';
     const newItem = {
       id: String(Date.now()),
       title: itemData.title,
       assignee: itemData.assignee,
+      repeat_type: repType,
       is_completed: false,
       completed_by: null,
       points_earned: false,
+      created_at: nowIso,
     };
 
     const updated = [newItem, ...shoppingItems];
@@ -772,18 +925,28 @@ export default function App() {
 
     if (isSupabaseReady) {
       try {
-        const { data, error } = await supabase
+        let insertPayload = {
+          family_id: profile.family_id,
+          profile_id: session.user.id,
+          title: itemData.title,
+          assignee: itemData.assignee,
+          repeat_type: repType,
+        };
+        let { data, error } = await supabase
           .from('shopping_items')
-          .insert({
-            family_id: profile.family_id,
-            profile_id: session.user.id,
-            title: itemData.title,
-            assignee: itemData.assignee,
-          })
+          .insert(insertPayload)
           .select();
+
+        if (error && error.message && error.message.includes('repeat_type')) {
+          delete insertPayload.repeat_type;
+          const retry = await supabase.from('shopping_items').insert(insertPayload).select();
+          data = retry.data;
+          error = retry.error;
+        }
+
         if (error) throw error;
         if (data && data.length > 0) {
-          setShoppingItems(prev => prev.map(i => i.id === newItem.id ? data[0] : i));
+          setShoppingItems(prev => prev.map(i => i.id === newItem.id ? { ...data[0], repeat_type: repType } : i));
         }
       } catch (e) {
         showError(e, '장보기 항목 추가에 실패했습니다.');
@@ -857,7 +1020,8 @@ export default function App() {
 
       if (!item.points_earned) {
         const todayEarnedCount = shoppingItems.filter(
-          i => i.points_earned && i.completed_date === todayStr
+          i => (i.points_earned || i.is_completed) && 
+               (i.completed_date === todayStr || (i.completed_at && i.completed_at.startsWith(todayStr)))
         ).length;
 
         if (todayEarnedCount < 3) {
@@ -870,11 +1034,17 @@ export default function App() {
       }
     }
 
+    const nowIso = new Date().toISOString();
+    const finalPointsEarned = isCompleted ? (item.points_earned || willEarnPoints) : item.points_earned;
+    const finalCompletedDate = isCompleted ? (item.completed_date || todayStr) : null;
+    const finalCompletedAt = isCompleted ? (item.completed_at || nowIso) : null;
+
     const localItemUpdate = {
       is_completed: isCompleted,
       completed_by: completedByStr,
-      points_earned: item.points_earned || willEarnPoints,
-      completed_date: item.completed_date || (willEarnPoints ? todayStr : null),
+      points_earned: finalPointsEarned,
+      completed_date: finalCompletedDate,
+      completed_at: finalCompletedAt,
     };
 
     // Optimistic local state update
@@ -891,6 +1061,9 @@ export default function App() {
         const dbPayload = {
           is_completed: isCompleted,
           completed_by: completedByStr,
+          completed_at: finalCompletedAt,
+          points_earned: finalPointsEarned,
+          completed_date: finalCompletedDate,
         };
 
         const { error } = await supabase
@@ -905,12 +1078,17 @@ export default function App() {
             .from('family_points')
             .update({ points: newPoints })
             .eq('family_id', profile.family_id);
+          logPointTransaction('earn', 10, `장보기 완료 (${item.title})`, newPoints, 'shopping');
         }
       } catch (e) {
         console.error('Toggle shopping item error:', e);
       }
     } else {
-      saveLocalState(newPoints, messages, events, smallTalk, rewardsList, userCoupons, updated);
+      if (willEarnPoints) {
+        logPointTransaction('earn', 10, `장보기 완료 (${item.title})`, newPoints, 'shopping');
+      } else {
+        saveLocalState(newPoints, messages, events, smallTalk, rewardsList, userCoupons, updated);
+      }
     }
   };
 
@@ -935,93 +1113,209 @@ export default function App() {
     }
   };
 
-  const handleUseCoupon = async (couponId) => {
+  const handleClearCompletedItems = async () => {
+    // Only delete one-time completed items; recurring items stay preserved in the routine
+    const itemsToDelete = shoppingItems.filter(i => i.is_completed && (!i.repeat_type || i.repeat_type === 'none'));
+    const completedIds = itemsToDelete.map(i => i.id);
+
+    if (completedIds.length === 0) {
+      Alert.alert('알림', '삭제할 1회성 완료 항목이 없습니다.\n매일/반복 할 일은 일일 루틴 유지를 위해 목록에 보존됩니다.');
+      return;
+    }
+
+    const updated = shoppingItems.filter(i => !completedIds.includes(i.id));
+    setShoppingItems(updated);
+
     if (isSupabaseReady) {
+      try {
+        const uuidList = completedIds.filter(id =>
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+        );
+        if (uuidList.length > 0) {
+          const { error } = await supabase
+            .from('shopping_items')
+            .delete()
+            .in('id', uuidList);
+          if (error) throw error;
+        }
+      } catch (e) {
+        console.error('Clear completed shopping items error:', e);
+      }
+    } else {
+      saveLocalState(points, messages, events, smallTalk, rewardsList, userCoupons, updated);
+    }
+  };
+
+  const handleToggleRepeat = async (item) => {
+    const nextType = item.repeat_type === 'daily' ? 'none' : 'daily';
+    const updated = shoppingItems.map(i => i.id === item.id ? { ...i, repeat_type: nextType } : i);
+    setShoppingItems(updated);
+
+    Alert.alert(
+      '반복 설정 변경',
+      nextType === 'daily'
+        ? `'${item.title}' 항목이 [매일 반복]으로 설정되었습니다.\n매일 자정에 새로운 오늘 할 일로 자동 갱신됩니다.`
+        : `'${item.title}' 항목의 반복이 해제되어 1회성 항목으로 변경되었습니다.`
+    );
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.id);
+    if (isSupabaseReady && isUuid) {
+      try {
+        await supabase
+          .from('shopping_items')
+          .update({ repeat_type: nextType })
+          .eq('id', item.id);
+      } catch (err) {
+        console.error('Update repeat_type error:', err);
+      }
+    } else {
+      saveLocalState(points, messages, events, smallTalk, rewardsList, userCoupons, updated);
+    }
+  };
+
+  const handleUseCoupon = async (couponOrId) => {
+    const couponId = typeof couponOrId === 'object' ? couponOrId.id : couponOrId;
+    const targetCoupon = userCoupons.find(c => c.id === couponId) || (typeof couponOrId === 'object' ? couponOrId : null);
+
+    // 1. Optimistic instant UI update
+    const updated = userCoupons.map(c => c.id === couponId ? { ...c, status: 'used' } : c);
+    setUserCoupons(updated);
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(couponId);
+
+    if (isSupabaseReady && isUuid) {
       try {
         const { error } = await supabase
           .from('user_coupons')
           .update({ status: 'used' })
           .eq('id', couponId);
-        if (error) throw error;
+        if (error) console.log('user_coupons update error:', error);
       } catch (e) {
-        showError(e, '쿠폰 사용 처리 실패');
+        console.log('Error updating coupon in DB:', e);
       }
     } else {
-      const updated = userCoupons.map(c => c.id === couponId ? { ...c, status: 'used' } : c);
-      setUserCoupons(updated);
-      saveLocalState(points, messages, events, smallTalk, rewardsList, updated, shoppingItems);
+      saveLocalState(points, messages, events, smallTalk, rewardsList, updated, shoppingItems, pointHistory);
+    }
+
+    // Automatically send announcement message to Family Group Chat!
+    if (targetCoupon) {
+      const myName = profile?.name || (familyMembersList.find(m => m.id === currentUser)?.name) || '가족';
+      const providerName = targetCoupon.provider || '가족';
+      const announcementText = `📢 [쿠폰 사용 알림] ${myName}님이 ${providerName}님에게 '${targetCoupon.title}' 쿠폰을 사용했습니다! 🎉`;
+
+      await handleSendMessage({
+        text: announcementText,
+        roomId: 'family-group',
+      });
     }
   };
 
-  const addDaysToDateStr = (dateStr, days) => {
-    if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
-    const [y, m, d] = dateStr.split('-').map(Number);
-    const dt = new Date(y, m - 1, d);
-    dt.setDate(dt.getDate() + days);
-    const ry = dt.getFullYear();
-    const rm = String(dt.getMonth() + 1).padStart(2, '0');
-    const rd = String(dt.getDate()).padStart(2, '0');
-    return `${ry}-${rm}-${rd}`;
+  const handleUpdateCoopGoal = async (newGoal) => {
+    setCoopGoal(newGoal);
+    try {
+      await AsyncStorage.setItem('FAMLINK_COOP_GOAL', JSON.stringify(newGoal));
+    } catch (e) {
+      console.log('Error saving coop goal', e);
+    }
+  };
+
+  const handleSendOrderNotice = async (noticeText) => {
+    await handleSendMessage({
+      text: noticeText,
+      roomId: 'family-group',
+    });
   };
 
   const handleRedeemReward = async (reward) => {
     const cost = reward.cost;
+    if (points < cost) {
+      Alert.alert('포인트 부족', '포인트가 부족하여 쿠폰을 교환할 수 없습니다. 스몰톡 미션을 완료해보세요!');
+      return false;
+    }
+
     const newPoints = points - cost;
     const todayStr = getTodayString();
     const expireDateStr = addDaysToDateStr(todayStr, 30);
+    const tempCouponId = `uc-${Date.now()}`;
 
-    const couponPayload = {
-      family_id: profile ? profile.family_id : null,
-      profile_id: session ? session.user.id : null,
+    const newCoupon = {
+      id: tempCouponId,
       reward_id: reward.id,
       title: reward.title,
       cost: reward.cost,
       provider: reward.provider,
       status: 'available',
       expire_date: expireDateStr,
+      created_at: new Date().toISOString(),
     };
 
+    // 1. Optimistic instant UI update
+    setPoints(newPoints);
+    setUserCoupons(prev => [newCoupon, ...prev]);
+    logPointTransaction('spend', cost, `'${reward.title}' 쿠폰 교환`, newPoints, 'coupon');
+
     if (isSupabaseReady) {
-      try {
-        const { error: ptsError } = await supabase
-          .from('family_points')
-          .update({ points: newPoints })
-          .eq('family_id', profile.family_id);
-        if (ptsError) throw ptsError;
-
-        const { error: cError } = await supabase
-          .from('user_coupons')
-          .insert(couponPayload);
-
-        if (cError) {
-          if (cError.code === 'PGRST204' || (cError.message && cError.message.includes('expire_date'))) {
-            delete couponPayload.expire_date;
-            const { error: fallbackError } = await supabase
-              .from('user_coupons')
-              .insert(couponPayload);
-            if (fallbackError) throw fallbackError;
-          } else {
-            throw cError;
-          }
-        }
-
-        setPoints(newPoints);
-      } catch (e) {
-        showError(e, '쿠폰 교환에 실패했습니다.');
-      }
-    } else {
-      const newCoupon = {
-        id: String(Date.now()),
+      const isRewardUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reward.id);
+      const couponPayload = {
+        family_id: profile ? profile.family_id : null,
+        profile_id: profile?.id || session?.user?.id || null,
+        ...(isRewardUuid ? { reward_id: reward.id } : {}),
         title: reward.title,
         cost: reward.cost,
         provider: reward.provider,
         status: 'available',
         expire_date: expireDateStr,
       };
-      const updatedCoupons = [newCoupon, ...userCoupons];
-      setPoints(newPoints);
-      setUserCoupons(updatedCoupons);
-      saveLocalState(newPoints, messages, events, smallTalk, rewardsList, updatedCoupons, shoppingItems);
+
+      try {
+        const { error: ptsError } = await supabase
+          .from('family_points')
+          .update({ points: newPoints })
+          .eq('family_id', profile.family_id);
+        if (ptsError) console.log('family_points update error:', ptsError);
+
+        const { data: inserted, error: cError } = await supabase
+          .from('user_coupons')
+          .insert(couponPayload)
+          .select()
+          .single();
+
+        if (cError) {
+          console.log('user_coupons insert error:', cError);
+          if (cError.code === 'PGRST204' || (cError.message && cError.message.includes('expire_date'))) {
+            delete couponPayload.expire_date;
+            const { data: fallbackInserted, error: fallbackError } = await supabase
+              .from('user_coupons')
+              .insert(couponPayload)
+              .select()
+              .single();
+            if (!fallbackError && fallbackInserted) {
+              setUserCoupons(prev => prev.map(c => c.id === tempCouponId ? fallbackInserted : c));
+            }
+          }
+        } else if (inserted) {
+          setUserCoupons(prev => prev.map(c => c.id === tempCouponId ? inserted : c));
+        }
+      } catch (e) {
+        console.log('Error inserting coupon to DB:', e);
+      }
+    } else {
+      saveLocalState(newPoints, messages, events, smallTalk, rewardsList, [newCoupon, ...userCoupons], shoppingItems, pointHistory);
+    }
+
+    return true;
+  };
+
+  const handleDeductPoints = async (cost, reason = '포인트 사용') => {
+    const newPoints = Math.max(0, points - cost);
+    setPoints(newPoints);
+    logPointTransaction('spend', cost, reason, newPoints, 'general');
+
+    if (isSupabaseReady && profile?.family_id) {
+      await supabase
+        .from('family_points')
+        .update({ points: newPoints })
+        .eq('family_id', profile.family_id);
     }
   };
 
@@ -1312,6 +1606,8 @@ export default function App() {
     if (isSupabaseReady) {
       try {
         const myId = session?.user?.id || profile?.id;
+        const isFirstAnswer = !smallTalk.responses?.[myId || user];
+
         const { error } = await supabase
           .from('small_talk_responses')
           .insert({
@@ -1337,30 +1633,50 @@ export default function App() {
           : Object.keys(updatedResponses).length;
         const complete = totalMembers > 0 && answeredCount >= totalMembers;
 
-        if (complete && !smallTalk.pointsAwarded) {
+        // Tokenomics: +5P for individual answer, +30P bonus if all family complete!
+        let addedPoints = 0;
+        if (isFirstAnswer) {
+          addedPoints += 5;
+        }
+        const willAwardAllBonus = complete && !smallTalk.pointsAwarded;
+        if (willAwardAllBonus) {
+          addedPoints += 30;
+        }
+
+        if (addedPoints > 0) {
+          const newPoints = points + addedPoints;
           const { error: ptsError } = await supabase
             .from('family_points')
-            .update({ points: points + 100 })
+            .update({ points: newPoints })
             .eq('family_id', profile.family_id);
 
           if (!ptsError) {
-            setCelebrationVisible(true);
-            // Award +50 EXP bonus to all petmong characters for complete family participation!
-            petmongCharacters.forEach(char => {
-              handleAwardPetmongExp(char.user_id, 50, '스몰톡 가족 전원 완료 보너스 (+50 EXP)');
-            });
+            setPoints(newPoints);
+            const myName = profile?.name || user;
+            if (isFirstAnswer) {
+              logPointTransaction('earn', 5, `${myName}님의 스몰톡 답변 (+5P)`, newPoints - (willAwardAllBonus ? 30 : 0), 'smalltalk');
+            }
+            if (willAwardAllBonus) {
+              setCelebrationVisible(true);
+              logPointTransaction('earn', 30, '스몰톡 가족 전원 완료 보너스 (+30P)', newPoints, 'smalltalk');
+              // Award +50 EXP bonus to all petmong characters for complete family participation!
+              petmongCharacters.forEach(char => {
+                handleAwardPetmongExp(char.user_id, 50, '스몰톡 가족 전원 완료 보너스 (+50 EXP)');
+              });
+            }
           }
         }
 
         setSmallTalk(prev => ({
           ...prev,
           responses: updatedResponses,
-          pointsAwarded: complete,
+          pointsAwarded: complete || prev.pointsAwarded,
         }));
       } catch (e) {
         showError(e, '답변 등록에 실패했습니다.');
       }
     } else {
+      const isFirstAnswer = !smallTalk.responses?.[user];
       const updatedResponses = {
         ...smallTalk.responses,
         [user]: answerText,
@@ -1376,8 +1692,12 @@ export default function App() {
       let pointsEarned = 0;
       let pointsAwardedStatus = smallTalk.pointsAwarded;
 
-      if (isCompleted && !smallTalk.pointsAwarded) {
-        pointsEarned = 100;
+      if (isFirstAnswer) {
+        pointsEarned += 5;
+      }
+      const willAwardAllBonus = isCompleted && !smallTalk.pointsAwarded;
+      if (willAwardAllBonus) {
+        pointsEarned += 30;
         pointsAwardedStatus = true;
         setCelebrationVisible(true);
         petmongCharacters.forEach(char => {
@@ -1392,6 +1712,13 @@ export default function App() {
       };
 
       const newPoints = points + pointsEarned;
+      const myName = profile?.name || user;
+      if (isFirstAnswer) {
+        logPointTransaction('earn', 5, `${myName}님의 스몰톡 답변 (+5P)`, newPoints - (willAwardAllBonus ? 30 : 0), 'smalltalk');
+      }
+      if (willAwardAllBonus) {
+        logPointTransaction('earn', 30, '스몰톡 가족 전원 완료 보너스 (+30P)', newPoints, 'smalltalk');
+      }
       setPoints(newPoints);
       setSmallTalk(updatedSmallTalk);
       saveLocalState(newPoints, messages, events, updatedSmallTalk);
@@ -1399,9 +1726,22 @@ export default function App() {
   };
 
   const handleAddReward = async (rewardData) => {
-    if (isSupabaseReady) {
+    const tempId = `reward-${Date.now()}`;
+    const newReward = {
+      id: tempId,
+      title: rewardData.title,
+      cost: rewardData.cost,
+      description: rewardData.desc || rewardData.description,
+      provider: rewardData.provider,
+    };
+
+    // 1. Optimistic UI update immediately
+    const updated = [...rewardsList, newReward];
+    setRewardsList(updated);
+
+    if (isSupabaseReady && profile?.family_id) {
       try {
-        const { error } = await supabase
+        const { data: inserted, error } = await supabase
           .from('rewards')
           .insert({
             family_id: profile.family_id,
@@ -1409,19 +1749,72 @@ export default function App() {
             cost: rewardData.cost,
             description: rewardData.desc || rewardData.description,
             provider: rewardData.provider,
-          });
+          })
+          .select()
+          .single();
+
         if (error) throw error;
+        if (inserted) {
+          setRewardsList(prev => prev.map(r => r.id === tempId ? inserted : r));
+        }
       } catch (e) {
         showError(e, '쿠폰 등록에 실패했습니다.');
       }
     } else {
-      const newReward = {
-        id: String(Date.now()),
-        ...rewardData,
-      };
-      const updated = [...rewardsList, newReward];
-      setRewardsList(updated);
       saveLocalState(points, messages, events, smallTalk, updated);
+    }
+  };
+
+  const handleUpdateReward = async (rewardId, updatedData) => {
+    // 1. Optimistic UI update immediately
+    const updatedList = rewardsList.map(r => r.id === rewardId ? {
+      ...r,
+      title: updatedData.title,
+      cost: updatedData.cost,
+      description: updatedData.desc || updatedData.description,
+      provider: updatedData.provider,
+    } : r);
+    setRewardsList(updatedList);
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rewardId);
+    if (isSupabaseReady && isUuid) {
+      try {
+        const { error } = await supabase
+          .from('rewards')
+          .update({
+            title: updatedData.title,
+            cost: updatedData.cost,
+            description: updatedData.desc || updatedData.description,
+            provider: updatedData.provider,
+          })
+          .eq('id', rewardId);
+        if (error) console.log('Update reward error:', error);
+      } catch (e) {
+        showError(e, '쿠폰 수정에 실패했습니다.');
+      }
+    } else {
+      saveLocalState(points, messages, events, smallTalk, updatedList, userCoupons, shoppingItems, pointHistory);
+    }
+  };
+
+  const handleDeleteReward = async (rewardId) => {
+    // 1. Optimistic UI delete immediately
+    const updatedList = rewardsList.filter(r => r.id !== rewardId);
+    setRewardsList(updatedList);
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rewardId);
+    if (isSupabaseReady && isUuid) {
+      try {
+        const { error } = await supabase
+          .from('rewards')
+          .delete()
+          .eq('id', rewardId);
+        if (error) console.log('Delete reward error:', error);
+      } catch (e) {
+        showError(e, '쿠폰 삭제에 실패했습니다.');
+      }
+    } else {
+      saveLocalState(points, messages, events, smallTalk, updatedList, userCoupons, shoppingItems, pointHistory);
     }
   };
 
@@ -1479,6 +1872,7 @@ export default function App() {
             setRewardsList(INITIAL_MOCK_REWARDS);
             setUserCoupons(INITIAL_MOCK_USER_COUPONS);
             setShoppingItems(INITIAL_MOCK_SHOPPING);
+            setPointHistory(INITIAL_MOCK_POINT_HISTORY);
             await AsyncStorage.removeItem('FAMLINK_STATE');
             Alert.alert('초기화 완료', '앱 데이터가 성공적으로 리셋되었습니다.');
           }
@@ -1540,13 +1934,27 @@ export default function App() {
             currentUser={currentUser}
             currentUserProfile={profile}
             points={points}
+            pointHistory={pointHistory}
             onAddResponse={handleAddResponse}
             onRedeemReward={handleRedeemReward}
+            onDeductPoints={handleDeductPoints}
             familyMembers={familyMembersList}
             rewardsList={rewardsList}
             onAddReward={handleAddReward}
+            onUpdateReward={handleUpdateReward}
+            onDeleteReward={handleDeleteReward}
             userCoupons={userCoupons}
             onUseCoupon={handleUseCoupon}
+            coopGoal={coopGoal}
+            onUpdateCoopGoal={handleUpdateCoopGoal}
+            messages={messages}
+            onSendOrderNotice={handleSendOrderNotice}
+            shoppingItems={shoppingItems}
+            onAddItem={handleAddItem}
+            onToggleItem={handleToggleItem}
+            onDeleteItem={handleDeleteItem}
+            onClearCompleted={handleClearCompletedItems}
+            onToggleRepeat={handleToggleRepeat}
           />
         );
       case 'shopping':
@@ -1558,6 +1966,8 @@ export default function App() {
             onAddItem={handleAddItem}
             onToggleItem={handleToggleItem}
             onDeleteItem={handleDeleteItem}
+            onClearCompleted={handleClearCompletedItems}
+            onToggleRepeat={handleToggleRepeat}
           />
         );
       case 'album':
@@ -1565,13 +1975,19 @@ export default function App() {
           <PhotoAlbumScreen
             currentUser={currentUser}
             familyMembers={familyMembersList}
+            messages={messages}
+            smallTalkState={smallTalk}
+            currentUserProfile={profile}
+            onSendOrderNotice={handleSendOrderNotice}
+            points={points}
+            onDeductPoints={handleDeductPoints}
           />
         );
       case 'interior':
         return (
           <InteriorScreen
             points={points}
-            onDeductPoints={(cost) => handleUpdatePoints(Math.max(0, points - cost))}
+            onDeductPoints={(cost) => handleDeductPoints(cost, '가구 구매')}
             placedFurniture={placedFurniture}
             onUpdatePlacedFurniture={handleUpdatePlacedFurniture}
             floorPlanUrl={floorPlanUrl}
@@ -1582,6 +1998,7 @@ export default function App() {
             petmongCharacters={petmongCharacters}
             setPetmongCharacters={setPetmongCharacters}
             onAwardExp={handleAwardPetmongExp}
+            familyMembers={familyMembersList}
           />
         );
       case 'family':
@@ -1592,6 +2009,8 @@ export default function App() {
             currentUserProfile={profile}
             onUpdateMood={handleUpdateMood}
             onlineUsers={onlineUsers}
+            onLogout={handleLogout}
+            onNavigateScreen={setCurrentScreen}
           />
         );
       default:
@@ -1646,26 +2065,26 @@ export default function App() {
               <Text style={styles.pointIndicatorText}>{points} P</Text>
             </View>
 
-            {/* User Switcher Emulator Widget */}
+            {/* User Profile Button (Navigates to Family Screen) */}
             {!isSupabaseReady ? (
               <TouchableOpacity
                 style={[styles.userSwitcherButton, { borderColor: activeMember.color }]}
-                onPress={() => setUserModalVisible(true)}
+                onPress={() => setCurrentScreen('family')}
+                activeOpacity={0.7}
               >
                 <Text style={styles.switcherAvatar}>{activeMember.avatar}</Text>
                 <Text style={styles.switcherName}>{activeMember.name} (시뮬)</Text>
               </TouchableOpacity>
             ) : (
-              <View style={[styles.userBadge, { borderColor: activeMember.color }]}>
+              <TouchableOpacity
+                style={[styles.userBadge, { borderColor: activeMember.color }]}
+                onPress={() => setCurrentScreen('family')}
+                activeOpacity={0.7}
+              >
                 <Text style={styles.switcherAvatar}>{activeMember.avatar}</Text>
                 <Text style={styles.switcherName}>{profile.name}</Text>
-              </View>
+              </TouchableOpacity>
             )}
-
-            {/* Logout Button */}
-            <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-              <LogOut size={16} color="#8E8E93" />
-            </TouchableOpacity>
           </View>
         </View>
 
@@ -1679,8 +2098,9 @@ export default function App() {
             {renderActiveScreen()}
           </View>
 
-          {/* Custom Tabbar (7 Tabs) */}
+          {/* Custom Tabbar (6 Tabs) */}
           <View style={styles.tabbar}>
+            {/* 1. 메신저 (일상 소통) */}
             <TouchableOpacity
               style={[styles.tabItem, currentScreen === 'chat' && styles.tabItemActive]}
               onPress={() => setCurrentScreen('chat')}
@@ -1689,38 +2109,7 @@ export default function App() {
               <Text style={[styles.tabLabel, currentScreen === 'chat' && styles.tabLabelActive]}>메신저</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.tabItem, currentScreen === 'calendar' && styles.tabItemActive]}
-              onPress={() => setCurrentScreen('calendar')}
-            >
-              <TabCalendarIcon size={19} color={currentScreen === 'calendar' ? '#FF7E82' : '#8E8E93'} focused={currentScreen === 'calendar'} />
-              <Text style={[styles.tabLabel, currentScreen === 'calendar' && styles.tabLabelActive]}>캘린더</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.tabItem, currentScreen === 'smalltalk' && styles.tabItemActive]}
-              onPress={() => setCurrentScreen('smalltalk')}
-            >
-              <TabSmallTalkIcon size={19} color={currentScreen === 'smalltalk' ? '#FF7E82' : '#8E8E93'} focused={currentScreen === 'smalltalk'} />
-              <Text style={[styles.tabLabel, currentScreen === 'smalltalk' && styles.tabLabelActive]}>스몰톡</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.tabItem, currentScreen === 'shopping' && styles.tabItemActive]}
-              onPress={() => setCurrentScreen('shopping')}
-            >
-              <TabShoppingIcon size={19} color={currentScreen === 'shopping' ? '#FF7E82' : '#8E8E93'} focused={currentScreen === 'shopping'} />
-              <Text style={[styles.tabLabel, currentScreen === 'shopping' && styles.tabLabelActive]}>장보기</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.tabItem, currentScreen === 'album' && styles.tabItemActive]}
-              onPress={() => setCurrentScreen('album')}
-            >
-              <TabAlbumIcon size={19} color={currentScreen === 'album' ? '#FF7E82' : '#8E8E93'} focused={currentScreen === 'album'} />
-              <Text style={[styles.tabLabel, currentScreen === 'album' && styles.tabLabelActive]}>앨범</Text>
-            </TouchableOpacity>
-
+            {/* 2. 반려몽 (가족 중심 공간 & 육성) */}
             <TouchableOpacity
               style={[styles.tabItem, currentScreen === 'interior' && styles.tabItemActive]}
               onPress={() => setCurrentScreen('interior')}
@@ -1729,6 +2118,34 @@ export default function App() {
               <Text style={[styles.tabLabel, currentScreen === 'interior' && styles.tabLabelActive]}>반려몽</Text>
             </TouchableOpacity>
 
+            {/* 3. 미션·혜택 (스몰톡/장보기/포인트 센터) */}
+            <TouchableOpacity
+              style={[styles.tabItem, currentScreen === 'smalltalk' && styles.tabItemActive]}
+              onPress={() => setCurrentScreen('smalltalk')}
+            >
+              <TabSmallTalkIcon size={19} color={currentScreen === 'smalltalk' ? '#FF7E82' : '#8E8E93'} focused={currentScreen === 'smalltalk'} />
+              <Text style={[styles.tabLabel, currentScreen === 'smalltalk' && styles.tabLabelActive]}>미션·혜택</Text>
+            </TouchableOpacity>
+
+            {/* 4. 캘린더 (가족 일정 & 기념일) */}
+            <TouchableOpacity
+              style={[styles.tabItem, currentScreen === 'calendar' && styles.tabItemActive]}
+              onPress={() => setCurrentScreen('calendar')}
+            >
+              <TabCalendarIcon size={19} color={currentScreen === 'calendar' ? '#FF7E82' : '#8E8E93'} focused={currentScreen === 'calendar'} />
+              <Text style={[styles.tabLabel, currentScreen === 'calendar' && styles.tabLabelActive]}>캘린더</Text>
+            </TouchableOpacity>
+
+            {/* 5. 앨범 (사진 추억 & 이야기책) */}
+            <TouchableOpacity
+              style={[styles.tabItem, currentScreen === 'album' && styles.tabItemActive]}
+              onPress={() => setCurrentScreen('album')}
+            >
+              <TabAlbumIcon size={19} color={currentScreen === 'album' ? '#FF7E82' : '#8E8E93'} focused={currentScreen === 'album'} />
+              <Text style={[styles.tabLabel, currentScreen === 'album' && styles.tabLabelActive]}>앨범</Text>
+            </TouchableOpacity>
+
+            {/* 6. 가족 (가족 연결 & 멤버 관리) */}
             <TouchableOpacity
               style={[styles.tabItem, currentScreen === 'family' && styles.tabItemActive]}
               onPress={() => setCurrentScreen('family')}

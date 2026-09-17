@@ -116,6 +116,8 @@ CREATE TABLE IF NOT EXISTS shopping_items (
 
 ALTER TABLE shopping_items ADD COLUMN IF NOT EXISTS points_earned BOOLEAN DEFAULT false NOT NULL;
 ALTER TABLE shopping_items ADD COLUMN IF NOT EXISTS completed_date TEXT;
+ALTER TABLE shopping_items ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE shopping_items ADD COLUMN IF NOT EXISTS repeat_type TEXT DEFAULT 'none';
 
 -- 10. 트리거: 새 가족(families) 생성 시 포인트 행 자동 생성
 CREATE OR REPLACE FUNCTION public.handle_new_family()

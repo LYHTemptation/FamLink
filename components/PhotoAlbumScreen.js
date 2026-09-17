@@ -9,13 +9,24 @@ import {
   Modal,
   Dimensions,
 } from 'react-native';
-import { Image as ImageIcon, X, Calendar, User } from 'lucide-react-native';
+import { Image as ImageIcon, X, Calendar, User, BookOpen } from 'lucide-react-native';
+import FamilyStorybookModal from './FamilyStorybookModal';
+import { colors, typography, commonStyles } from '../theme';
 
 const { width } = Dimensions.get('window');
 const GRID_ITEM_SIZE = (width - 48) / 3;
 
-export default function PhotoAlbumScreen({ messages, familyMembers }) {
+export default function PhotoAlbumScreen({
+  messages,
+  familyMembers,
+  smallTalkState,
+  currentUserProfile,
+  onSendOrderNotice,
+  points = 0,
+  onDeductPoints,
+}) {
   const [selectedPhoto, setSelectedPhoto] = useState(null);
+  const [storybookVisible, setStorybookVisible] = useState(false);
 
   // Extract all messages containing image URLs or image URIs
   const photoMessages = messages
@@ -58,9 +69,20 @@ export default function PhotoAlbumScreen({ messages, familyMembers }) {
           <Text style={styles.subHeaderSub}>공유된 사진 {photoMessages.length}장</Text>
         </View>
 
-        <View style={styles.photoCountBadge}>
-          <ImageIcon size={14} color="#FF7E82" style={{ marginRight: 4 }} />
-          <Text style={styles.photoCountBadgeText}>{photoMessages.length}장</Text>
+        <View style={styles.headerRightActions}>
+          <TouchableOpacity
+            style={styles.storybookBtn}
+            onPress={() => setStorybookVisible(true)}
+            activeOpacity={0.8}
+          >
+            <BookOpen size={14} color="#FFFFFF" style={{ marginRight: 5 }} />
+            <Text style={styles.storybookBtnText}>이야기책 출판</Text>
+          </TouchableOpacity>
+
+          <View style={styles.photoCountBadge}>
+            <ImageIcon size={14} color="#FF7E82" style={{ marginRight: 4 }} />
+            <Text style={styles.photoCountBadgeText}>{photoMessages.length}장</Text>
+          </View>
         </View>
       </View>
 
@@ -105,69 +127,94 @@ export default function PhotoAlbumScreen({ messages, familyMembers }) {
       >
         {selectedPhoto && (
           <View style={styles.modalBg}>
-            <TouchableOpacity style={styles.closeBtn} onPress={() => setSelectedPhoto(null)}>
-              <X size={26} color="#FFFFFF" />
+            <TouchableOpacity
+              style={styles.closeBtn}
+              onPress={() => setSelectedPhoto(null)}
+              hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+            >
+              <X size={28} color="#FFFFFF" />
             </TouchableOpacity>
 
-            <Image
-              source={{ uri: selectedPhoto.photoUri }}
-              style={styles.fullImage}
-              resizeMode="contain"
-            />
+            <TouchableOpacity
+              style={styles.modalBackdropTouch}
+              activeOpacity={1}
+              onPress={() => setSelectedPhoto(null)}
+            >
+              <Image
+                source={{ uri: selectedPhoto.photoUri }}
+                style={styles.fullImage}
+                resizeMode="contain"
+              />
+            </TouchableOpacity>
 
             <View style={styles.photoFooter}>
               <View style={styles.footerSenderRow}>
-                <Text style={styles.footerAvatar}>{selectedPhoto.sender.avatar}</Text>
-                <Text style={[styles.footerSenderName, { color: selectedPhoto.sender.color }]}>
-                  {selectedPhoto.sender.name}
+                <Text style={styles.footerAvatar}>{selectedPhoto.sender?.avatar || '👦'}</Text>
+                <Text style={[styles.footerSenderName, { color: selectedPhoto.sender?.color || '#FF7E82' }]}>
+                  {selectedPhoto.sender?.name || '가족'}
                 </Text>
               </View>
               {selectedPhoto.text ? (
                 <Text style={styles.photoCaption}>"{selectedPhoto.text}"</Text>
               ) : null}
-              <Text style={styles.photoTime}>{selectedPhoto.timestamp || '가족 단톡방 공유'}</Text>
+              <Text style={styles.photoTime}>
+                {selectedPhoto.timestamp || (selectedPhoto.created_at ? new Date(selectedPhoto.created_at).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '가족 단톡방 공유')}
+              </Text>
             </View>
           </View>
         )}
       </Modal>
+
+      {/* AI Family Storybook Modal */}
+      <FamilyStorybookModal
+        visible={storybookVisible}
+        onClose={() => setStorybookVisible(false)}
+        smallTalkState={smallTalkState}
+        familyMembers={familyMembers}
+        messages={messages}
+        currentUserProfile={currentUserProfile}
+        onSendOrderNotice={onSendOrderNotice}
+        points={points}
+        onDeductPoints={onDeductPoints}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F8F9FA',
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 40,
-  },
-  subHeaderBar: {
-    paddingHorizontal: 20,
-    height: 64,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
+  container: commonStyles.screenContainer,
+  scrollContent: commonStyles.scrollContent,
+  subHeaderBar: commonStyles.subHeaderBar,
+  subHeaderTitle: commonStyles.subHeaderTitle,
+  subHeaderSub: commonStyles.subHeaderSub,
+  headerRightActions: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
   },
-  subHeaderTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#1C1C1E',
+  storybookBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF7E82',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+    shadowColor: '#FF7E82',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  subHeaderSub: {
+  storybookBtnText: {
     fontSize: 12,
-    color: '#8E8E93',
-    marginTop: 2,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   photoCountBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFF2F3',
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 10,
     borderWidth: 1,
@@ -234,12 +281,33 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  modalBackdropTouch: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   closeBtn: {
     position: 'absolute',
     top: 50,
     right: 20,
-    zIndex: 10,
-    padding: 8,
+    zIndex: 20,
+    padding: 10,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    borderRadius: 20,
+  },
+  fullPhotoContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 20,
+    padding: 10,
   },
   fullImage: {
     width: width,

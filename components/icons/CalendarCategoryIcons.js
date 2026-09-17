@@ -273,3 +273,29 @@ export function CategoryOtherIcon({ size = 20, color = '#95A5A6', strokeWidth = 
     </Svg>
   );
 }
+
+/**
+ * 6. 직접 입력/커스텀 카테고리 아이콘 (CategoryCustomIcon)
+ * 직접 입력 카테고리를 나타내는 네임태그와 플러스 디자인
+ */
+export function CategoryCustomIcon({ size = 20, color = '#3498DB', strokeWidth = 2, ...props }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
+      <Path
+        d="M20.59 13.41L13.42 20.58C12.64 21.36 11.37 21.36 10.59 20.58L2 12V2H12L20.59 10.59C21.37 11.37 21.37 12.64 20.59 13.41Z"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Circle cx="7" cy="7" r="1.5" fill={color} />
+      <Path
+        d="M12 12H16M14 10V14"
+        stroke={color}
+        strokeWidth={strokeWidth * 0.9}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}

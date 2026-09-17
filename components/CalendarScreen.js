@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -30,7 +30,10 @@ import {
   CategoryTripIcon,
   CategoryHouseworkIcon,
   CategoryOtherIcon,
+  CategoryCustomIcon,
+  IconClose,
 } from './icons';
+import { colors, typography, commonStyles } from '../theme';
 
 const FAMILY_MEMBERS = {
   mom: { name: '엄마', avatar: '👩‍🦰', color: '#FF7E82' },
@@ -39,12 +42,28 @@ const FAMILY_MEMBERS = {
   daughter: { name: '딸', avatar: '👧', color: '#F39C12' },
 };
 
+const PRESET_CATEGORIES = ['dinner', 'anniversary', 'trip', 'housework', 'etc'];
+
 const CATEGORIES = {
   dinner: { label: '가족 식사', icon: CategoryMealIcon, color: '#E74C3C' },
+  meal: { label: '가족 식사', icon: CategoryMealIcon, color: '#E74C3C' },
   anniversary: { label: '기념일/생일', icon: CategoryAnniversaryIcon, color: '#9B59B6' },
   trip: { label: '나들이/외출', icon: CategoryTripIcon, color: '#2ECC71' },
+  travel: { label: '나들이/외출', icon: CategoryTripIcon, color: '#2ECC71' },
   housework: { label: '집안일', icon: CategoryHouseworkIcon, color: '#F39C12' },
   etc: { label: '기타', icon: CategoryOtherIcon, color: '#95A5A6' },
+};
+
+const getCategoryInfo = (catKeyOrName) => {
+  if (!catKeyOrName) return CATEGORIES.etc;
+  if (CATEGORIES[catKeyOrName]) {
+    return CATEGORIES[catKeyOrName];
+  }
+  return {
+    label: catKeyOrName,
+    icon: CategoryCustomIcon,
+    color: '#3498DB',
+  };
 };
 
 export default function CalendarScreen({
@@ -79,6 +98,25 @@ export default function CalendarScreen({
     return FAMILY_MEMBERS[item?.creator] || { name: item?.creator || '가족', avatar: '👦', color: '#8E8E93' };
   };
 
+  const isEventOwner = (item) => {
+    if (!item) return false;
+    // 1. Check profile_id matching
+    if (currentUserProfile?.id && item.profile_id && item.profile_id === currentUserProfile.id) {
+      return true;
+    }
+    // 2. Check creatorObj matching
+    if (currentUserProfile?.id && item.creatorObj?.id && item.creatorObj.id === currentUserProfile.id) {
+      return true;
+    }
+    // 3. Fallback check (name, role, or currentUser string match)
+    const currentName = currentUserProfile?.name || currentUser;
+    const currentRole = currentUserProfile?.role;
+    if (item.creator && (item.creator === currentName || (currentRole && item.creator === currentRole))) {
+      return true;
+    }
+    return false;
+  };
+
   const getTodayString = (dateObj = new Date()) => {
     const y = dateObj.getFullYear();
     const m = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -86,12 +124,14 @@ export default function CalendarScreen({
     return `${y}-${m}-${d}`;
   };
 
+  const mainScrollRef = useRef(null);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(getTodayString());
   const [modalVisible, setModalVisible] = useState(false);
   const [title, setTitle] = useState('');
   const [time, setTime] = useState('19:00');
   const [category, setCategory] = useState('anniversary');
+  const [customCategory, setCustomCategory] = useState('');
 
   // Range date states
   const [startDateInput, setStartDateInput] = useState(getTodayString());
@@ -119,6 +159,16 @@ export default function CalendarScreen({
     const today = new Date();
     setCurrentDate(today);
     setSelectedDate(getTodayString(today));
+    setTimeout(() => {
+      mainScrollRef.current?.scrollTo({ y: 160, animated: true });
+    }, 100);
+  };
+
+  const handleSelectDate = (dateStr) => {
+    setSelectedDate(dateStr);
+    setTimeout(() => {
+      mainScrollRef.current?.scrollTo({ y: 180, animated: true });
+    }, 100);
   };
 
   const handleOpenAddModal = () => {
@@ -126,6 +176,7 @@ export default function CalendarScreen({
     setTitle('');
     setTime('19:00');
     setCategory('anniversary');
+    setCustomCategory('');
     setStartDateInput(selectedDate);
     setEndDateInput(selectedDate);
     setIsRange(false);
@@ -133,10 +184,20 @@ export default function CalendarScreen({
   };
 
   const handleOpenEditModal = (eventItem) => {
+    if (!isEventOwner(eventItem)) {
+      Alert.alert('권한 없음 ⚠️', '일정을 등록한 본인만 수정할 수 있습니다.');
+      return;
+    }
     setEditingEventId(eventItem.id);
     setTitle(eventItem.title || '');
     setTime(eventItem.time || '19:00');
-    setCategory(eventItem.category || 'etc');
+    if (CATEGORIES[eventItem.category]) {
+      setCategory(eventItem.category);
+      setCustomCategory('');
+    } else {
+      setCategory('custom');
+      setCustomCategory(eventItem.category || '');
+    }
     const start = eventItem.date || selectedDate;
     const end = eventItem.endDate || eventItem.end_date || start;
     setStartDateInput(start);
@@ -162,6 +223,11 @@ export default function CalendarScreen({
       return;
     }
 
+    if (category === 'custom' && !customCategory.trim()) {
+      Alert.alert('알림', '직접 입력할 카테고리명을 입력해 주세요.');
+      return;
+    }
+
     const start = isRange ? startDateInput.trim() : selectedDate;
     const end = isRange ? endDateInput.trim() : selectedDate;
 
@@ -176,12 +242,14 @@ export default function CalendarScreen({
       return;
     }
 
+    const finalCategory = category === 'custom' ? customCategory.trim() : category;
+
     const eventData = {
       title: title.trim(),
       date: start,
       endDate: end,
-      time,
-      category,
+      time: time.trim() || '시간 미정',
+      category: finalCategory,
       profile_id: currentUserProfile?.id,
       creator: currentUserProfile?.name || currentUser,
     };
@@ -196,12 +264,17 @@ export default function CalendarScreen({
 
     setTitle('');
     setTime('19:00');
+    setCustomCategory('');
     setIsRange(false);
     setEditingEventId(null);
     setModalVisible(false);
   };
 
   const handleDeleteClick = (eventItem) => {
+    if (!isEventOwner(eventItem)) {
+      Alert.alert('권한 없음 ⚠️', '일정을 등록한 본인만 삭제할 수 있습니다.');
+      return;
+    }
     Alert.alert(
       '일정 삭제 🗑️',
       `'${eventItem.title}' 일정을 삭제하시겠습니까?`,
@@ -265,8 +338,7 @@ export default function CalendarScreen({
         if (a.isOngoing && !b.isOngoing) return -1;
         if (!a.isOngoing && b.isOngoing) return 1;
         return a.diffDays - b.diffDays;
-      })
-      .slice(0, 3);
+      });
   };
 
   const dDayItems = getDDayList();
@@ -278,167 +350,201 @@ export default function CalendarScreen({
 
   return (
     <View style={styles.container}>
-      {/* Sub-header Bar */}
-      <View style={styles.calendarHeader}>
-        <View>
-          <Text style={styles.subHeaderTitle}>캘린더</Text>
-          <Text style={styles.subHeaderSub}>이번 달 가족 일정 {monthEventsCount}개</Text>
+      <ScrollView
+        ref={mainScrollRef}
+        style={styles.mainScrollView}
+        contentContainerStyle={styles.mainScrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Sub-header Bar */}
+        <View style={styles.calendarHeader}>
+          <View>
+            <Text style={styles.subHeaderTitle}>캘린더</Text>
+            <Text style={styles.subHeaderSub}>이번 달 가족 일정 {monthEventsCount}개</Text>
+          </View>
+
+          <TouchableOpacity style={styles.addButton} onPress={handleOpenAddModal} activeOpacity={0.8}>
+            <Plus size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
+            <Text style={styles.addButtonText}>일정 추가</Text>
+          </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={styles.addButton} onPress={handleOpenAddModal} activeOpacity={0.8}>
-          <Plus size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
-          <Text style={styles.addButtonText}>일정 추가</Text>
-        </TouchableOpacity>
-      </View>
+        {/* D-Day Banner Carousel */}
+        {dDayItems.length > 0 && (
+          <View style={styles.dDayContainer}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dDayScroll}>
+              {dDayItems.map((item) => {
+                const catInfo = getCategoryInfo(item.category);
+                const CatIcon = catInfo.icon;
+                const catColor = catInfo.color;
 
-      {/* D-Day Banner Carousel */}
-      {dDayItems.length > 0 && (
-        <View style={styles.dDayContainer}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dDayScroll}>
-            {dDayItems.map((item) => (
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[
+                      styles.dDayChip,
+                      { backgroundColor: catColor + '15', borderColor: catColor + '40' }
+                    ]}
+                    onPress={() => handleSelectDate(item.date)}
+                  >
+                    {CatIcon ? (
+                      <CatIcon size={16} color={catColor} style={{ marginRight: 6 }} />
+                    ) : (
+                      <PartyPopper size={16} color={catColor} style={{ marginRight: 6 }} />
+                    )}
+                    <Text style={styles.dDayTitle}>{item.title}</Text>
+                    <View style={[styles.dDayBadge, { backgroundColor: catColor }]}>
+                      <Text style={styles.dDayBadgeText}>
+                        {item.isOngoing ? '진행 중' : (item.diffDays === 0 ? 'D-Day' : `D-${item.diffDays}`)}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Calendar Month Navigation Bar */}
+        <View style={styles.monthNavRow}>
+          <View style={styles.monthNavControls}>
+            <TouchableOpacity onPress={handlePrevMonth} style={styles.navArrowBtn} activeOpacity={0.7}>
+              <ChevronLeft size={20} color="#1C1C1E" />
+            </TouchableOpacity>
+            <Text style={styles.monthNavTitle}>{year}년 {month}월</Text>
+            <TouchableOpacity onPress={handleNextMonth} style={styles.navArrowBtn} activeOpacity={0.7}>
+              <ChevronRight size={20} color="#1C1C1E" />
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity style={styles.todayBtn} onPress={handleToday} activeOpacity={0.7}>
+            <Text style={styles.todayBtnText}>오늘</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Weekdays Row */}
+        <View style={styles.weekdaysRow}>
+          {['일', '월', '화', '수', '목', '금', '토'].map((w, index) => (
+            <Text key={w} style={[styles.weekdayText, index === 0 && { color: '#E74C3C' }, index === 6 && { color: '#4A90E2' }]}>
+              {w}
+            </Text>
+          ))}
+        </View>
+
+        {/* Days Grid */}
+        <View style={styles.daysGrid}>
+          {calendarCells.map((dateStr, index) => {
+            if (!dateStr) {
+              return <View key={`empty-${index}`} style={styles.dayCell} />;
+            }
+
+            const dayNum = parseInt(dateStr.split('-')[2], 10);
+            const isSelected = selectedDate === dateStr;
+            const dayEvents = getEventsForDate(dateStr);
+
+            return (
               <TouchableOpacity
-                key={item.id}
-                style={styles.dDayChip}
-                onPress={() => setSelectedDate(item.date)}
+                key={dateStr}
+                style={[styles.dayCell, isSelected && styles.selectedDayCell]}
+                onPress={() => handleSelectDate(dateStr)}
               >
-                <PartyPopper size={16} color="#9B59B6" style={{ marginRight: 6 }} />
-                <Text style={styles.dDayTitle}>{item.title}</Text>
-                <View style={styles.dDayBadge}>
-                  <Text style={styles.dDayBadgeText}>
-                    {item.isOngoing ? '진행 중' : (item.diffDays === 0 ? 'D-Day' : `D-${item.diffDays}`)}
-                  </Text>
+                <Text style={[styles.dayNumber, isSelected && styles.selectedDayNumber]}>
+                  {dayNum}
+                </Text>
+                <View style={styles.dotRow}>
+                  {dayEvents.length <= 3 ? (
+                    dayEvents.map((evt, i) => {
+                      const catColor = getCategoryInfo(evt.category).color;
+                      return <View key={i} style={[styles.eventDot, { backgroundColor: catColor }]} />;
+                    })
+                  ) : (
+                    <>
+                      {dayEvents.slice(0, 2).map((evt, i) => {
+                        const catColor = getCategoryInfo(evt.category).color;
+                        return <View key={i} style={[styles.eventDot, { backgroundColor: catColor }]} />;
+                      })}
+                      <View style={styles.moreDotBadge}>
+                        <Text style={styles.moreDotBadgeText}>+{dayEvents.length - 2}</Text>
+                      </View>
+                    </>
+                  )}
                 </View>
               </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {/* Calendar Month Navigation Bar */}
-      <View style={styles.monthNavRow}>
-        <View style={styles.monthNavControls}>
-          <TouchableOpacity onPress={handlePrevMonth} style={styles.navArrowBtn} activeOpacity={0.7}>
-            <ChevronLeft size={20} color="#1C1C1E" />
-          </TouchableOpacity>
-          <Text style={styles.monthNavTitle}>{year}년 {month}월</Text>
-          <TouchableOpacity onPress={handleNextMonth} style={styles.navArrowBtn} activeOpacity={0.7}>
-            <ChevronRight size={20} color="#1C1C1E" />
-          </TouchableOpacity>
+            );
+          })}
         </View>
 
-        <TouchableOpacity style={styles.todayBtn} onPress={handleToday} activeOpacity={0.7}>
-          <Text style={styles.todayBtnText}>오늘</Text>
-        </TouchableOpacity>
-      </View>
+        {/* Selected Date Events List */}
+        <View style={styles.eventSection}>
+          <View style={styles.eventSectionHeader}>
+            <Text style={styles.eventSectionTitle}>{selectedDate} 일정</Text>
+            <Text style={styles.eventCount}>{selectedDateEvents.length}개 건</Text>
+          </View>
 
-      {/* Weekdays Row */}
-      <View style={styles.weekdaysRow}>
-        {['일', '월', '화', '수', '목', '금', '토'].map((w, index) => (
-          <Text key={w} style={[styles.weekdayText, index === 0 && { color: '#E74C3C' }, index === 6 && { color: '#4A90E2' }]}>
-            {w}
-          </Text>
-        ))}
-      </View>
+          <View style={styles.eventList}>
+            {selectedDateEvents.length === 0 ? (
+              <Text style={styles.emptyText}>등록된 가족 일정이 없습니다.</Text>
+            ) : (
+              selectedDateEvents.map((item) => {
+                const catInfo = getCategoryInfo(item.category);
+                const creatorInfo = getCreatorInfo(item);
+                const CatIcon = catInfo.icon;
 
-      {/* Days Grid */}
-      <View style={styles.daysGrid}>
-        {calendarCells.map((dateStr, index) => {
-          if (!dateStr) {
-            return <View key={`empty-${index}`} style={styles.dayCell} />;
-          }
-
-          const dayNum = parseInt(dateStr.split('-')[2], 10);
-          const isSelected = selectedDate === dateStr;
-          const dayEvents = getEventsForDate(dateStr);
-
-          return (
-            <TouchableOpacity
-              key={dateStr}
-              style={[styles.dayCell, isSelected && styles.selectedDayCell]}
-              onPress={() => setSelectedDate(dateStr)}
-            >
-              <Text style={[styles.dayNumber, isSelected && styles.selectedDayNumber]}>
-                {dayNum}
-              </Text>
-              <View style={styles.dotRow}>
-                {dayEvents.map((evt, i) => {
-                  const catColor = CATEGORIES[evt.category]?.color || '#FF7E82';
-                  return <View key={i} style={[styles.eventDot, { backgroundColor: catColor }]} />;
-                })}
-              </View>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {/* Selected Date Events List */}
-      <View style={styles.eventSection}>
-        <View style={styles.eventSectionHeader}>
-          <Text style={styles.eventSectionTitle}>{selectedDate} 일정</Text>
-          <Text style={styles.eventCount}>{selectedDateEvents.length}개 건</Text>
-        </View>
-
-        <ScrollView style={styles.eventList}>
-          {selectedDateEvents.length === 0 ? (
-            <Text style={styles.emptyText}>등록된 가족 일정이 없습니다.</Text>
-          ) : (
-            selectedDateEvents.map((item) => {
-              const catInfo = CATEGORIES[item.category] || CATEGORIES.etc;
-              const creatorInfo = getCreatorInfo(item);
-              const CatIcon = catInfo.icon;
-
-              return (
-                <View key={item.id} style={styles.eventCard}>
-                  <View style={[styles.categoryIndicator, { backgroundColor: catInfo.color }]} />
-                  <View style={styles.eventContent}>
-                    <Text style={styles.eventTitle}>{item.title}</Text>
-                    <View style={styles.eventMetaRow}>
-                      <Clock size={12} color="#8E8E93" style={{ marginRight: 4 }} />
-                      <Text style={styles.eventMetaText}>
-                        {item.date && (item.endDate || item.end_date) && item.date !== (item.endDate || item.end_date)
-                          ? `${item.date} ~ ${item.endDate || item.end_date} (${item.time})`
-                          : `${item.time}`}
-                      </Text>
-
-                      <View style={[styles.categoryBadge, { backgroundColor: catInfo.color + '18' }]}>
-                        {CatIcon && (
-                          <CatIcon size={12} color={catInfo.color} style={{ marginRight: 4 }} />
-                        )}
-                        <Text style={[styles.categoryBadgeText, { color: catInfo.color }]}>
-                          {catInfo.label}
+                return (
+                  <View key={item.id} style={styles.eventCard}>
+                    <View style={[styles.categoryIndicator, { backgroundColor: catInfo.color }]} />
+                    <View style={styles.eventContent}>
+                      <Text style={styles.eventTitle}>{item.title}</Text>
+                      <View style={styles.eventMetaRow}>
+                        <Clock size={12} color="#8E8E93" style={{ marginRight: 4 }} />
+                        <Text style={styles.eventMetaText}>
+                          {item.date && (item.endDate || item.end_date) && item.date !== (item.endDate || item.end_date)
+                            ? `${item.date} ~ ${item.endDate || item.end_date} (${item.time})`
+                            : `${item.time}`}
                         </Text>
-                      </View>
 
-                      <View style={styles.creatorTag}>
-                        <Text style={styles.creatorAvatar}>{creatorInfo.avatar}</Text>
-                        <Text style={[styles.creatorName, { color: creatorInfo.color }]}>
-                          {creatorInfo.name}
-                        </Text>
+                        <View style={[styles.categoryBadge, { backgroundColor: catInfo.color + '18' }]}>
+                          {CatIcon && (
+                            <CatIcon size={12} color={catInfo.color} style={{ marginRight: 4 }} />
+                          )}
+                          <Text style={[styles.categoryBadgeText, { color: catInfo.color }]}>
+                            {catInfo.label}
+                          </Text>
+                        </View>
+
+                        <View style={styles.creatorTag}>
+                          <Text style={styles.creatorAvatar}>{creatorInfo.avatar}</Text>
+                          <Text style={[styles.creatorName, { color: creatorInfo.color }]}>
+                            {creatorInfo.name}
+                          </Text>
+                        </View>
                       </View>
                     </View>
-                  </View>
 
-                  <View style={styles.cardBtnGroup}>
-                    <TouchableOpacity
-                      style={styles.editButton}
-                      onPress={() => handleOpenEditModal(item)}
-                    >
-                      <Edit3 size={16} color="#4A90E2" />
-                    </TouchableOpacity>
+                    {isEventOwner(item) && (
+                      <View style={styles.cardBtnGroup}>
+                        <TouchableOpacity
+                          style={styles.editButton}
+                          onPress={() => handleOpenEditModal(item)}
+                        >
+                          <Edit3 size={16} color="#4A90E2" />
+                        </TouchableOpacity>
 
-                    <TouchableOpacity
-                      style={styles.deleteButton}
-                      onPress={() => handleDeleteClick(item)}
-                    >
-                      <Trash2 size={16} color="#FF7E82" />
-                    </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.deleteButton}
+                          onPress={() => handleDeleteClick(item)}
+                        >
+                          <Trash2 size={16} color="#FF7E82" />
+                        </TouchableOpacity>
+                      </View>
+                    )}
                   </View>
-                </View>
-              );
-            })
-          )}
-        </ScrollView>
-      </View>
+                );
+              })
+            )}
+          </View>
+        </View>
+      </ScrollView>
 
       {/* Add Event Modal */}
       <Modal
@@ -452,141 +558,210 @@ export default function CalendarScreen({
           style={styles.modalOverlay}
         >
           <View style={styles.modalView}>
-            <Text style={styles.modalHeader}>{editingEventId ? '일정 수정' : '새 일정 추가'}</Text>
-
-            {/* Date Type Selector (당일 vs 기간) */}
-            <Text style={styles.label}>일정 기간 설정</Text>
-            <View style={styles.rangeToggleRow}>
+            {/* Modal Header */}
+            <View style={styles.modalHeaderRow}>
+              <Text style={styles.modalHeader}>{editingEventId ? '일정 수정' : '새 일정 추가'}</Text>
               <TouchableOpacity
-                style={[styles.rangeTab, !isRange && styles.rangeTabActive]}
-                onPress={() => {
-                  setIsRange(false);
-                  setStartDateInput(selectedDate);
-                  setEndDateInput(selectedDate);
-                }}
+                style={styles.modalCloseBtn}
+                onPress={() => setModalVisible(false)}
+                activeOpacity={0.7}
               >
-                <Text style={[styles.rangeTabText, !isRange && styles.rangeTabTextActive]}>당일 일정</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.rangeTab, isRange && styles.rangeTabActive]}
-                onPress={() => {
-                  setIsRange(true);
-                  if (endDateInput === startDateInput) {
-                    setEndDateInput(addDaysToDateStr(startDateInput, 1));
-                  }
-                }}
-              >
-                <Text style={[styles.rangeTabText, isRange && styles.rangeTabTextActive]}>기간 범위 지정</Text>
+                <IconClose size={20} color="#8E8E93" />
               </TouchableOpacity>
             </View>
 
-            {!isRange ? (
-              <View style={styles.singleDateBox}>
-                <Text style={styles.singleDateText}>📅 선택한 날짜: {selectedDate}</Text>
-              </View>
-            ) : (
-              <View style={styles.rangeInputContainer}>
-                <View style={styles.dateInputRow}>
-                  <View style={styles.dateInputHalf}>
-                    <Text style={styles.subLabel}>시작일</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      value={startDateInput}
-                      onChangeText={setStartDateInput}
-                      placeholder="YYYY-MM-DD"
-                      placeholderTextColor="#AEAEB2"
-                    />
-                  </View>
-                  <Text style={styles.dateSeparator}>~</Text>
-                  <View style={styles.dateInputHalf}>
-                    <Text style={styles.subLabel}>종료일</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      value={endDateInput}
-                      onChangeText={setEndDateInput}
-                      placeholder="YYYY-MM-DD"
-                      placeholderTextColor="#AEAEB2"
-                    />
-                  </View>
-                </View>
-
-                {/* Quick Duration Chips */}
-                <View style={styles.quickDurationRow}>
-                  <Text style={styles.quickLabel}>빠른 기간:</Text>
-                  {[
-                    { label: '+1일', days: 1 },
-                    { label: '+2일', days: 2 },
-                    { label: '+3일', days: 3 },
-                    { label: '+7일', days: 7 },
-                  ].map(chip => (
-                    <TouchableOpacity
-                      key={chip.label}
-                      style={styles.quickChip}
-                      onPress={() => setEndDateInput(addDaysToDateStr(startDateInput, chip.days))}
-                    >
-                      <Text style={styles.quickChipText}>{chip.label}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            <Text style={styles.label}>일정 내용</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="일정 제목을 입력하세요 (예: 가족 식사, 기념일)"
-              placeholderTextColor="#AEAEB2"
-              value={title}
-              onChangeText={setTitle}
-            />
-
-            <Text style={styles.label}>시간</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="예: 19:00 또는 오후 7시"
-              placeholderTextColor="#AEAEB2"
-              value={time}
-              onChangeText={setTime}
-            />
-
-            <Text style={styles.label}>카테고리</Text>
-            <View style={styles.categoryContainer}>
-              {Object.keys(CATEGORIES).map((catKey) => {
-                const isSelected = category === catKey;
-                const cat = CATEGORIES[catKey];
-                const CatIcon = cat.icon;
-                return (
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.modalScrollContent}
+              keyboardShouldPersistTaps="handled"
+            >
+              {/* Date Type Selector (당일 vs 기간) */}
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>일정 기간 설정</Text>
+                <View style={styles.rangeToggleRow}>
                   <TouchableOpacity
-                    key={catKey}
+                    style={[styles.rangeTab, !isRange && styles.rangeTabActive]}
+                    onPress={() => {
+                      setIsRange(false);
+                      setStartDateInput(selectedDate);
+                      setEndDateInput(selectedDate);
+                    }}
+                  >
+                    <Text style={[styles.rangeTabText, !isRange && styles.rangeTabTextActive]}>당일 일정</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.rangeTab, isRange && styles.rangeTabActive]}
+                    onPress={() => {
+                      setIsRange(true);
+                      if (endDateInput === startDateInput) {
+                        setEndDateInput(addDaysToDateStr(startDateInput, 1));
+                      }
+                    }}
+                  >
+                    <Text style={[styles.rangeTabText, isRange && styles.rangeTabTextActive]}>기간 범위 지정</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {!isRange ? (
+                  <View style={styles.singleDateBox}>
+                    <Text style={styles.singleDateText}>선택한 날짜: {selectedDate}</Text>
+                  </View>
+                ) : (
+                  <View style={styles.rangeInputContainer}>
+                    <View style={styles.dateInputRow}>
+                      <View style={styles.dateInputHalf}>
+                        <Text style={styles.subLabel}>시작일</Text>
+                        <TextInput
+                          style={styles.textInput}
+                          value={startDateInput}
+                          onChangeText={setStartDateInput}
+                          placeholder="YYYY-MM-DD"
+                          placeholderTextColor="#AEAEB2"
+                        />
+                      </View>
+                      <Text style={styles.dateSeparator}>~</Text>
+                      <View style={styles.dateInputHalf}>
+                        <Text style={styles.subLabel}>종료일</Text>
+                        <TextInput
+                          style={styles.textInput}
+                          value={endDateInput}
+                          onChangeText={setEndDateInput}
+                          placeholder="YYYY-MM-DD"
+                          placeholderTextColor="#AEAEB2"
+                        />
+                      </View>
+                    </View>
+
+                    {/* Quick Duration Chips */}
+                    <View style={styles.quickDurationRow}>
+                      <Text style={styles.quickLabel}>빠른 기간:</Text>
+                      {[
+                        { label: '+1일', days: 1 },
+                        { label: '+2일', days: 2 },
+                        { label: '+3일', days: 3 },
+                        { label: '+7일', days: 7 },
+                      ].map(chip => (
+                        <TouchableOpacity
+                          key={chip.label}
+                          style={styles.quickChip}
+                          onPress={() => setEndDateInput(addDaysToDateStr(startDateInput, chip.days))}
+                        >
+                          <Text style={styles.quickChipText}>{chip.label}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              {/* 일정 내용 */}
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>일정 내용</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="일정 제목을 입력하세요 (예: 가족 식사, 기념일)"
+                  placeholderTextColor="#AEAEB2"
+                  value={title}
+                  onChangeText={setTitle}
+                />
+              </View>
+
+              {/* 시간 */}
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>시간</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="예: 19:00 또는 오후 7시"
+                  placeholderTextColor="#AEAEB2"
+                  value={time}
+                  onChangeText={setTime}
+                />
+              </View>
+
+              {/* 카테고리 */}
+              <View style={styles.formGroup}>
+                <Text style={styles.label}>카테고리</Text>
+                <View style={styles.categoryContainer}>
+                  {PRESET_CATEGORIES.map((catKey) => {
+                    const isSelected = category === catKey;
+                    const cat = CATEGORIES[catKey];
+                    const CatIcon = cat.icon;
+                    return (
+                      <TouchableOpacity
+                        key={catKey}
+                        style={[
+                          styles.categoryButton,
+                          isSelected && { backgroundColor: cat.color, borderColor: cat.color }
+                        ]}
+                        onPress={() => setCategory(catKey)}
+                        activeOpacity={0.7}
+                      >
+                        {CatIcon && (
+                          <CatIcon
+                            size={14}
+                            color={isSelected ? '#FFFFFF' : cat.color}
+                            style={{ marginRight: 6 }}
+                          />
+                        )}
+                        <Text style={[styles.categoryButtonText, isSelected && { color: '#FFFFFF' }]}>
+                          {cat.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                  <TouchableOpacity
                     style={[
                       styles.categoryButton,
-                      isSelected && { backgroundColor: cat.color, borderColor: cat.color }
+                      category === 'custom' && { backgroundColor: '#3498DB', borderColor: '#3498DB' }
                     ]}
-                    onPress={() => setCategory(catKey)}
+                    onPress={() => setCategory('custom')}
+                    activeOpacity={0.7}
                   >
-                    {CatIcon && (
-                      <CatIcon
-                        size={15}
-                        color={isSelected ? '#FFFFFF' : cat.color}
-                        style={{ marginRight: 6 }}
-                      />
-                    )}
-                    <Text style={[styles.categoryButtonText, isSelected && { color: '#FFFFFF' }]}>
-                      {cat.label}
+                    <CategoryCustomIcon
+                      size={14}
+                      color={category === 'custom' ? '#FFFFFF' : '#3498DB'}
+                      style={{ marginRight: 6 }}
+                    />
+                    <Text style={[styles.categoryButtonText, category === 'custom' && { color: '#FFFFFF' }]}>
+                      직접 입력
                     </Text>
                   </TouchableOpacity>
-                );
-              })}
-            </View>
+                </View>
 
-            <View style={styles.modalActionRow}>
-              <TouchableOpacity style={styles.cancelButton} onPress={() => setModalVisible(false)}>
-                <Text style={styles.cancelButtonText}>취소</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.confirmButton} onPress={handleSaveEvent}>
-                <Text style={styles.confirmButtonText}>{editingEventId ? '수정 완료' : '등록'}</Text>
-              </TouchableOpacity>
-            </View>
+                {/* Custom Category Direct Input */}
+                {category === 'custom' && (
+                  <View style={styles.customCategoryInputWrap}>
+                    <CategoryCustomIcon size={16} color="#3498DB" style={{ marginRight: 8 }} />
+                    <TextInput
+                      style={styles.customCategoryInput}
+                      placeholder="카테고리명 직접 입력 (예: 병원, 학원, 운동, 캠핑)"
+                      placeholderTextColor="#AEAEB2"
+                      value={customCategory}
+                      onChangeText={setCustomCategory}
+                      maxLength={15}
+                    />
+                  </View>
+                )}
+              </View>
+
+              {/* Modal Buttons */}
+              <View style={styles.modalActionRow}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={() => setModalVisible(false)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.cancelButtonText}>취소</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.confirmButton}
+                  onPress={handleSaveEvent}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.confirmButtonText}>{editingEventId ? '수정 완료' : '등록'}</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -595,9 +770,12 @@ export default function CalendarScreen({
 }
 
 const styles = StyleSheet.create({
-  container: {
+  container: commonStyles.screenContainer,
+  mainScrollView: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+  },
+  mainScrollContent: {
+    paddingBottom: 40,
   },
   dDayContainer: {
     backgroundColor: '#FFFFFF',
@@ -749,7 +927,9 @@ const styles = StyleSheet.create({
   },
   dotRow: {
     flexDirection: 'row',
-    marginTop: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 3,
   },
   eventDot: {
     width: 5,
@@ -757,8 +937,20 @@ const styles = StyleSheet.create({
     borderRadius: 2.5,
     marginHorizontal: 1,
   },
+  moreDotBadge: {
+    backgroundColor: '#F2F2F7',
+    paddingHorizontal: 2.5,
+    paddingVertical: 0.5,
+    borderRadius: 4,
+    marginLeft: 1.5,
+  },
+  moreDotBadgeText: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: '#8E8E93',
+    lineHeight: 9,
+  },
   eventSection: {
-    flex: 1,
     padding: 16,
   },
   eventSectionHeader: {
@@ -778,7 +970,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   eventList: {
-    flex: 1,
   },
   emptyText: {
     fontSize: 13,
@@ -866,35 +1057,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#F0F7FF',
     marginRight: 6,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalView: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    maxHeight: '90%',
-  },
-  modalHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  modalHeader: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#1C1C1E',
-  },
+  modalOverlay: commonStyles.modalOverlay,
+  modalView: commonStyles.modalBottomSheet,
+  modalHeaderRow: commonStyles.modalHeaderRow,
+  modalHeader: commonStyles.modalHeaderTitle,
   modalCloseBtn: {
-    padding: 4,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F2F2F7',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  modalCloseText: {
-    fontSize: 20,
-    color: '#8E8E93',
+  modalScrollContent: {
+    paddingBottom: 12,
+  },
+  formGroup: {
+    marginBottom: 16,
   },
   label: {
     fontSize: 13,
@@ -902,18 +1081,20 @@ const styles = StyleSheet.create({
     color: '#1C1C1E',
     marginBottom: 8,
   },
-  input: {
-    backgroundColor: '#F1F2F4',
-    borderRadius: 10,
-    padding: 12,
+  textInput: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     fontSize: 14,
     color: '#1C1C1E',
-    marginBottom: 16,
   },
   categoryContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginBottom: 16,
+    gap: 8,
   },
   categoryButton: {
     flexDirection: 'row',
@@ -922,9 +1103,7 @@ const styles = StyleSheet.create({
     borderColor: '#EBEBEB',
     borderRadius: 10,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginRight: 8,
-    marginBottom: 8,
+    paddingVertical: 9,
     backgroundColor: '#FFFFFF',
   },
   categoryButtonText: {
@@ -932,10 +1111,27 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1C1C1E',
   },
+  customCategoryInputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F8FF',
+    borderWidth: 1,
+    borderColor: '#BAE0FF',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    marginTop: 10,
+  },
+  customCategoryInput: {
+    flex: 1,
+    paddingVertical: 11,
+    fontSize: 13,
+    color: '#1C1C1E',
+  },
   modalActionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 10,
+    marginTop: 8,
+    paddingTop: 8,
   },
   rangeToggleRow: {
     flexDirection: 'row',

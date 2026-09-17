@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase, isSupabaseReady } from '../lib/supabase';
 import { User, Lock, Mail, Heart, ArrowRight, ShieldAlert } from 'lucide-react-native';
+import { colors, typography } from '../theme';
 
 const AVATAR_LIST = ['👩‍🦰', '👨‍💼', '👦', '👧', '👵', '👴', '🧑', '👱', '👶', '🐱', '🐶'];
 
@@ -164,6 +165,17 @@ export default function AuthScreen({ onAuthComplete }) {
           if (findFamilyError || !existingFamily) {
             throw new Error('일치하는 가족 코드가 없습니다. 코드를 확인해 주세요.');
           }
+
+          // Enforce 10-member family limit
+          const { count: memberCount, error: countError } = await supabase
+            .from('profiles')
+            .select('*', { count: 'exact', head: true })
+            .eq('family_id', existingFamily.id);
+
+          if (memberCount !== null && memberCount >= 10) {
+            throw new Error('해당 가족은 최대 정원(10명)이 모두 찼습니다. 더 이상 참여할 수 없습니다.');
+          }
+
           targetFamilyId = existingFamily.id;
           finalFamilyCode = cleanCode;
         }
@@ -408,7 +420,7 @@ const styles = StyleSheet.create({
   logoTitle: {
     fontSize: 28,
     fontWeight: '900',
-    color: '#FF7E82',
+    color: colors.primary,
     letterSpacing: -0.5,
   },
   logoSub: {

@@ -26,6 +26,9 @@
         "projectId": "85837381-dbc6-4529-8709-1ada2e354174"
       }
     },
-    "owner": "yon_know"
+    "owner": "yon_know",
+    "plugins": [
+      "expo-status-bar"
+    ]
   }
 }
