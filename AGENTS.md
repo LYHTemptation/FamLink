@@ -39,4 +39,12 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v56.0.0/ before 
   - **스펙**: 밤하늘 천장의 빛나는 별들을 순서대로 선으로 이어 별자리를 완성하는 힐링 감성 퍼즐. 완성 시 꿀잠 에너지 완충 + 다음 날 아침 깜짝 보물상자 선물 연동.
   - **파일**: `components/minigames/DreamConstellationGame.js`
 
+# UI 아이콘 사용 및 렌더링 규칙 (Icon Usage & Vector First)
+
+- **벡터/SVG 아이콘 우선 사용 (Vector First)**: 화면 UI, 액션 버튼, 게임 인터랙션 오브젝트, 상태 뱃지 등에 단순 유니코드 텍스트 이모티콘(Emoji) 사용을 지양하고, 선명하고 스타일링(`color`, `fill`, `size`) 제어가 가능한 정규 아이콘 컴포넌트를 사용하세요.
+- **기존 라이브러리 최우선 재사용 (Reuse Existing)**: 프로젝트에 이미 설치된 `lucide-react-native`에 대응되는 아이콘이 있다면 최우선으로 import하여 재사용하세요. (`<Star />`, `<Trophy />`, `<Clock />`, `<Sparkles />`, `<Heart />`, `<Zap />`, `<Droplets />` 등)
+- **커스텀 벡터 아이콘 직접 제작 (Create Custom Icons)**: 기존 라이브러리에 적합한 아이콘이 없거나 독자적인 그래픽(특수 간식, 게임 전용 비주얼 등)이 필요한 경우, 텍스트 이모지에 의존하지 말고 `react-native-svg`(`<Path>`, `<Svg>`, `<G>`, `<Circle>` 등)를 활용하여 새로운 벡터 아이콘 컴포넌트를 직접 제작하여 사용하세요.
+- **시각적 완성도 및 피드백 (Styling & Glow)**: 단순 플랫 아이콘에 그치지 않고, 상태(활성, 비활성, 펄스, 포커스)에 맞춰 명시적인 색상 테마, 채우기(`fill`), 후광 발광(Aura Glow), 테두리 배지 스타일을 조합해 완성도 높은 피드백을 제공하세요.
+
+
 
