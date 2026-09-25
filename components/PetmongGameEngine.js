@@ -25,6 +25,7 @@ import {
 import { getEvolutionStage, getEvolvedEmoji } from '../lib/petmongEvolution';
 import SnackCatchGame from './minigames/SnackCatchGame';
 import KeepyUppyGame from './minigames/KeepyUppyGame';
+import BubblePopGame from './minigames/BubblePopGame';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
@@ -60,6 +61,7 @@ export default function PetmongGameEngine({
   const [showConditionPopup, setShowConditionPopup] = useState(false);
   const [isSnackGameVisible, setIsSnackGameVisible] = useState(false);
   const [isKeepyUppyGameVisible, setIsKeepyUppyGameVisible] = useState(false);
+  const [isBubbleGameVisible, setIsBubbleGameVisible] = useState(false);
 
   // Pet Action State: 'idle' | 'walking' | 'eating' | 'playing' | 'bathing' | 'sleeping' | 'happy'
   const [petAction, setPetAction] = useState('idle');
@@ -814,6 +816,80 @@ export default function PetmongGameEngine({
       )}
 
       {/* ------------------------------------------------------------- */}
+      {/* 3-C. FLOATING BATH DRAWER (Slides up smoothly when Bath active) */}
+      {/* ------------------------------------------------------------- */}
+      {activeTool === 'bath' && (
+        <View style={styles.floatingSnackDrawer}>
+          <View style={styles.snackDrawerHeader}>
+            <Text style={[styles.snackDrawerTitle, { color: '#0D9488' }]}>
+              반려몽 거품 목욕 & 버블 팝 🧼
+            </Text>
+            <TouchableOpacity onPress={() => setActiveTool('none')} style={styles.snackCloseBtn}>
+              <X size={16} color="#8E8E93" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Action A: Interactive Mini-Game Launcher */}
+          <TouchableOpacity
+            style={[styles.snackGameBanner, { backgroundColor: '#F0FDFA', borderColor: '#99F6E4' }]}
+            onPress={() => {
+              setActiveTool('none');
+              setIsBubbleGameVisible(true);
+            }}
+            activeOpacity={0.85}
+          >
+            <View style={styles.snackGameBannerLeft}>
+              <View style={[styles.snackGameTag, { backgroundColor: '#0D9488' }]}>
+                <Flame size={12} color="#FFF" style={{ marginRight: 3 }} />
+                <Text style={styles.snackGameTagText}>제3탄 체류형 게임</Text>
+              </View>
+              <Text style={styles.snackGameTitle}>🎮 뽀득뽀득 버블 팝 도전!</Text>
+              <Text style={styles.snackGameSubtitle}>
+                피어오르는 비누방울을 손가락으로 팡팡 터트려 청결도 100%!
+              </Text>
+            </View>
+            <View style={[styles.snackGameStartBadge, { backgroundColor: '#0D9488', shadowColor: '#0D9488' }]}>
+              <Text style={styles.snackGameStartText}>START ⚡</Text>
+            </View>
+          </TouchableOpacity>
+
+          <View style={styles.snackDrawerDivider}>
+            <Text style={styles.snackDrawerDividerText}>또는 비누 스펀지로 직접 씻겨주기</Text>
+          </View>
+
+          {/* Action B: Quick Soap Sponge in Room */}
+          <TouchableOpacity
+            style={[
+              styles.snackCard,
+              {
+                width: '100%',
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingVertical: 11,
+                paddingHorizontal: 14,
+                backgroundColor: '#F8FAFC',
+                borderColor: '#E2E8F0',
+              },
+            ]}
+            onPress={() => {
+              setDialogue('비누 스펀지를 들었어요! 반려몽을 톡톡 터치해 씻겨주세요 🧼');
+            }}
+            activeOpacity={0.75}
+          >
+            <Text style={[styles.snackEmoji, { fontSize: 24, marginRight: 10, marginBottom: 0 }]}>🧼</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.snackName, { fontSize: 12 }]}>스펀지 거품 목욕</Text>
+              <Text style={{ fontSize: 10, color: '#64748B', marginTop: 1 }}>
+                반려몽을 톡톡 터치해 보글보글 거품을 내며 씻겨줍니다
+              </Text>
+            </View>
+            <Text style={[styles.snackExp, { color: '#0D9488', fontWeight: '800', marginRight: 4 }]}>청결 +100%</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* ------------------------------------------------------------- */}
       {/* 4. RADIAL FLOATING CARE HUB (Minimal 95% Open Layout) */}
       {/* ------------------------------------------------------------- */}
       <View style={styles.floatingHubContainer} pointerEvents="box-none">
@@ -939,6 +1015,30 @@ export default function PetmongGameEngine({
           setPetAction('happy');
           setDialogue(`환상의 랠리였어요 몽! ${maxRally}회 연속 성공, ${score}점 달성! ⚽🎉`);
           spawnHeartToast(`+${exp} EXP & +${points}P 🏆`);
+        }}
+      />
+
+      {/* ------------------------------------------------------------- */}
+      {/* 7. INTERACTIVE BUBBLE POP MINI-GAME MODAL */}
+      {/* ------------------------------------------------------------- */}
+      <BubblePopGame
+        visible={isBubbleGameVisible}
+        character={character}
+        transparentUrl={transparentUrl}
+        onClose={() => setIsBubbleGameVisible(false)}
+        onGameComplete={({ score, poppedCount, cleanliness, exp, points }) => {
+          if (onUpdateVitals) {
+            onUpdateVitals(prev => ({
+              ...prev,
+              cleanliness: 100,
+              happiness: Math.min(100, (prev.happiness || 85) + 20),
+            }));
+          }
+          if (onGainExp) onGainExp(exp);
+          if (onAwardPoints) onAwardPoints(points, '뽀득뽀득 버블 팝');
+          setPetAction('happy');
+          setDialogue(`뽀득뽀득 기분 최고 몽! 청결도 100% 완충, ${poppedCount}개 버블 팝! 🫧✨`);
+          spawnHeartToast(`+${exp} EXP & +${points}P 🧼`);
         }}
       />
     </View>
