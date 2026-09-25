@@ -21,6 +21,7 @@ import {
   IconRepeat,
 } from './icons';
 import { colors, typography, commonStyles } from '../theme';
+import UserAvatar from './UserAvatar';
 
 export default function ShoppingListScreen({
   shoppingItems,
@@ -410,7 +411,7 @@ export default function ShoppingListScreen({
                     style={[styles.assigneeChip, isSelected && styles.assigneeChipActive]}
                     onPress={() => setSelectedAssignee(item.name)}
                   >
-                    <Text style={styles.assigneeAvatar}>{item.avatar}</Text>
+                    <UserAvatar avatar={item.avatar} size={18} style={{ marginRight: 6 }} />
                     <Text style={[styles.assigneeChipText, isSelected && styles.assigneeChipTextActive]}>
                       {item.name}
                     </Text>

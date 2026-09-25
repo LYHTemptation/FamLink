@@ -8,11 +8,20 @@ import {
   Alert,
   Modal,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  Image,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import { Users, Heart, Award, ShieldCheck, Smile, Edit3, LogOut, Sparkles } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { Users, Heart, Award, ShieldCheck, Smile, Edit3, LogOut, Sparkles, Check, Camera, Trash2 } from 'lucide-react-native';
 import { MoodIcon, MOOD_ITEMS, IconCopy, IconShare, IconClose, IconChevronRight } from './icons';
 import { colors, typography, commonStyles } from '../theme';
+import UserAvatar from './UserAvatar';
+
+const EDIT_AVATAR_PRESETS = [
+  '👩‍🦰', '👨‍💼', '👦', '👧', '👵', '👴', '🧑', '👱', '👶', '🐱', '🐶', '🐰', '🐻', '🐼', '🦊', '🐣'
+];
 
 const FAMILY_MEMBERS_STATIC = {
   mom: { name: '엄마', avatar: '👩‍🦰', color: '#FF7E82' },
@@ -26,13 +35,55 @@ export default function FamilyScreen({
   familyMembersList,
   currentUserProfile,
   onUpdateMood,
+  onUpdateProfile,
   onlineUsers,
   onLogout,
   onNavigateScreen,
 }) {
   const [modalVisible, setModalVisible] = useState(false);
+  const [editName, setEditName] = useState(currentUserProfile?.name || '');
+  const [editRole, setEditRole] = useState(currentUserProfile?.role || '');
+  const [selectedAvatar, setSelectedAvatar] = useState(currentUserProfile?.avatar || '👦');
   const [selectedMood, setSelectedMood] = useState(currentUserProfile?.mood || '😊');
   const [statusText, setStatusText] = useState(currentUserProfile?.status_text || '');
+
+  const openEditModal = () => {
+    setEditName(currentUserProfile?.name || '');
+    setEditRole(currentUserProfile?.role || '');
+    setSelectedAvatar(currentUserProfile?.avatar || '👦');
+    setSelectedMood(currentUserProfile?.mood || '😊');
+    setStatusText(currentUserProfile?.status_text || '');
+    setModalVisible(true);
+  };
+
+  const handlePickProfileImage = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (permissionResult.granted === false) {
+        Alert.alert('권한 필요', '프로필 사진 설정을 위해 사진첩 접근 권한이 필요합니다.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.5,
+        base64: true,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        const imageUri = asset.base64
+          ? `data:image/jpeg;base64,${asset.base64}`
+          : asset.uri;
+        setSelectedAvatar(imageUri);
+      }
+    } catch (e) {
+      console.log('Error picking profile image:', e);
+      Alert.alert('오류', '사진을 불러오는 중 문제가 발생했습니다.');
+    }
+  };
 
   const isFamilyFull = (familyMembersList?.length || 0) >= 10;
 
@@ -55,8 +106,16 @@ export default function FamilyScreen({
     Alert.alert('초대문구 복사', '초대 메시지가 복사되었습니다. 카카오톡이나 메시지로 가족에게 전송해 보세요!');
   };
 
-  const handleSaveMood = () => {
-    if (onUpdateMood) {
+  const handleSaveProfile = () => {
+    if (onUpdateProfile) {
+      onUpdateProfile({
+        name: editName.trim() || currentUserProfile?.name,
+        role: editRole.trim() || currentUserProfile?.role,
+        avatar: selectedAvatar,
+        mood: selectedMood,
+        status_text: statusText.trim(),
+      });
+    } else if (onUpdateMood) {
       onUpdateMood(selectedMood, statusText.trim());
     }
     setModalVisible(false);
@@ -81,11 +140,11 @@ export default function FamilyScreen({
         <View style={styles.subHeaderRightGroup}>
           <TouchableOpacity
             style={styles.headerActionBtn}
-            onPress={() => setModalVisible(true)}
+            onPress={openEditModal}
             activeOpacity={0.8}
           >
-            <Smile size={15} color="#FF7E82" style={{ marginRight: 4 }} />
-            <Text style={styles.headerActionBtnText}>내 기분 변경</Text>
+            <Edit3 size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
+            <Text style={styles.headerActionBtnText}>내 프로필 수정</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -174,9 +233,7 @@ export default function FamilyScreen({
 
           return (
             <View key={isDbProfile ? member.id : roleKey} style={styles.memberItem}>
-              <View style={[styles.avatarBox, { backgroundColor: memberColor + '15' }]}>
-                <Text style={styles.avatarText}>{memberAvatar}</Text>
-              </View>
+              <UserAvatar avatar={memberAvatar} size={42} style={{ marginRight: 12 }} />
 
               <View style={styles.memberInfo}>
                 <View style={styles.memberNameRow}>
@@ -216,7 +273,7 @@ export default function FamilyScreen({
         </View>
         <View style={styles.accountContentRow}>
           <View style={styles.accountInfoCol}>
-            <Text style={styles.accountAvatar}>{currentUserProfile?.avatar || '👦'}</Text>
+            <UserAvatar avatar={currentUserProfile?.avatar} size={42} style={{ marginRight: 10 }} />
             <View>
               <Text style={styles.accountNameText}>
                 {currentUserProfile?.name || '내 계정'} ({currentUserProfile?.role || '가족'})
@@ -227,76 +284,202 @@ export default function FamilyScreen({
             </View>
           </View>
 
-          {onLogout && (
+          <View style={styles.accountActionCol}>
             <TouchableOpacity
-              style={styles.accountLogoutBtn}
-              onPress={onLogout}
+              style={styles.accountEditBtn}
+              onPress={openEditModal}
               activeOpacity={0.8}
             >
-              <LogOut size={14} color="#FF3B30" style={{ marginRight: 4 }} />
-              <Text style={styles.accountLogoutBtnText}>로그아웃</Text>
+              <Edit3 size={13} color="#FF7E82" style={{ marginRight: 4 }} />
+              <Text style={styles.accountEditBtnText}>프로필 수정</Text>
             </TouchableOpacity>
-          )}
+
+            {onLogout && (
+              <TouchableOpacity
+                style={styles.accountLogoutBtn}
+                onPress={onLogout}
+                activeOpacity={0.8}
+              >
+                <LogOut size={13} color="#8E8E93" style={{ marginRight: 4 }} />
+                <Text style={styles.accountLogoutBtnText}>로그아웃</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
 
-      {/* Mood Edit Modal */}
+      {/* Profile & Mood Edit Modal */}
       <Modal
         animationType="slide"
         transparent={true}
         visible={modalVisible}
         onRequestClose={() => setModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalView}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalView, { maxHeight: '88%' }]}>
             <View style={styles.modalHeaderRow}>
-              <Text style={styles.modalHeader}>오늘의 기분 & 한 줄 상태</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Edit3 size={18} color="#FF7E82" />
+                <Text style={styles.modalHeader}>내 프로필 설정</Text>
+              </View>
+              <TouchableOpacity onPress={() => setModalVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                 <IconClose size={20} color="#8E8E93" />
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.modalLabel}>오늘의 기분 스티커 선택</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.emojiScroll} contentContainerStyle={{ paddingVertical: 4 }}>
-              {MOOD_ITEMS.map((item) => {
-                const isSelected = selectedMood === item.id;
-                return (
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
+              {/* 1. KakaoTalk-style Avatar Preview & Photo Picker */}
+              <Text style={styles.modalLabel}>프로필 사진 / 아바타</Text>
+              <View style={styles.avatarPreviewWrap}>
+                <TouchableOpacity
+                  style={styles.avatarLargeCircleTouchable}
+                  onPress={handlePickProfileImage}
+                  activeOpacity={0.85}
+                >
+                  <View style={styles.avatarLargeCircle}>
+                    {selectedAvatar && (selectedAvatar.startsWith('http') || selectedAvatar.startsWith('data:')) ? (
+                      <Image
+                        source={{ uri: selectedAvatar }}
+                        style={styles.avatarLargeImage}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <Text style={styles.avatarLargeText}>{selectedAvatar || '👦'}</Text>
+                    )}
+                  </View>
+                  <View style={styles.avatarCameraBadge}>
+                    <Camera size={14} color="#FFFFFF" strokeWidth={2.5} />
+                  </View>
+                </TouchableOpacity>
+
+                {/* Photo Action Buttons */}
+                <View style={styles.avatarActionBtnsRow}>
                   <TouchableOpacity
-                    key={item.id}
-                    style={[
-                      styles.emojiChip,
-                      isSelected && {
-                        borderColor: item.color,
-                        backgroundColor: item.color + '15',
-                        borderWidth: 2,
-                      }
-                    ]}
-                    onPress={() => setSelectedMood(item.id)}
+                    style={styles.avatarUploadBtn}
+                    onPress={handlePickProfileImage}
+                    activeOpacity={0.8}
                   >
-                    <MoodIcon mood={item.id} size={22} color={item.color} />
-                    <Text style={[styles.moodChipLabel, isSelected && { color: item.color, fontWeight: '800' }]}>
-                      {item.label}
-                    </Text>
+                    <Camera size={14} color="#FF7E82" style={{ marginRight: 5 }} />
+                    <Text style={styles.avatarUploadBtnText}>앨범에서 사진 선택</Text>
                   </TouchableOpacity>
-                );
-              })}
+
+                  {(selectedAvatar && (selectedAvatar.startsWith('http') || selectedAvatar.startsWith('data:'))) && (
+                    <TouchableOpacity
+                      style={styles.avatarResetBtn}
+                      onPress={() => setSelectedAvatar('👦')}
+                      activeOpacity={0.8}
+                    >
+                      <Trash2 size={13} color="#8E8E93" style={{ marginRight: 4 }} />
+                      <Text style={styles.avatarResetBtnText}>기본 이모지로</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                <Text style={styles.avatarSubText}>
+                  카카오톡처럼 사진첩에서 사진을 등록하거나 아래 캐릭터를 골라보세요
+                </Text>
+              </View>
+
+              {/* Emoji Character Presets */}
+              <Text style={[styles.modalLabel, { marginTop: 10, marginBottom: 8 }]}>또는 기본 캐릭터 이모티콘 선택</Text>
+              <View style={styles.avatarGridWrap}>
+                {EDIT_AVATAR_PRESETS.map((emoji) => {
+                  const isSelected = selectedAvatar === emoji;
+                  return (
+                    <TouchableOpacity
+                      key={emoji}
+                      style={[
+                        styles.avatarGridCell,
+                        isSelected && styles.avatarGridCellActive,
+                      ]}
+                      onPress={() => setSelectedAvatar(emoji)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.avatarGridEmoji}>{emoji}</Text>
+                      {isSelected && (
+                        <View style={styles.avatarCheckBadge}>
+                          <Check size={10} color="#FFFFFF" strokeWidth={3} />
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* 2. Name & Role Input */}
+              <View style={styles.modalRowInputs}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalLabel}>내 이름 (실명)</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="이름 입력"
+                    placeholderTextColor="#AEAEB2"
+                    value={editName}
+                    onChangeText={setEditName}
+                    maxLength={10}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalLabel}>가족 내 호칭/역할</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="예: 엄마, 큰아들"
+                    placeholderTextColor="#AEAEB2"
+                    value={editRole}
+                    onChangeText={setEditRole}
+                    maxLength={10}
+                  />
+                </View>
+              </View>
+
+              {/* 3. Mood Selector */}
+              <Text style={[styles.modalLabel, { marginTop: 14 }]}>오늘의 기분 스티커</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.emojiScroll} contentContainerStyle={{ paddingVertical: 4 }}>
+                {MOOD_ITEMS.map((item) => {
+                  const isSelected = selectedMood === item.id;
+                  return (
+                    <TouchableOpacity
+                      key={item.id}
+                      style={[
+                        styles.emojiChip,
+                        isSelected && {
+                          borderColor: item.color,
+                          backgroundColor: item.color + '15',
+                          borderWidth: 2,
+                        }
+                      ]}
+                      onPress={() => setSelectedMood(item.id)}
+                    >
+                      <MoodIcon mood={item.id} size={22} color={item.color} />
+                      <Text style={[styles.moodChipLabel, isSelected && { color: item.color, fontWeight: '800' }]}>
+                        {item.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              {/* 4. Status Message */}
+              <Text style={[styles.modalLabel, { marginTop: 14 }]}>한 줄 상태 메시지</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="예: 공부 중, 퇴근길 피곤함, 헬스장 도착!"
+                placeholderTextColor="#AEAEB2"
+                value={statusText}
+                onChangeText={setStatusText}
+                maxLength={30}
+              />
             </ScrollView>
 
-            <Text style={styles.modalLabel}>한 줄 상태 메시지</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="예: 공부 중, 퇴근길 피곤함, 헬스장 도착!"
-              placeholderTextColor="#AEAEB2"
-              value={statusText}
-              onChangeText={setStatusText}
-              maxLength={30}
-            />
-
-            <TouchableOpacity style={styles.modalConfirmBtn} onPress={handleSaveMood}>
-              <Text style={styles.modalConfirmBtnText}>상태 업데이트</Text>
+            <TouchableOpacity style={styles.modalConfirmBtn} onPress={handleSaveProfile} activeOpacity={0.85}>
+              <Sparkles size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={styles.modalConfirmBtnText}>프로필 저장 완료</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
       </ScrollView>
     </View>
@@ -355,16 +538,19 @@ const styles = StyleSheet.create({
   headerActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF2F3',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    backgroundColor: '#FF7E82',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#FFA2A5',
     flexShrink: 0,
+    shadowColor: '#FF7E82',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
   },
   headerActionBtnText: {
-    color: '#FF7E82',
+    color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '700',
   },
@@ -649,20 +835,40 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
     marginTop: 2,
   },
-  accountLogoutBtn: {
+  accountActionCol: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF1F0',
+    gap: 8,
+  },
+  accountEditBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF2F3',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#FFA39E',
+    borderColor: '#FFD4D7',
+  },
+  accountEditBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FF7E82',
+  },
+  accountLogoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F2F2F7',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
   },
   accountLogoutBtnText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#FF3B30',
+    color: '#8E8E93',
   },
   modalOverlay: commonStyles.modalOverlay,
   modalView: commonStyles.modalBottomSheet,
@@ -675,9 +881,141 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     marginTop: 10,
   },
+  avatarPreviewWrap: {
+    alignItems: 'center',
+    paddingVertical: 10,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#EFEFEF',
+    marginBottom: 10,
+  },
+  avatarLargeCircleTouchable: {
+    position: 'relative',
+    marginBottom: 8,
+  },
+  avatarLargeCircle: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FF7E82',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  avatarLargeImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 38,
+  },
+  avatarCameraBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#FF7E82',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  avatarActionBtnsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  avatarUploadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF2F3',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#FFD4D7',
+  },
+  avatarUploadBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FF7E82',
+  },
+  avatarResetBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F2F2F7',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 16,
+  },
+  avatarResetBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8E8E93',
+  },
+  avatarLargeText: {
+    fontSize: 40,
+  },
+  avatarSubText: {
+    fontSize: 11,
+    color: '#8E8E93',
+    fontWeight: '500',
+  },
+  avatarGridWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingVertical: 6,
+    marginBottom: 8,
+  },
+  avatarGridCell: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#EBEBEB',
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  avatarGridCellActive: {
+    borderColor: '#FF7E82',
+    backgroundColor: '#FFF2F3',
+  },
+  avatarGridEmoji: {
+    fontSize: 22,
+  },
+  avatarCheckBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#FF7E82',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+  modalRowInputs: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
   emojiScroll: {
     flexDirection: 'row',
-    marginBottom: 10,
+    marginBottom: 6,
     paddingVertical: 4,
   },
   emojiChip: {
@@ -708,16 +1046,19 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 14,
     color: '#1C1C1E',
-    marginBottom: 16,
+    marginBottom: 10,
   },
   modalConfirmBtn: {
+    flexDirection: 'row',
     backgroundColor: '#FF7E82',
     padding: 14,
     borderRadius: 12,
+    justifyContent: 'center',
     alignItems: 'center',
+    marginTop: 8,
   },
   modalConfirmBtnText: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#FFFFFF',
     fontWeight: '700',
   },

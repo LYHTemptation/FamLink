@@ -13,18 +13,17 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase, isSupabaseReady } from '../lib/supabase';
-import { User, Lock, Mail, Heart, ArrowRight, ShieldAlert } from 'lucide-react-native';
+import { User, Lock, Mail, Heart, ArrowRight, ShieldAlert, Sparkles, Check } from 'lucide-react-native';
 import { colors, typography } from '../theme';
 
-const AVATAR_LIST = ['👩‍🦰', '👨‍💼', '👦', '👧', '👵', '👴', '🧑', '👱', '👶', '🐱', '🐶'];
-
-const COLOR_LIST = [
-  '#FF7E82', // Coral Pink
-  '#4A90E2', // Soft Blue
-  '#2ECC71', // Emerald Green
-  '#F39C12', // Warm Orange
-  '#9B59B6', // Amethyst Purple
-  '#1ABC9C', // Turquoise/Teal
+const ROLE_PRESETS = [
+  { label: '엄마', avatar: '👩‍🦰', color: '#FF7E82' },
+  { label: '아빠', avatar: '👨‍💼', color: '#4A90E2' },
+  { label: '아들', avatar: '👦', color: '#2ECC71' },
+  { label: '딸', avatar: '👧', color: '#F39C12' },
+  { label: '할머니', avatar: '👵', color: '#9B59B6' },
+  { label: '할아버지', avatar: '👴', color: '#34495E' },
+  { label: '직접 입력', avatar: '🧑', color: '#FF7E82' },
 ];
 
 export default function AuthScreen({ onAuthComplete }) {
@@ -36,9 +35,10 @@ export default function AuthScreen({ onAuthComplete }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [roleName, setRoleName] = useState('아들'); // Custom role name
-  const [selectedAvatar, setSelectedAvatar] = useState(AVATAR_LIST[2]); // Default 👦
-  const [selectedColor, setSelectedColor] = useState(COLOR_LIST[2]); // Default Green
+  const [roleName, setRoleName] = useState('엄마');
+  const [isCustomRole, setIsCustomRole] = useState(false);
+  const [selectedAvatar, setSelectedAvatar] = useState('👩‍🦰');
+  const [selectedColor, setSelectedColor] = useState('#FF7E82');
   const [familyOption, setFamilyOption] = useState('create'); // 'create' or 'join'
   const [familyCode, setFamilyCode] = useState('');
 
@@ -279,56 +279,63 @@ export default function AuthScreen({ onAuthComplete }) {
                 />
               </View>
 
-              {/* Custom Role */}
-              <Text style={styles.label}>가족 내 역할/호칭 (예: 큰딸, 삼촌, 할머니)</Text>
-              <View style={styles.inputWrapper}>
-                <Heart size={16} color="#AEAEB2" style={{ marginRight: 10 }} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="예: 엄마, 아빠, 삼촌, 할머니"
-                  placeholderTextColor="#AEAEB2"
-                  value={roleName}
-                  onChangeText={setRoleName}
-                />
-              </View>
-
-              {/* Avatar Selector Scroll */}
-              <Text style={styles.label}>프로필 아바타 선택</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.avatarScrollContainer}>
-                {AVATAR_LIST.map((avatarItem) => {
-                  const isSelected = selectedAvatar === avatarItem;
+              {/* Custom Role Chips */}
+              <Text style={styles.label}>가족 내 역할/호칭</Text>
+              <View style={styles.roleChipsWrap}>
+                {ROLE_PRESETS.map((preset) => {
+                  const isSelected = isCustomRole ? preset.label === '직접 입력' : roleName === preset.label;
                   return (
                     <TouchableOpacity
-                      key={avatarItem}
+                      key={preset.label}
                       style={[
-                        styles.avatarCell,
-                        isSelected && { borderColor: selectedColor, backgroundColor: selectedColor + '15' }
+                        styles.roleChipItem,
+                        isSelected && styles.roleChipItemActive,
                       ]}
-                      onPress={() => setSelectedAvatar(avatarItem)}
+                      onPress={() => {
+                        if (preset.label === '직접 입력') {
+                          setIsCustomRole(true);
+                          setRoleName('');
+                          setSelectedAvatar('🧑');
+                          setSelectedColor('#FF7E82');
+                        } else {
+                          setIsCustomRole(false);
+                          setRoleName(preset.label);
+                          setSelectedAvatar(preset.avatar);
+                          setSelectedColor(preset.color);
+                        }
+                      }}
+                      activeOpacity={0.7}
                     >
-                      <Text style={styles.avatarEmoji}>{avatarItem}</Text>
+                      <Text style={styles.roleChipEmoji}>{preset.avatar}</Text>
+                      <Text style={[styles.roleChipLabel, isSelected && styles.roleChipLabelActive]}>
+                        {preset.label}
+                      </Text>
+                      {isSelected && <Check size={12} color="#FF7E82" style={{ marginLeft: 2 }} />}
                     </TouchableOpacity>
                   );
                 })}
-              </ScrollView>
+              </View>
 
-              {/* Color Selector */}
-              <Text style={styles.label}>테마 컬러 선택</Text>
-              <View style={styles.colorPaletteRow}>
-                {COLOR_LIST.map((colorItem) => {
-                  const isSelected = selectedColor === colorItem;
-                  return (
-                    <TouchableOpacity
-                      key={colorItem}
-                      style={[
-                        styles.colorDot,
-                        { backgroundColor: colorItem },
-                        isSelected && { borderColor: '#1C1C1E', borderWidth: 2.5 }
-                      ]}
-                      onPress={() => setSelectedColor(colorItem)}
-                    />
-                  );
-                })}
+              {/* Custom Role Input if '직접 입력' selected */}
+              {isCustomRole && (
+                <View style={[styles.inputWrapper, { marginTop: 8 }]}>
+                  <Heart size={16} color="#FF7E82" style={{ marginRight: 10 }} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="호칭을 입력해 주세요 (예: 큰딸, 삼촌, 이모)"
+                    placeholderTextColor="#AEAEB2"
+                    value={roleName}
+                    onChangeText={setRoleName}
+                  />
+                </View>
+              )}
+
+              {/* UX Hint Banner: Avatar can be changed after signup */}
+              <View style={styles.signupHintBanner}>
+                <Sparkles size={14} color="#FF7E82" style={{ marginRight: 6 }} />
+                <Text style={styles.signupHintText}>
+                  프로필 아바타와 닉네임은 가입 후 [가족] 탭에서 언제든지 자유롭게 변경할 수 있어요!
+                </Text>
               </View>
 
               {/* Family Room Option Selector */}
@@ -487,37 +494,58 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#1C1C1E',
   },
-  avatarScrollContainer: {
-    paddingVertical: 6,
+  roleChipsWrap: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 4,
+    marginBottom: 6,
   },
-  avatarCell: {
-    width: 48,
-    height: 48,
-    borderRadius: 10,
+  roleChipItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
     borderWidth: 1.5,
     borderColor: '#EBEBEB',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8F9FA',
   },
-  avatarEmoji: {
-    fontSize: 24,
+  roleChipItemActive: {
+    borderColor: '#FF7E82',
+    backgroundColor: '#FFF2F3',
   },
-  colorPaletteRow: {
+  roleChipEmoji: {
+    fontSize: 16,
+    marginRight: 6,
+  },
+  roleChipLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#636366',
+  },
+  roleChipLabelActive: {
+    color: '#FF7E82',
+    fontWeight: '800',
+  },
+  signupHintBanner: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 6,
-    marginTop: 2,
-    width: '100%',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#EFEFEF',
+    marginTop: 14,
+    marginBottom: 4,
   },
-  colorDot: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderColor: 'rgba(0,0,0,0.05)',
+  signupHintText: {
+    flex: 1,
+    fontSize: 11,
+    color: '#8E8E93',
+    lineHeight: 15,
+    fontWeight: '500',
   },
   familyOptionsRow: {
     flexDirection: 'row',

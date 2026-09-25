@@ -1,5 +1,7 @@
 import styles from './InteriorStyles';
 import React, { useState, useRef, useEffect } from 'react';
+import UserAvatar from './UserAvatar';
+import PetmongGameEngine from './PetmongGameEngine';
 import {
   StyleSheet,
   Text,
@@ -22,6 +24,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Image as ExpoImage } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../lib/supabase';
 import {
@@ -35,6 +38,8 @@ import {
   Gift,
   Smile,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Camera,
   MessageCircle,
   Plus,
@@ -47,11 +52,21 @@ import {
   Palette,
   BookOpen,
 } from 'lucide-react-native';
-import { MoodIcon } from './icons';
+import { MoodIcon, DropHeartIcon, DropCloverIcon, DropStarIcon } from './icons';
+import {
+  getEvolutionStage,
+  getEvolvedEmoji,
+  isMilestoneLevel,
+  EVOLUTION_STAGES,
+  getStageEvolutionPrompt,
+} from '../lib/petmongEvolution';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 const BASE_CANVAS_SIZE = SCREEN_WIDTH - 64; // Account for scrollContent padding 32 + canvasCard padding 32
 const MAX_DAILY_TOUCH = 10; // Daily touch EXP reward limit (10 times = +30 EXP)
+const MAX_DAILY_HARVEST = 15; // Daily harvest limit (15 drops per day)
+const MAX_DAILY_CARE = 2; // Daily care limit when visiting other family members (2 times = +2P)
 const MAX_ACTIVE_ROAMING = 3; // Maximum active wandering family pets simultaneously
 
 // High-Res 3 Sumone-Style Empty Room Shell Backgrounds & Classic Day/Night
@@ -63,155 +78,45 @@ const ROOM_BACKGROUNDS = {
   night: require('../assets/petmong/room_night.jpg'),
 };
 
+// Immediate hardware & memory preloader for room backgrounds (iOS SDWebImage / Android Glide / Web)
+try {
+  Object.values(ROOM_BACKGROUNDS).forEach(src => {
+    if (ExpoImage.prefetch) {
+      ExpoImage.prefetch(src);
+    }
+  });
+} catch (e) {}
+
 const ROOM_THEMES = [
   { id: 'cottage', name: '코티지 원목', emoji: '🏡', desc: '따스한 햇살과 원목 바닥' },
   { id: 'pastel', name: '파스텔 핑크', emoji: '🌸', desc: '사랑스럽고 화사한 핑크 룸' },
   { id: 'midnight', name: '미드나잇 다락방', emoji: '🌌', desc: '신비롭고 아늑한 인디고 밤' },
+  { id: 'day', name: '햇살 가득 낮', emoji: '☀️', desc: '싱그럽고 밝은 오후 햇살 룸' },
+  { id: 'night', name: '달빛 포근한 밤', emoji: '🌙', desc: '조용하고 감성적인 달밤 룸' },
 ];
 
-// Sumone-Style Fixed Room Hotspot Slots (Adjusted for harmonious room perspective)
-const ROOM_SLOTS = [
-  { id: 'window', name: '벽면 창문/아트', category: 'wall', x: 28, y: 15, width: 110, height: 110, label: '+ 창문 자리', defaultEmoji: '🪟', desc: '벽면에 따뜻한 햇살과 바깥 풍경을 담는 창문' },
-  { id: 'sofa', name: '휴식 소파/침대', category: 'rest', x: 8, y: 46, width: 130, height: 105, label: '+ 소파 자리', defaultEmoji: '🛋️', desc: '반려몽이 올라가 낮잠을 즐기는 아늑한 자리' },
-  { id: 'rug', name: '바닥 러그', category: 'floor', x: 30, y: 68, width: 140, height: 95, label: '+ 러그 자리', defaultEmoji: '☁️', desc: '방 중앙 바닥을 포근하게 받쳐주는 러그' },
-  { id: 'lamp', name: '스탠드 조명', category: 'deco', x: 74, y: 35, width: 70, height: 120, label: '+ 조명 자리', defaultEmoji: '💡', desc: '방 안을 은은하고 따뜻하게 밝혀주는 플로어 스탠드' },
-  { id: 'plant', name: '식물 화분/소품', category: 'deco', x: 70, y: 55, width: 80, height: 90, label: '+ 화분 자리', defaultEmoji: '🪴', desc: '싱그러운 초록빛 감성을 더해주는 화분' },
-];
+// Idle Resource Drop Bubbles Configuration & Generator
+const BUBBLE_CONFIG = {
+  heart: { type: 'heart', emoji: '💖', label: '행복 하트', color: '#FF4D6D', exp: 1 },
+  clover: { type: 'clover', emoji: '🍀', label: '행운 클로버', color: '#10B981', exp: 2 },
+  star: { type: 'star', emoji: '⭐', label: '별빛 방울', color: '#F59E0B', exp: 3 },
+};
 
-// Sumone-Style Furniture Objects Catalog per Slot (Unlockable with Family Points & Real Illustration Assets)
-const FURNITURE_CATALOG = [
-  // 1. Window Slot (wall)
-  {
-    id: 'f_win_1',
-    slotId: 'window',
-    category: 'wall',
-    name: '햇살 가득 원목 창문',
-    emoji: '🪟',
-    cost: 150,
-    desc: '살랑이는 커튼 사이로 따스한 햇살이 비추는 감성 창문',
-    image: require('../assets/petmong/obj_window_sunshine.png'),
-  },
-  {
-    id: 'f_win_2',
-    slotId: 'window',
-    category: 'wall',
-    name: '별빛 밤하늘 창문',
-    emoji: '🌌',
-    cost: 220,
-    desc: '달콤한 밤하늘과 별똥별이 내다보이는 로맨틱 창문',
-  },
-
-  // 2. Sofa/Bed Slot (rest)
-  {
-    id: 'f_sofa_1',
-    slotId: 'sofa',
-    category: 'rest',
-    name: '머스터드 패브릭 소파',
-    emoji: '🛋️',
-    cost: 200,
-    desc: '반려몽이 뒹굴거리며 낮잠 자기 좋은 포근한 2인용 소파',
-    image: require('../assets/petmong/obj_sofa_yellow.png'),
-  },
-  {
-    id: 'f_sofa_2',
-    slotId: 'sofa',
-    category: 'rest',
-    name: '구름 솜털 침대',
-    emoji: '🛏️',
-    cost: 260,
-    desc: '누우면 바로 꿀잠에 빠져드는 마법의 폭신 침대',
-  },
-  {
-    id: 'f_sofa_3',
-    slotId: 'sofa',
-    category: 'rest',
-    name: '원목 흔들의자',
-    emoji: '🪑',
-    cost: 320,
-    desc: '살랑살랑 흔들리며 피로를 풀어주는 빈티지 흔들의자',
-  },
-
-  // 3. Rug Slot (floor)
-  {
-    id: 'f_rug_1',
-    slotId: 'rug',
-    category: 'floor',
-    name: '몽실몽실 구름 러그',
-    emoji: '☁️',
-    cost: 100,
-    desc: '발이 편안해지는 부드럽고 폭신한 크림화이트 구름 카펫',
-    image: require('../assets/petmong/obj_rug_cloud.png'),
-  },
-  {
-    id: 'f_rug_2',
-    slotId: 'rug',
-    category: 'floor',
-    name: '체크 파스텔 러그',
-    emoji: '🧇',
-    cost: 160,
-    desc: '북유럽 감성이 물씬 풍기는 따뜻한 와플 러그',
-  },
-  {
-    id: 'f_rug_3',
-    slotId: 'rug',
-    category: 'floor',
-    name: '포근한 꽃잎 원형 러그',
-    emoji: '🌸',
-    cost: 220,
-    desc: '봄날 벚꽃이 핀 듯 향긋한 원형 러그',
-  },
-
-  // 4. Floor Lamp Slot (deco)
-  {
-    id: 'f_lamp_1',
-    slotId: 'lamp',
-    category: 'deco',
-    name: '클래식 빈티지 조명',
-    emoji: '💡',
-    cost: 130,
-    desc: '고즈넉한 원목 기둥과 플리츠 갓의 아늑한 플로어 램프',
-    image: require('../assets/petmong/obj_lamp_vintage.png'),
-  },
-  {
-    id: 'f_lamp_2',
-    slotId: 'lamp',
-    category: 'deco',
-    name: '따뜻한 별빛 무드등',
-    emoji: '🌟',
-    cost: 180,
-    desc: '방 안을 은은하고 따뜻하게 비춰주는 수면등',
-  },
-
-  // 5. Plant & Shelf Slot (deco)
-  {
-    id: 'f_plant_1',
-    slotId: 'plant',
-    category: 'deco',
-    name: '몬스테라 테라코타 화분',
-    emoji: '🪴',
-    cost: 140,
-    desc: '피톤치드가 뿜어져 나오는 싱그럽고 생기 넘치는 관엽식물',
-    image: require('../assets/petmong/obj_plant_pot.png'),
-  },
-  {
-    id: 'f_plant_2',
-    slotId: 'plant',
-    category: 'deco',
-    name: '장난감 곰인형',
-    emoji: '🧸',
-    cost: 160,
-    desc: '반려몽이 잘 때 꼭 껴안고 자는 영원한 단짝 친구',
-  },
-  {
-    id: 'f_plant_3',
-    slotId: 'plant',
-    category: 'deco',
-    name: '감성 레트로 LP 오디오',
-    emoji: '📻',
-    cost: 240,
-    desc: '잔잔한 재즈와 클래식이 흘러나오는 미니 턴테이블',
-  },
-];
+const createRandomDrop = (userId) => {
+  const rand = Math.random();
+  const type = rand < 0.62 ? 'heart' : (rand < 0.88 ? 'clover' : 'star');
+  // Safe bounds within visible full-screen floor/room area (x: 15%~82%, y: 22%~64%)
+  const x = Math.round(15 + Math.random() * 67);
+  const y = Math.round(22 + Math.random() * 42);
+  return {
+    id: `drop_${Date.now()}_${Math.random().toString(36).substr(2, 7)}`,
+    userId,
+    type,
+    x,
+    y,
+    createdAt: Date.now(),
+  };
+};
 
 const EMOJI_OPTIONS = ['🐶', '🐱', '🐰', '🐼', '🦊', '🐻', '🐹', '🐥'];
 const PERSONALITY_OPTIONS = ['다정한', '장난꾸러기', '잠꾸러기', '애교쟁이', '호기심많은'];
@@ -288,65 +193,102 @@ const getRandomDialogue = (personality) => {
   return list[Math.floor(Math.random() * list.length)];
 };
 
-// Sumone-Style Fixed Slot Object Component (Renders only equipped objects in normal room view)
-const RoomSlotObject = React.memo(({
-  slot,
-  equippedItem,
-  onPressSlot,
-  styles,
-}) => {
-  // If no item is equipped in this slot, keep the room background clean (no plus badges)
-  if (!equippedItem) {
-    return null;
-  }
+// Idle Resource Harvest Bubble Component with float & pop animations
+const HarvestBubble = React.memo(({ drop, onHarvest }) => {
+  const floatAnim = useRef(new Animated.Value(0)).current;
+  const popScale = useRef(new Animated.Value(1)).current;
+  const popOpacity = useRef(new Animated.Value(1)).current;
+  const [popping, setPopping] = useState(false);
+
+  useEffect(() => {
+    const randomDuration = 1400 + Math.floor(Math.random() * 500);
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim, {
+          toValue: -8,
+          duration: randomDuration,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: USE_NATIVE_DRIVER,
+        }),
+        Animated.timing(floatAnim, {
+          toValue: 0,
+          duration: randomDuration,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: USE_NATIVE_DRIVER,
+        }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [floatAnim]);
+
+  const handlePress = () => {
+    if (popping) return;
+    setPopping(true);
+    Animated.parallel([
+      Animated.timing(popScale, {
+        toValue: 1.45,
+        duration: 160,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: USE_NATIVE_DRIVER,
+      }),
+      Animated.timing(popOpacity, {
+        toValue: 0,
+        duration: 220,
+        useNativeDriver: USE_NATIVE_DRIVER,
+      }),
+    ]).start(() => {
+      onHarvest(drop);
+    });
+  };
+
+  const config = BUBBLE_CONFIG[drop.type] || BUBBLE_CONFIG.heart;
+
+  const renderDropIcon = () => {
+    const iconProps = { size: 26, color: config.color };
+    switch (drop.type) {
+      case 'clover':
+        return <DropCloverIcon {...iconProps} />;
+      case 'star':
+        return <DropStarIcon {...iconProps} />;
+      case 'heart':
+      default:
+        return <DropHeartIcon {...iconProps} />;
+    }
+  };
 
   return (
-    <TouchableOpacity
-      activeOpacity={0.85}
-      onPress={() => onPressSlot(slot)}
+    <Animated.View
       style={[
-        styles.slotObjectWrapper,
+        styles.bubbleContainer,
         {
-          left: `${slot.x}%`,
-          top: `${slot.y}%`,
+          left: `${drop.x}%`,
+          top: `${drop.y}%`,
+          opacity: popOpacity,
+          transform: [
+            { translateY: floatAnim },
+            { scale: popScale },
+          ],
         },
       ]}
     >
-      <View style={styles.slotEquippedContainer}>
-        {equippedItem.image ? (
-          <View
-            style={[
-              styles.slotItemImageWrapper,
-              slot.width ? { width: slot.width, height: slot.height } : null,
-            ]}
-          >
-            {Platform.OS === 'web' ? (
-              <img
-                src={equippedItem.image}
-                alt={equippedItem.name}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'contain',
-                  mixBlendMode: 'multiply',
-                  display: 'block',
-                  pointerEvents: 'none',
-                  userSelect: 'none',
-                }}
-              />
-            ) : (
-              <Image
-                source={equippedItem.image}
-                style={styles.slotItemImage}
-                resizeMode="contain"
-              />
-            )}
+      <TouchableOpacity
+        activeOpacity={0.65}
+        onPress={handlePress}
+        style={styles.bubbleTouchable}
+      >
+        <View style={styles.bubbleIconWrapper}>
+          {renderDropIcon()}
+        </View>
+        {popping && (
+          <View style={styles.bubbleFloatParticle}>
+            <Text style={[styles.bubbleFloatParticleText, { color: config.color }]}>
+              +{config.exp} EXP
+            </Text>
           </View>
-        ) : (
-          <Text style={styles.slotEquippedEmoji}>{equippedItem.emoji}</Text>
         )}
-      </View>
-    </TouchableOpacity>
+      </TouchableOpacity>
+    </Animated.View>
   );
 });
 
@@ -472,8 +414,6 @@ const RoamingFamilyPetmong = React.memo(({
   const bobAnim = useRef(new Animated.Value(0)).current;
   const tapBounceAnim = useRef(new Animated.Value(0)).current;
   const [idleEmote, setIdleEmote] = useState(null);
-  const [isRestingOnFurniture, setIsRestingOnFurniture] = useState(false);
-  const [restingFurnitureName, setRestingFurnitureName] = useState(null);
   const isMountedRef = useRef(true);
   const walkTimerRef = useRef(null);
 
@@ -483,41 +423,25 @@ const RoamingFamilyPetmong = React.memo(({
     // Bobbing loop for footstep vibration
     const bobLoop = Animated.loop(
       Animated.sequence([
-        Animated.timing(bobAnim, { toValue: -3.5, duration: 220, useNativeDriver: true }),
-        Animated.timing(bobAnim, { toValue: 0, duration: 220, useNativeDriver: true }),
+        Animated.timing(bobAnim, { toValue: -3.5, duration: 220, useNativeDriver: USE_NATIVE_DRIVER }),
+        Animated.timing(bobAnim, { toValue: 0, duration: 220, useNativeDriver: USE_NATIVE_DRIVER }),
       ])
     );
 
     const wander = () => {
       if (!isMountedRef.current) return;
 
-      // Furniture interaction: check if cozy furniture is placed on floor
-      const cozyFurnitureList = (placedFurniture || []).filter(f => 
-        RESTING_FURNITURE_EMOJIS.includes(f.emoji) && f.y >= 20 && f.y <= 75
-      );
-
-      // 30% chance to target a cozy placed furniture item if available
-      const shouldTargetFurniture = cozyFurnitureList.length > 0 && Math.random() < 0.35;
+      // Pick a random target within open floor areas
+      const isSide = Math.random() > 0.3;
       let nextX, nextY;
-      let targetFurniture = null;
-
-      if (shouldTargetFurniture) {
-        targetFurniture = cozyFurnitureList[Math.floor(Math.random() * cozyFurnitureList.length)];
-        // Slightly offset so the pet looks like sitting right on/beside the furniture
-        nextX = Math.max(6, Math.min(84, Math.round(targetFurniture.x + 2)));
-        nextY = Math.max(34, Math.min(68, Math.round(targetFurniture.y + 4)));
+      if (isSide) {
+        nextX = Math.random() > 0.5 
+          ? Math.round(10 + Math.random() * 22)   // 10% ~ 32% (Left open floor)
+          : Math.round(62 + Math.random() * 22);  // 62% ~ 84% (Right open floor)
+        nextY = Math.round(36 + Math.random() * 24); // 36% ~ 60%
       } else {
-        // Pick a random target within open floor areas (preferring sides & upper back area)
-        const isSide = Math.random() > 0.3;
-        if (isSide) {
-          nextX = Math.random() > 0.5 
-            ? Math.round(8 + Math.random() * 24)    // 8% ~ 32% (Left open floor)
-            : Math.round(62 + Math.random() * 22);  // 62% ~ 84% (Right open floor)
-          nextY = Math.round(38 + Math.random() * 22); // 38% ~ 60%
-        } else {
-          nextX = Math.round(12 + Math.random() * 70); // 12% ~ 82% (Upper back floor)
-          nextY = Math.round(34 + Math.random() * 8);  // 34% ~ 42%
-        }
+        nextX = Math.round(14 + Math.random() * 68); // 14% ~ 82% (Upper back floor)
+        nextY = Math.round(30 + Math.random() * 12); // 30% ~ 42%
       }
 
       const dx = nextX - currentX.current;
@@ -526,16 +450,14 @@ const RoamingFamilyPetmong = React.memo(({
 
       // Face direction of walk
       if (dx < -2) {
-        Animated.timing(scaleXAnim, { toValue: -1, duration: 160, useNativeDriver: true }).start();
+        Animated.timing(scaleXAnim, { toValue: -1, duration: 160, useNativeDriver: USE_NATIVE_DRIVER }).start();
       } else if (dx > 2) {
-        Animated.timing(scaleXAnim, { toValue: 1, duration: 160, useNativeDriver: true }).start();
+        Animated.timing(scaleXAnim, { toValue: 1, duration: 160, useNativeDriver: USE_NATIVE_DRIVER }).start();
       }
 
       const duration = Math.max(2000, Math.min(4500, dist * 70));
 
       setIdleEmote(null);
-      setIsRestingOnFurniture(false);
-      setRestingFurnitureName(null);
       bobLoop.start();
 
       Animated.timing(posAnim, {
@@ -551,32 +473,19 @@ const RoamingFamilyPetmong = React.memo(({
         bobAnim.setValue(0);
 
         if (finished) {
-          if (targetFurniture) {
-            // Settled on cozy furniture! Show cute snoozing/relaxed state
-            setIsRestingOnFurniture(true);
-            setRestingFurnitureName(targetFurniture.name || '가구');
-            const sleepEmotes = ['💤', '💤', '✨', '🥰', '☕'];
-            setIdleEmote(sleepEmotes[Math.floor(Math.random() * sleepEmotes.length)]);
-
-            // Longer resting duration on comfortable furniture
-            const restDuration = 6000 + Math.random() * 5000;
-            walkTimerRef.current = setTimeout(wander, restDuration);
-          } else {
-            // Normal arrival emotion bubble
-            if (Math.random() < 0.6) {
-              const ownerMood = owner?.mood || '😊';
-              const emotes = [ownerMood, '💤', '❤️', '🐾', '✨', '🎵', '🌿'];
-              const chosen = emotes[Math.floor(Math.random() * emotes.length)];
-              setIdleEmote(chosen);
-              setTimeout(() => {
-                if (isMountedRef.current && !targetFurniture) setIdleEmote(null);
-              }, 2600);
-            }
-
-            // Staggered pacing: only 2-3 characters wander simultaneously, others rest
-            const nextDelay = 4500 + (index % 3) * 2500 + Math.random() * 4000;
-            walkTimerRef.current = setTimeout(wander, nextDelay);
+          // Arrival emotion bubble (sleep, heart, mood, sparkles, music)
+          if (Math.random() < 0.65) {
+            const ownerMood = owner?.mood || '😊';
+            const emotes = [ownerMood, '💤', '❤️', '🐾', '✨', '🎵', '🌿', '🍀'];
+            const chosen = emotes[Math.floor(Math.random() * emotes.length)];
+            setIdleEmote(chosen);
+            setTimeout(() => {
+              if (isMountedRef.current) setIdleEmote(null);
+            }, 2600);
           }
+
+          const nextDelay = 4500 + (index % 3) * 2500 + Math.random() * 4000;
+          walkTimerRef.current = setTimeout(wander, nextDelay);
         }
       });
     };
@@ -595,8 +504,8 @@ const RoamingFamilyPetmong = React.memo(({
   const handlePress = () => {
     // Tap reaction: happy jump
     Animated.sequence([
-      Animated.timing(tapBounceAnim, { toValue: -12, duration: 120, useNativeDriver: true }),
-      Animated.spring(tapBounceAnim, { toValue: 0, friction: 3, tension: 60, useNativeDriver: true }),
+      Animated.timing(tapBounceAnim, { toValue: -12, duration: 120, useNativeDriver: USE_NATIVE_DRIVER }),
+      Animated.spring(tapBounceAnim, { toValue: 0, friction: 3, tension: 60, useNativeDriver: USE_NATIVE_DRIVER }),
     ]).start();
     onPress(char);
   };
@@ -675,15 +584,10 @@ const RoamingFamilyPetmong = React.memo(({
         {/* Owner & Pet Name Tag */}
         <View style={styles.subCharLabelBox}>
           <View style={styles.subCharOwnerRow}>
-            <Text style={styles.subCharOwnerAvatar}>{owner?.avatar || '👦'}</Text>
+            <UserAvatar avatar={owner?.avatar} size={14} style={{ marginRight: 4 }} />
             <Text style={styles.subCharOwnerName}>{owner?.name || '가족'}의</Text>
           </View>
           <Text style={styles.subCharLabelText}>{char.name} (Lv.{char.level || 1})</Text>
-          {isRestingOnFurniture && restingFurnitureName && (
-            <View style={styles.restingBadge}>
-              <Text style={styles.restingBadgeText}>{restingFurnitureName}에서 휴식 중 💤</Text>
-            </View>
-          )}
         </View>
       </TouchableOpacity>
     </Animated.View>
@@ -693,6 +597,7 @@ const RoamingFamilyPetmong = React.memo(({
 export default function InteriorScreen({
   points,
   onDeductPoints,
+  onAwardPoints,
   placedFurniture,
   onUpdatePlacedFurniture,
   floorPlanUrl,
@@ -707,14 +612,15 @@ export default function InteriorScreen({
 }) {
   const insets = useSafeAreaInsets();
   
-  // UI States
-  const [shopModalVisible, setShopModalVisible] = useState(false);
-  const [selectedSlotId, setSelectedSlotId] = useState('sofa'); // Currently selected slot in shop modal: 'rug', 'sofa', 'shelf', 'play'
-  const [unlockedFurnitureIds, setUnlockedFurnitureIds] = useState(['f_sofa_1', 'f_rug_1']); // Default starting unlocked items
-  
+  // Idle Game & Room Navigation States
+  const [selectedRoomUserId, setSelectedRoomUserId] = useState(currentUserProfile?.id);
+  const [dropsByRoom, setDropsByRoom] = useState({});
+  const [dailyHarvestCount, setDailyHarvestCount] = useState(0);
+  const [dailyCareCount, setDailyCareCount] = useState(0);
+
   // Petmong States (Linked with Supabase)
   const [myCharacter, setMyCharacter] = useState(null);
-  const [mainCharTransparentUrl, setMainCharTransparentUrl] = useState(null);
+  const [displayedTransparentUrl, setDisplayedTransparentUrl] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [familyCharacters, setFamilyCharacters] = useState([]);
   
@@ -738,6 +644,19 @@ export default function InteriorScreen({
   const [levelUpModalVisible, setLevelUpModalVisible] = useState(false);
   const [levelUpInfo, setLevelUpInfo] = useState({ name: '', level: 1 });
 
+  // 4-Stage Evolution Milestone Modal State
+  const [evolutionModalVisible, setEvolutionModalVisible] = useState(false);
+  const [evolutionData, setEvolutionData] = useState(null);
+  const prevLevelRef = useRef(myCharacter?.level || 1);
+  const hasInitializedLevelRef = useRef(false);
+
+  const handleCloseEvolutionModal = () => {
+    if (evolutionData?.stage?.stage && myCharacter?.id) {
+      AsyncStorage.setItem(`@famlink_celebrated_stage_${myCharacter.id}_${evolutionData.stage.stage}`, 'true').catch(() => {});
+    }
+    setEvolutionModalVisible(false);
+  };
+
   // Sub Character Dialogue State
   const [subBubbleCharId, setSubBubbleCharId] = useState(null);
   const [subBubbleText, setSubBubbleText] = useState('');
@@ -749,46 +668,153 @@ export default function InteriorScreen({
   // Family Petmong Book / Roster Modal State
   const [familyBookModalVisible, setFamilyBookModalVisible] = useState(false);
 
-  // Sumone-Style 3 Room Theme State (Default: cottage 빈 방)
-  const [roomTheme, setRoomTheme] = useState('cottage');
+  // Sumone-Style Room Theme States (Per-room themes so each member's room has its own theme)
+  const [roomThemesByRoom, setRoomThemesByRoom] = useState({});
   const [themeModalVisible, setThemeModalVisible] = useState(false);
+
+  // Active room's theme (defaults to 'cottage')
+  const activeRoomTheme = (selectedRoomUserId && roomThemesByRoom[selectedRoomUserId]) || 'cottage';
+
+  // Floating Mini Capsule HUD State (Default: collapsed capsule for maximum room visibility)
+  const [isHudExpanded, setIsHudExpanded] = useState(false);
+  const hudCollapseTimer = useRef(null);
+
+  const expandHudTemporarily = (durationMs = 4000) => {
+    setIsHudExpanded(true);
+    if (hudCollapseTimer.current) clearTimeout(hudCollapseTimer.current);
+    hudCollapseTimer.current = setTimeout(() => {
+      setIsHudExpanded(false);
+    }, durationMs);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (hudCollapseTimer.current) clearTimeout(hudCollapseTimer.current);
+    };
+  }, []);
 
   // Main Character Float Animation
   const floatAnim = useRef(new Animated.Value(0)).current;
 
+  // Auto initialize selectedRoomUserId
+  useEffect(() => {
+    if (currentUserProfile?.id && !selectedRoomUserId) {
+      setSelectedRoomUserId(currentUserProfile.id);
+    }
+  }, [currentUserProfile?.id]);
+
+  const displayedCharacter = petmongCharacters.find(c => c.user_id === selectedRoomUserId) || (selectedRoomUserId === currentUserProfile?.id ? myCharacter : null);
+  const displayedOwner = familyMembers.find(m => m.id === selectedRoomUserId) || (selectedRoomUserId === currentUserProfile?.id ? currentUserProfile : null);
+  const isVisitingOther = selectedRoomUserId !== currentUserProfile?.id;
+  const activeRoomDrops = dropsByRoom[selectedRoomUserId] || [];
+
+  // 🎮 Real-time Petmong Game Vitals (Tamagotchi Engine)
+  const [petVitals, setPetVitals] = useState({
+    hunger: 80,
+    happiness: 85,
+    cleanliness: 90,
+    energy: 95,
+  });
+
+  const activeCharId = displayedCharacter?.id || currentUserProfile?.id || currentUser;
+
+  useEffect(() => {
+    if (!activeCharId) return;
+    AsyncStorage.getItem(`@famlink_game_vitals_${activeCharId}`)
+      .then(res => {
+        if (res) {
+          try {
+            setPetVitals(JSON.parse(res));
+          } catch (e) {}
+        }
+      })
+      .catch(() => {});
+  }, [activeCharId]);
+
+  const handleUpdateVitals = (updater) => {
+    setPetVitals(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : { ...prev, ...updater };
+      if (activeCharId) {
+        AsyncStorage.setItem(`@famlink_game_vitals_${activeCharId}`, JSON.stringify(next)).catch(() => {});
+      }
+      return next;
+    });
+  };
+
+  const handleGameGainExp = (amount = 5) => {
+    if (!displayedCharacter) return;
+    if (onAwardExp && displayedCharacter.user_id) {
+      onAwardExp(displayedCharacter.user_id, amount, '반려몽 게임 케어');
+    } else {
+      setMyCharacter(prev => {
+        if (!prev) return prev;
+        let newExp = (prev.exp || 0) + amount;
+        let newLevel = prev.level || 1;
+        if (newExp >= 100) {
+          newExp -= 100;
+          newLevel += 1;
+          setLevelUpInfo({ name: prev.name, level: newLevel });
+          setLevelUpModalVisible(true);
+        }
+        return { ...prev, exp: newExp, level: newLevel };
+      });
+    }
+  };
+
+  const handleGameCareAction = () => {
+    if (!isVisitingOther) return;
+    if (dailyCareCount >= MAX_DAILY_CARE) {
+      Alert.alert('오늘의 돌봄 완료! 💕', `오늘 가족 반려몽 돌봄(일일 ${MAX_DAILY_CARE}회)을 이미 모두 완료했습니다!`);
+      return;
+    }
+    const nextCare = dailyCareCount + 1;
+    setDailyCareCount(nextCare);
+    if (currentUserProfile?.id) {
+      const today = new Date().toISOString().split('T')[0];
+      const careKey = `PETMONG_CARE_${currentUserProfile.id}_${today}`;
+      AsyncStorage.setItem(careKey, String(nextCare)).catch(() => {});
+    }
+    if (onAwardPoints) {
+      onAwardPoints(1, `가족 반려몽 돌봄 보너스 (${nextCare}/${MAX_DAILY_CARE})`);
+    }
+    Alert.alert('가족 반려몽 돌봄 완료! 💖', `가족의 반려몽에게 맛있는 간식을 챙겨주었습니다!\n돌봄 보너스 +1P가 지급되었습니다. (${nextCare}/${MAX_DAILY_CARE}회)`);
+  };
+
+  // Dynamic roaming characters: all characters in family EXCEPT the owner of the active room
+  const roamingList = petmongCharacters
+    .filter(c => c.user_id !== selectedRoomUserId)
+    .map((c, idx) => ({
+      ...c,
+      x: 10 + (idx * 28) % 70,
+      y: 54 + (idx * 14) % 24,
+    }))
+    .slice(0, MAX_ACTIVE_ROAMING);
+
   useEffect(() => {
     if (familyId && currentUserProfile?.id) {
       const mine = petmongCharacters.find(c => c.user_id === currentUserProfile.id);
-      const others = petmongCharacters.filter(c => c.user_id !== currentUserProfile.id).map((c, idx) => ({
-        ...c,
-        x: 10 + (idx * 28) % 70,
-        y: 54 + (idx * 14) % 24,
-      }));
-      
       if (mine) {
         setMyCharacter(mine);
         setCreateModalVisible(false);
       } else {
         setCreateModalVisible(true);
       }
-      
-      setFamilyCharacters(others);
     }
   }, [familyId, currentUserProfile, petmongCharacters]);
 
   useEffect(() => {
-    if (myCharacter?.image_url) {
-      if (transparentImageCache.has(myCharacter.image_url)) {
-        setMainCharTransparentUrl(transparentImageCache.get(myCharacter.image_url));
+    if (displayedCharacter?.image_url) {
+      if (transparentImageCache.has(displayedCharacter.image_url)) {
+        setDisplayedTransparentUrl(transparentImageCache.get(displayedCharacter.image_url));
       } else {
-        makeBackgroundTransparent(myCharacter.image_url).then(url => {
-          setMainCharTransparentUrl(url);
+        makeBackgroundTransparent(displayedCharacter.image_url).then(url => {
+          setDisplayedTransparentUrl(url);
           // Persist the clean transparent PNG to Supabase so it permanently never has a white background
-          if (myCharacter.id && !myCharacter.image_url.startsWith('data:image/png')) {
+          if (displayedCharacter.id && !displayedCharacter.image_url.startsWith('data:image/png')) {
             supabase
               .from('petmong_characters')
               .update({ image_url: url })
-              .eq('id', myCharacter.id)
+              .eq('id', displayedCharacter.id)
               .then(() => {
                 console.log('Successfully persisted transparent petmong character image in DB');
               });
@@ -796,26 +822,191 @@ export default function InteriorScreen({
         });
       }
     } else {
-      setMainCharTransparentUrl(null);
+      setDisplayedTransparentUrl(null);
     }
-  }, [myCharacter?.id, myCharacter?.image_url]);
+  }, [displayedCharacter?.id, displayedCharacter?.image_url]);
+
+  // Method B: Image-to-Image AI Stage Evolution
+  const triggerAiEvolution = async (char, stage) => {
+    try {
+      let base64Image = null;
+      if (char.image_url.startsWith('data:image')) {
+        base64Image = char.image_url;
+      } else {
+        const resp = await fetch(char.image_url);
+        const blob = await resp.blob();
+        base64Image = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.readAsDataURL(blob);
+        });
+      }
+
+      const clientApiKey = (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_GEMINI_API_KEY) || '';
+      let evolvedImageUrl = null;
+
+      // 1. Try Supabase Edge Function first
+      try {
+        const { data, error } = await supabase.functions.invoke('generate-petmong', {
+          body: {
+            imageBase64: base64Image,
+            personality: char.personality || '다정한',
+            mode: 'evolve',
+            targetStage: stage.stage,
+            characterName: char.name,
+            apiKey: clientApiKey,
+          }
+        });
+        if (!error && data?.imageUrl) {
+          evolvedImageUrl = data.imageUrl;
+        }
+      } catch (edgeErr) {
+        console.log('Edge function evolve try:', edgeErr);
+      }
+
+      // 2. Client-side Gemini + Imagen fallback if clientApiKey is available
+      if (!evolvedImageUrl && clientApiKey) {
+        try {
+          const cleanBase64 = base64Image.replace(/^data:image\/\w+;base64,/, '');
+          const visionResp = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${clientApiKey}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{
+                  parts: [
+                    { text: "Analyze this cute 2D pet monster. Describe its body color, shape, face traits, and cute vibe in 2 concise sentences so its evolved form retains 100% identity." },
+                    { inlineData: { mimeType: "image/jpeg", data: cleanBase64 } }
+                  ]
+                }]
+              })
+            }
+          );
+          let traits = "A cute 2D monster";
+          if (visionResp.ok) {
+            const vData = await visionResp.json();
+            traits = vData.candidates?.[0]?.content?.parts?.[0]?.text || traits;
+          }
+
+          const stagePrompt = getStageEvolutionPrompt(stage.stage, traits, char.personality);
+          const imagenResp = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${clientApiKey}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                instances: [{ prompt: `${traits}. ${stagePrompt}` }],
+                parameters: { sampleCount: 1, aspectRatio: "1:1", outputMimeType: "image/jpeg" }
+              })
+            }
+          );
+          if (imagenResp.ok) {
+            const imgData = await imagenResp.json();
+            const b64 = imgData.predictions?.[0]?.bytesBase64Encoded;
+            if (b64) {
+              evolvedImageUrl = `data:image/jpeg;base64,${b64}`;
+            }
+          }
+        } catch (clientErr) {
+          console.log('Client AI evolve fallback:', clientErr);
+        }
+      }
+
+      if (evolvedImageUrl) {
+        await supabase
+          .from('petmong_characters')
+          .update({ image_url: evolvedImageUrl })
+          .eq('id', char.id);
+
+        setMyCharacter(prev => ({ ...prev, image_url: evolvedImageUrl }));
+        setPetmongCharacters(prev => prev.map(c => c.id === char.id ? { ...c, image_url: evolvedImageUrl } : c));
+        setEvolutionData(prev => prev ? { ...prev, isAiEvolving: false, newImageUrl: evolvedImageUrl } : null);
+      } else {
+        setEvolutionData(prev => prev ? { ...prev, isAiEvolving: false } : null);
+      }
+    } catch (err) {
+      console.log('AI Evolution note (graceful fallback):', err);
+      setEvolutionData(prev => prev ? { ...prev, isAiEvolving: false } : null);
+    }
+  };
+
+  // Detect Milestone Level Up for 4-Stage Evolution (Lv.5, Lv.10, Lv.20)
+  useEffect(() => {
+    if (!myCharacter?.level || !myCharacter?.id) return;
+
+    // 1. Skip celebration on initial mount/data load to prevent repetitive popup loops
+    if (!hasInitializedLevelRef.current) {
+      hasInitializedLevelRef.current = true;
+      prevLevelRef.current = myCharacter.level;
+      return;
+    }
+
+    const oldLevel = prevLevelRef.current;
+    const newLevel = myCharacter.level;
+    prevLevelRef.current = newLevel;
+
+    if (newLevel > oldLevel && isMilestoneLevel(newLevel)) {
+      const stage = getEvolutionStage(newLevel);
+      const celebrationKey = `@famlink_celebrated_stage_${myCharacter.id}_${stage.stage}`;
+
+      AsyncStorage.getItem(celebrationKey).then(celebrated => {
+        if (celebrated === 'true') {
+          // Already celebrated this stage milestone, do not popup again!
+          return;
+        }
+
+        // Mark as celebrated immediately so repeated events/renders don't re-trigger
+        AsyncStorage.setItem(celebrationKey, 'true').catch(() => {});
+
+        setEvolutionData({
+          character: myCharacter,
+          stage: stage,
+          previousLevel: oldLevel,
+          previousImageUrl: myCharacter.image_url,
+          newLevel: newLevel,
+          isAiEvolving: !!myCharacter.image_url,
+          newImageUrl: null,
+        });
+        setEvolutionModalVisible(true);
+
+        // Trigger AI Evolution if character has image_url, or evolve emoji
+        if (myCharacter.image_url) {
+          triggerAiEvolution(myCharacter, stage);
+        } else if (myCharacter.emoji) {
+          const newEmoji = getEvolvedEmoji(myCharacter.emoji, newLevel);
+          if (newEmoji !== myCharacter.emoji) {
+            supabase
+              .from('petmong_characters')
+              .update({ emoji: newEmoji })
+              .eq('id', myCharacter.id)
+              .then(() => {
+                setMyCharacter(prev => ({ ...prev, emoji: newEmoji }));
+                setPetmongCharacters(prev => prev.map(c => c.id === myCharacter.id ? { ...c, emoji: newEmoji } : c));
+              })
+              .catch(() => {});
+          }
+        }
+      }).catch(() => {});
+    }
+  }, [myCharacter?.id, myCharacter?.level]);
 
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
-        Animated.timing(floatAnim, { toValue: -3, duration: 1800, useNativeDriver: true }),
-        Animated.timing(floatAnim, { toValue: 0, duration: 1800, useNativeDriver: true }),
+        Animated.timing(floatAnim, { toValue: -3, duration: 1800, useNativeDriver: USE_NATIVE_DRIVER }),
+        Animated.timing(floatAnim, { toValue: 0, duration: 1800, useNativeDriver: USE_NATIVE_DRIVER }),
       ])
     ).start();
   }, [floatAnim]);
 
-  // Load daily touch count for today from DB (Supabase petmong_activities) & AsyncStorage
+  // Load daily touch count, daily harvest, daily care, room theme, and idle drops
   useEffect(() => {
     if (!currentUserProfile?.id) return;
     const today = new Date().toISOString().split('T')[0];
     const key = `PETMONG_TOUCH_${currentUserProfile.id}_${today}`;
 
-    // 1. Initial quick load from local storage
+    // 1. Load daily touch count from local storage
     AsyncStorage.getItem(key).then(val => {
       if (val !== null) {
         setDailyTouchCount(parseInt(val, 10) || 0);
@@ -824,19 +1015,114 @@ export default function InteriorScreen({
       }
     }).catch(err => console.log('Error loading daily touch count:', err));
 
-    // Load unlocked furniture items
-    AsyncStorage.getItem('PETMONG_UNLOCKED_FURNITURE').then(val => {
-      if (val) {
-        try {
-          const parsed = JSON.parse(val);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setUnlockedFurnitureIds(prev => Array.from(new Set([...prev, ...parsed])));
-          }
-        } catch (e) {}
+    // 2. Load daily harvest & care counts
+    AsyncStorage.getItem(`PETMONG_DAILY_HARVEST_${currentUserProfile.id}_${today}`).then(val => {
+      if (val !== null) {
+        const loaded = parseInt(val, 10) || 0;
+        setDailyHarvestCount(Math.min(MAX_DAILY_HARVEST, loaded));
       }
     }).catch(() => {});
 
-    // 2. Fetch ground-truth count from Supabase petmong_activities for cross-device sync (e.g. mobile <-> PC)
+    AsyncStorage.getItem(`PETMONG_DAILY_CARE_${currentUserProfile.id}_${today}`).then(val => {
+      if (val !== null) setDailyCareCount(parseInt(val, 10) || 0);
+    }).catch(() => {});
+
+    // 3. Load theme preference per room & idle drops
+    if (familyId) {
+      const themesKey = `PETMONG_ROOM_THEMES_${familyId}`;
+      AsyncStorage.getItem(themesKey).then(val => {
+        if (val) {
+          try {
+            const parsed = JSON.parse(val);
+            if (parsed && typeof parsed === 'object') {
+              setRoomThemesByRoom(parsed);
+            }
+          } catch (e) {}
+        }
+      }).catch(() => {});
+
+      const dropsKey = `PETMONG_ROOM_DROPS_${familyId}`;
+      const lastTimeKey = `PETMONG_LAST_IDLE_TIME_${familyId}`;
+
+      Promise.all([
+        AsyncStorage.getItem(dropsKey),
+        AsyncStorage.getItem(lastTimeKey),
+      ]).then(([storedDropsStr, lastTimeStr]) => {
+        let currentDropsMap = {};
+        if (storedDropsStr) {
+          try {
+            currentDropsMap = JSON.parse(storedDropsStr) || {};
+          } catch (e) {}
+        }
+
+        const now = Date.now();
+        const lastTime = lastTimeStr ? parseInt(lastTimeStr, 10) : now;
+        const elapsedMinutes = Math.floor((now - lastTime) / (1000 * 60));
+        // Offline accumulation: 1 drop per 4 minutes, maximum 10 drops
+        const offlineSpawns = Math.min(10, Math.floor(elapsedMinutes / 4));
+
+        const targetUserIds = [
+          currentUserProfile.id,
+          ...familyMembers.map(m => m.id).filter(id => id && id !== currentUserProfile.id),
+        ];
+
+        let updated = false;
+        targetUserIds.forEach(uId => {
+          const userDrops = currentDropsMap[uId] ? [...currentDropsMap[uId]] : [];
+          // If it's current user's room and daily harvest reached limit, do not spawn more
+          if (uId === currentUserProfile.id && dailyHarvestCount >= MAX_DAILY_HARVEST) {
+            return;
+          }
+          const needed = offlineSpawns > 0 ? offlineSpawns : (userDrops.length === 0 ? 3 : 0);
+          const toAdd = Math.min(needed, 10 - userDrops.length);
+          if (toAdd > 0) {
+            for (let i = 0; i < toAdd; i++) {
+              userDrops.push(createRandomDrop(uId));
+            }
+            currentDropsMap[uId] = userDrops;
+            updated = true;
+          }
+        });
+
+        setDropsByRoom(currentDropsMap);
+        AsyncStorage.setItem(lastTimeKey, String(now)).catch(() => {});
+        if (updated) {
+          AsyncStorage.setItem(dropsKey, JSON.stringify(currentDropsMap)).catch(() => {});
+        }
+      }).catch(err => console.log('Error loading idle drops:', err));
+    }
+
+    // 4. Fetch ground-truth count from Supabase petmong_activities for cross-device sync
+    if (familyId) {
+      // Query recent room theme updates for all members
+      supabase
+        .from('petmong_activities')
+        .select('action_type, created_at')
+        .eq('family_id', familyId)
+        .ilike('action_type', 'ROOM_THEME_UPDATE:%')
+        .order('created_at', { ascending: true })
+        .then(({ data, error }) => {
+          if (data && !error) {
+            const dbThemes = {};
+            data.forEach(row => {
+              // Format: ROOM_THEME_UPDATE:userId:themeId
+              const parts = row.action_type.split(':');
+              if (parts.length >= 3) {
+                const uId = parts[1];
+                const tId = parts[2];
+                if (ROOM_THEMES.some(t => t.id === tId)) {
+                  dbThemes[uId] = tId;
+                }
+              }
+            });
+            if (Object.keys(dbThemes).length > 0) {
+              setRoomThemesByRoom(prev => ({ ...prev, ...dbThemes }));
+            }
+          }
+        })
+        .catch(err => console.log('Error fetching DB room themes:', err));
+    }
+
     if (myCharacter?.id) {
       const todayStart = `${today}T00:00:00.000Z`;
       supabase
@@ -854,16 +1140,110 @@ export default function InteriorScreen({
         })
         .catch(err => console.log('Error syncing touch count with DB:', err));
     }
-  }, [currentUserProfile?.id, myCharacter?.id]);
+  }, [currentUserProfile?.id, myCharacter?.id, familyId, familyMembers.length, dailyHarvestCount]);
 
-  // Handle Tap Interaction on My Petmong (Sumone Style)
+  // Real-time Supabase listener for Room Theme Updates across incognito/different devices
+  useEffect(() => {
+    if (!familyId) return;
+    const themeChannel = supabase
+      .channel(`realtime-room-themes-${familyId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'petmong_activities',
+          filter: `family_id=eq.${familyId}`,
+        },
+        (payload) => {
+          const actionType = payload.new?.action_type || '';
+          if (actionType.startsWith('ROOM_THEME_UPDATE:')) {
+            const parts = actionType.split(':');
+            if (parts.length >= 3) {
+              const uId = parts[1];
+              const tId = parts[2];
+              if (ROOM_THEMES.some(t => t.id === tId)) {
+                setRoomThemesByRoom(prev => {
+                  const updated = { ...prev, [uId]: tId };
+                  AsyncStorage.setItem(`PETMONG_ROOM_THEMES_${familyId}`, JSON.stringify(updated)).catch(() => {});
+                  return updated;
+                });
+              }
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(themeChannel);
+    };
+  }, [familyId]);
+
+  // Real-time idle drop generation interval (adds 1 drop every 22 seconds up to 10)
+  useEffect(() => {
+    if (!familyId || !selectedRoomUserId) return;
+    // Do not spawn drops in my room if today's harvest limit is already reached
+    if (selectedRoomUserId === currentUserProfile?.id && dailyHarvestCount >= MAX_DAILY_HARVEST) {
+      return;
+    }
+    const interval = setInterval(() => {
+      setDropsByRoom(prev => {
+        // Double check daily limit
+        if (selectedRoomUserId === currentUserProfile?.id && dailyHarvestCount >= MAX_DAILY_HARVEST) {
+          return prev;
+        }
+        const currentList = prev[selectedRoomUserId] || [];
+        if (currentList.length >= 10) return prev;
+        const newDrop = createRandomDrop(selectedRoomUserId);
+        const updated = {
+          ...prev,
+          [selectedRoomUserId]: [...currentList, newDrop],
+        };
+        AsyncStorage.setItem(`PETMONG_ROOM_DROPS_${familyId}`, JSON.stringify(updated)).catch(() => {});
+        return updated;
+      });
+    }, 22000);
+
+    return () => clearInterval(interval);
+  }, [familyId, selectedRoomUserId, currentUserProfile?.id, dailyHarvestCount]);
+
+  // Helper to trigger character bounce & speech bubble without EXP
+  const handlePetBounceOnly = (text) => {
+    Animated.sequence([
+      Animated.timing(bounceAnim, { toValue: -18, duration: 150, useNativeDriver: USE_NATIVE_DRIVER }),
+      Animated.spring(bounceAnim, { toValue: 0, friction: 3, tension: 70, useNativeDriver: USE_NATIVE_DRIVER }),
+    ]).start();
+
+    setBubbleText(text);
+    setBubbleVisible(true);
+    bubbleAnim.setValue(0);
+    Animated.spring(bubbleAnim, {
+      toValue: 1,
+      friction: 5,
+      tension: 60,
+      useNativeDriver: USE_NATIVE_DRIVER,
+    }).start();
+
+    if (bubbleTimerRef.current) clearTimeout(bubbleTimerRef.current);
+    bubbleTimerRef.current = setTimeout(() => {
+      Animated.timing(bubbleAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: USE_NATIVE_DRIVER,
+      }).start(() => setBubbleVisible(false));
+    }, 4500);
+  };
+
+  // Handle Tap Interaction on Active Petmong (Sumone Style)
   const handlePetTap = () => {
-    if (!myCharacter) return;
+    const targetChar = displayedCharacter;
+    if (!targetChar) return;
 
     // 1. Bounce animation
     Animated.sequence([
-      Animated.timing(bounceAnim, { toValue: -18, duration: 150, useNativeDriver: true }),
-      Animated.spring(bounceAnim, { toValue: 0, friction: 3, tension: 70, useNativeDriver: true }),
+      Animated.timing(bounceAnim, { toValue: -18, duration: 150, useNativeDriver: USE_NATIVE_DRIVER }),
+      Animated.spring(bounceAnim, { toValue: 0, friction: 3, tension: 70, useNativeDriver: USE_NATIVE_DRIVER }),
     ]).start();
 
     // 2. Heart floating particle animation
@@ -872,14 +1252,14 @@ export default function InteriorScreen({
     Animated.timing(heartAnim, {
       toValue: 1,
       duration: 1100,
-      useNativeDriver: true,
+      useNativeDriver: USE_NATIVE_DRIVER,
     }).start(() => setHeartVisible(false));
 
     // 3. Speech bubble with personality & time-based quote
     const isLimitReached = dailyTouchCount >= MAX_DAILY_TOUCH;
     const quote = isLimitReached
       ? '오늘 사랑은 듬뿍 받았어요! 내일 또 쓰다듬어주세요 🥰'
-      : getRandomDialogue(myCharacter.personality);
+      : getRandomDialogue(targetChar.personality || '다정한');
     setBubbleText(quote);
     setBubbleVisible(true);
     bubbleAnim.setValue(0);
@@ -887,7 +1267,7 @@ export default function InteriorScreen({
       toValue: 1,
       friction: 5,
       tension: 60,
-      useNativeDriver: true,
+      useNativeDriver: USE_NATIVE_DRIVER,
     }).start();
 
     if (bubbleTimerRef.current) clearTimeout(bubbleTimerRef.current);
@@ -895,7 +1275,7 @@ export default function InteriorScreen({
       Animated.timing(bubbleAnim, {
         toValue: 0,
         duration: 300,
-        useNativeDriver: true,
+        useNativeDriver: USE_NATIVE_DRIVER,
       }).start(() => setBubbleVisible(false));
     }, 4500);
 
@@ -910,10 +1290,11 @@ export default function InteriorScreen({
         AsyncStorage.setItem(key, String(nextCount)).catch(e => console.log(e));
       }
 
-      if (onAwardExp && currentUserProfile?.id) {
-        onAwardExp(currentUserProfile.id, 3, `반려몽 쓰다듬기 (${nextCount}/${MAX_DAILY_TOUCH})`);
+      if (onAwardExp && targetChar.user_id) {
+        onAwardExp(targetChar.user_id, 3, `반려몽 쓰다듬기 (${nextCount}/${MAX_DAILY_TOUCH})`);
       } else {
         setMyCharacter(prev => {
+          if (!prev) return prev;
           let newExp = (prev.exp || 0) + 3;
           let newLevel = prev.level || 1;
           if (newExp >= 100) {
@@ -923,6 +1304,277 @@ export default function InteriorScreen({
             setLevelUpModalVisible(true);
           }
           return { ...prev, exp: newExp, level: newLevel };
+        });
+      }
+    }
+  };
+
+  // Handle Harvesting a Single Idle Drop (Heart, Clover, Star)
+  const handleHarvestDrop = (drop) => {
+    const config = BUBBLE_CONFIG[drop.type] || BUBBLE_CONFIG.heart;
+
+    if (isVisitingOther) {
+      // Visiting other family member: 품앗이 돌봄!
+      const targetOwner = familyMembers.find(m => m.id === selectedRoomUserId);
+      const targetName = targetOwner?.name || '가족';
+
+      if (dailyCareCount >= MAX_DAILY_CARE) {
+        Alert.alert(
+          '오늘의 돌봄 완료! 💕',
+          `오늘 가족 반려몽 돌봄(일일 ${MAX_DAILY_CARE}회)을 이미 모두 완료했습니다!\n내일 다시 사랑과 관심을 전해주세요 🥰`
+        );
+        return;
+      }
+
+      const currentList = dropsByRoom[selectedRoomUserId] || [];
+      const updatedList = currentList.filter(d => d.id !== drop.id);
+      const updatedMap = {
+        ...dropsByRoom,
+        [selectedRoomUserId]: updatedList,
+      };
+      setDropsByRoom(updatedMap);
+      if (familyId) {
+        AsyncStorage.setItem(`PETMONG_ROOM_DROPS_${familyId}`, JSON.stringify(updatedMap)).catch(() => {});
+      }
+
+      const nextCare = dailyCareCount + 1;
+      setDailyCareCount(nextCare);
+      const today = new Date().toISOString().split('T')[0];
+      AsyncStorage.setItem(`PETMONG_DAILY_CARE_${currentUserProfile.id}_${today}`, String(nextCare)).catch(() => {});
+
+      // Award EXP to visited petmong strictly within daily care limit
+      if (onAwardExp) {
+        onAwardExp(selectedRoomUserId, config.exp + 1, `가족 돌봄 방울 수확 (+${config.exp + 1} EXP) (${nextCare}/${MAX_DAILY_CARE})`);
+      }
+
+      if (onAwardPoints) {
+        onAwardPoints(1, `${targetName} 반려몽 돌봄 보너스 (+1P)`);
+      }
+
+      if (familyId && displayedCharacter?.id) {
+        supabase.from('petmong_activities').insert({
+          family_id: familyId,
+          actor_id: myCharacter?.id || displayedCharacter.id,
+          target_id: displayedCharacter.id,
+          action_type: `가족 반려몽 방울 돌봄 품앗이 (+1P) (${nextCare}/${MAX_DAILY_CARE})`,
+        }).then(() => {}).catch(() => {});
+      }
+
+      Alert.alert(
+        '돌봄 품앗이 완료! 💕',
+        `${targetName} 님의 반려몽 방울을 대신 수확해주었습니다!\n경험치 +${config.exp + 1} EXP 선물 & 돌봄 보너스 1P 획득! 🪙 (오늘 ${nextCare}/${MAX_DAILY_CARE}회)`
+      );
+
+      handlePetBounceOnly(`${currentUserProfile?.name || '가족'} 님이 방울을 따줬어요! 헤헤 고마워요 💕`);
+    } else {
+      // My room harvest!
+      if (dailyHarvestCount >= MAX_DAILY_HARVEST) {
+        Alert.alert(
+          '오늘의 수확 완료! 🌟',
+          `오늘 수확 가능한 방울(${MAX_DAILY_HARVEST}개)을 모두 수확했습니다!\n내일 자정에 새로운 방울이 생성됩니다. 푹 쉬고 내일 만나요!`
+        );
+        return;
+      }
+
+      const currentList = dropsByRoom[selectedRoomUserId] || [];
+      const updatedList = currentList.filter(d => d.id !== drop.id);
+      const updatedMap = {
+        ...dropsByRoom,
+        [selectedRoomUserId]: updatedList,
+      };
+      setDropsByRoom(updatedMap);
+      if (familyId) {
+        AsyncStorage.setItem(`PETMONG_ROOM_DROPS_${familyId}`, JSON.stringify(updatedMap)).catch(() => {});
+      }
+
+      const prevCount = dailyHarvestCount;
+      const nextCount = Math.min(MAX_DAILY_HARVEST, prevCount + 1);
+      setDailyHarvestCount(nextCount);
+      const today = new Date().toISOString().split('T')[0];
+      AsyncStorage.setItem(`PETMONG_DAILY_HARVEST_${currentUserProfile.id}_${today}`, String(nextCount)).catch(() => {});
+
+      expandHudTemporarily(3500);
+
+      if (onAwardExp && currentUserProfile?.id) {
+        onAwardExp(currentUserProfile.id, config.exp, `방치 자원 수확 (+${config.exp} EXP)`);
+      }
+
+      // Check economic milestones: 5 items = +1P, 15 items = +2P
+      if (nextCount % 5 === 0 && nextCount <= MAX_DAILY_HARVEST) {
+        if (onAwardPoints) {
+          onAwardPoints(1, `반려몽 방치 수확 (${nextCount}개 달성)`);
+        }
+        Alert.alert(
+          '수확 포인트 획득! 🎉',
+          `행복 방울 ${nextCount}개 수확 달성! 1P를 획득했습니다! 🪙`
+        );
+      }
+
+      if (nextCount === MAX_DAILY_HARVEST) {
+        if (onAwardPoints) {
+          onAwardPoints(2, '반려몽 방치 수확 일일 완판 (+2P)');
+        }
+        Alert.alert(
+          '일일 완판 보너스! 🌟',
+          `오늘의 방울 ${MAX_DAILY_HARVEST}개 완판을 달성했습니다! 일일 완판 보너스 2P를 획득했습니다! 🏆`
+        );
+      }
+
+      const quotes = {
+        heart: '방울 따줘서 고마워요! 사랑이 가득 채워졌어요~ 💖',
+        clover: '행운의 클로버 방울이다! 오늘 우리 가족에게 좋은 일이 생길 거예요 🍀',
+        star: '반짝반짝 별빛 방울! 오늘 밤엔 좋은 꿈 꿀게요 ⭐',
+      };
+      handlePetBounceOnly(quotes[drop.type] || '방울 따줘서 고마워요! 몸이 가벼워졌어요 🥰');
+    }
+  };
+
+  // Handle Harvesting All Drops in Current Room
+  const handleHarvestAll = () => {
+    const currentList = dropsByRoom[selectedRoomUserId] || [];
+    if (currentList.length === 0) return;
+
+    if (isVisitingOther) {
+      if (dailyCareCount >= MAX_DAILY_CARE) {
+        Alert.alert(
+          '오늘의 돌봄 완료! 💕',
+          `오늘 가족 반려몽 돌봄(일일 ${MAX_DAILY_CARE}회)을 이미 모두 완료했습니다!\n내일 다시 사랑과 관심을 전해주세요 🥰`
+        );
+        return;
+      }
+
+      const availableCare = MAX_DAILY_CARE - dailyCareCount;
+      const careCountToHarvest = Math.min(currentList.length, availableCare);
+      const dropsToHarvest = currentList.slice(0, careCountToHarvest);
+      const remainingDrops = currentList.slice(careCountToHarvest);
+
+      const updatedMap = {
+        ...dropsByRoom,
+        [selectedRoomUserId]: remainingDrops,
+      };
+      setDropsByRoom(updatedMap);
+      if (familyId) {
+        AsyncStorage.setItem(`PETMONG_ROOM_DROPS_${familyId}`, JSON.stringify(updatedMap)).catch(() => {});
+      }
+
+      const nextCare = dailyCareCount + careCountToHarvest;
+      setDailyCareCount(nextCare);
+      const today = new Date().toISOString().split('T')[0];
+      AsyncStorage.setItem(`PETMONG_DAILY_CARE_${currentUserProfile.id}_${today}`, String(nextCare)).catch(() => {});
+
+      const targetOwner = familyMembers.find(m => m.id === selectedRoomUserId);
+      const targetName = targetOwner?.name || '가족';
+      const totalExp = dropsToHarvest.reduce((sum, d) => sum + ((BUBBLE_CONFIG[d.type]?.exp || 1) + 1), 0);
+
+      if (onAwardExp) {
+        onAwardExp(selectedRoomUserId, totalExp, `가족 돌봄 방울 일괄 수확 (+${totalExp} EXP) (${nextCare}/${MAX_DAILY_CARE})`);
+      }
+
+      if (onAwardPoints) {
+        onAwardPoints(careCountToHarvest, `${targetName} 반려몽 돌봄 보너스 (+${careCountToHarvest}P)`);
+      }
+
+      if (familyId && displayedCharacter?.id) {
+        supabase.from('petmong_activities').insert({
+          family_id: familyId,
+          actor_id: myCharacter?.id || displayedCharacter.id,
+          target_id: displayedCharacter.id,
+          action_type: `가족 반려몽 방울 일괄 돌봄 (+${careCountToHarvest}P) (${nextCare}/${MAX_DAILY_CARE})`,
+        }).then(() => {}).catch(() => {});
+      }
+
+      Alert.alert(
+        '모두 돌봄 완료! 💕',
+        `${targetName} 님의 방울 ${careCountToHarvest}개를 돌봐주었습니다!\n${totalExp} EXP 선물 & 돌봄 보너스 ${careCountToHarvest}P를 획득했습니다! 🪙 (오늘 ${nextCare}/${MAX_DAILY_CARE}회 완료)`
+      );
+
+      handlePetBounceOnly(`${currentUserProfile?.name || '가족'} 님이 방울을 따줬어요! 최고야! 💕`);
+    } else {
+      if (dailyHarvestCount >= MAX_DAILY_HARVEST) {
+        Alert.alert(
+          '오늘의 수확 완료! 🌟',
+          `오늘 수확 가능한 방울(${MAX_DAILY_HARVEST}개)을 모두 수확했습니다!\n내일 자정에 새로운 방울이 생성됩니다. 푹 쉬고 내일 만나요!`
+        );
+        return;
+      }
+
+      const availableHarvest = MAX_DAILY_HARVEST - dailyHarvestCount;
+      const countToHarvest = Math.min(currentList.length, availableHarvest);
+      const dropsToHarvest = currentList.slice(0, countToHarvest);
+      const remainingDrops = currentList.slice(countToHarvest);
+
+      const updatedMap = {
+        ...dropsByRoom,
+        [selectedRoomUserId]: remainingDrops,
+      };
+      setDropsByRoom(updatedMap);
+      if (familyId) {
+        AsyncStorage.setItem(`PETMONG_ROOM_DROPS_${familyId}`, JSON.stringify(updatedMap)).catch(() => {});
+      }
+
+      const totalExp = dropsToHarvest.reduce((acc, d) => acc + (BUBBLE_CONFIG[d.type]?.exp || 1), 0);
+      if (onAwardExp && currentUserProfile?.id) {
+        onAwardExp(currentUserProfile.id, totalExp, `방치 자원 모두 수확 (+${totalExp} EXP)`);
+      }
+
+      const prevCount = dailyHarvestCount;
+      const nextCount = prevCount + countToHarvest;
+      setDailyHarvestCount(nextCount);
+      const today = new Date().toISOString().split('T')[0];
+      AsyncStorage.setItem(`PETMONG_DAILY_HARVEST_${currentUserProfile.id}_${today}`, String(nextCount)).catch(() => {});
+
+      expandHudTemporarily(4500);
+
+      const milestonesPassed = Math.floor(nextCount / 5) - Math.floor(prevCount / 5);
+      let bonusPoints = milestonesPassed;
+      if (prevCount < MAX_DAILY_HARVEST && nextCount >= MAX_DAILY_HARVEST) {
+        bonusPoints += 2;
+      }
+
+      if (bonusPoints > 0 && onAwardPoints) {
+        onAwardPoints(bonusPoints, `반려몽 방치 수확 (${countToHarvest}개 일괄 수확 보너스)`);
+        Alert.alert(
+          '모두 수확 완료! 🎉',
+          `방울 ${countToHarvest}개를 한 번에 수확하여 +${totalExp} EXP와 +${bonusPoints}P를 획득했습니다! 🪙 (오늘: ${nextCount}/${MAX_DAILY_HARVEST}개)`
+        );
+      } else {
+        Alert.alert(
+          '모두 수확 완료! ✨',
+          `방울 ${countToHarvest}개를 한 번에 수확하여 +${totalExp} EXP를 획득했습니다! (오늘 수확: ${nextCount}/${MAX_DAILY_HARVEST}개)`
+        );
+      }
+
+      handlePetBounceOnly('와아! 방울들을 전부 따줘서 몸이 깃털처럼 가벼워졌어요~ 💖');
+    }
+  };
+
+  const handleSelectTheme = (themeId) => {
+    if (!currentUserProfile?.id) return;
+    const updatedThemes = {
+      ...roomThemesByRoom,
+      [currentUserProfile.id]: themeId,
+    };
+    setRoomThemesByRoom(updatedThemes);
+    setThemeModalVisible(false);
+
+    // 1. Local storage caching
+    if (familyId) {
+      AsyncStorage.setItem(`PETMONG_ROOM_THEMES_${familyId}`, JSON.stringify(updatedThemes)).catch(() => {});
+    }
+
+    // 2. Realtime sync across devices/incognito via Supabase
+    if (familyId) {
+      const myPetId = myCharacter?.id || (displayedCharacter?.user_id === currentUserProfile.id ? displayedCharacter.id : null);
+      if (myPetId) {
+        supabase.from('petmong_activities').insert({
+          family_id: familyId,
+          actor_id: myPetId,
+          target_id: myPetId,
+          action_type: `ROOM_THEME_UPDATE:${currentUserProfile.id}:${themeId}`,
+        }).then(() => {
+          console.log('Successfully synced room theme to Supabase');
+        }).catch(err => {
+          console.log('Error syncing room theme to DB:', err);
         });
       }
     }
@@ -963,27 +1615,24 @@ export default function InteriorScreen({
 
     if (!result.canceled && result.assets[0].base64) {
       setIsGenerating(true);
-      
       try {
         const { data, error } = await supabase.functions.invoke('generate-petmong', {
           body: { imageBase64: result.assets[0].base64, personality: newPersonality }
         });
 
-        if (error) {
-          throw new Error(error.message || '서버 응답 오류');
-        }
+        if (error) throw new Error(error.message || '서버 응답 오류');
 
         const newCharData = {
           user_id: currentUserProfile.id,
           family_id: familyId,
-          name: newName,
+          name: newName.trim(),
           emoji: null,
           image_url: data.imageUrl,
           personality: newPersonality,
           level: 1,
           exp: 0,
         };
-        
+
         const { data: insertedChar, error: insertError } = await supabase
           .from('petmong_characters')
           .insert(newCharData)
@@ -996,7 +1645,6 @@ export default function InteriorScreen({
         setMyCharacter(insertedChar);
         setCreateModalVisible(false);
         setPetmongCharacters(prev => [...prev, insertedChar]);
-        
         Alert.alert('탄생 완료! 🎉', '나를 똑닮은 귀여운 반려몽이 부화했어요!');
       } catch (err) {
         setIsGenerating(false);
@@ -1048,13 +1696,13 @@ export default function InteriorScreen({
   // Handle Interaction
   const handleInteract = (actionType) => {
     if (!selectedTargetChar || !myCharacter) return;
-    
     const expGain = actionType === 'gift' ? 15 : 5;
 
     if (onAwardExp && currentUserProfile?.id) {
       onAwardExp(currentUserProfile.id, expGain, `가족 반려몽과 상호작용 (+${expGain} EXP)`);
     } else {
       setMyCharacter(prev => {
+        if (!prev) return prev;
         let newExp = (prev.exp || 0) + expGain;
         let newLevel = prev.level || 1;
         if (newExp >= 100) {
@@ -1069,404 +1717,167 @@ export default function InteriorScreen({
     setInteractionModalVisible(false);
   };
 
-  // Sumone-Style Slot & Object Unlock/Equip Handlers
-  const handleUnlockAndEquip = (item) => {
-    if (points < item.cost) {
-      Alert.alert('포인트 부족 ⚠️', `[${item.name}] 잠금 해제에는 ${item.cost}P가 필요합니다. 스몰톡 및 장보기로 포인트를 모아보세요!`);
-      return;
-    }
-
-    Alert.alert(
-      '오브젝트 잠금 해제 & 장착',
-      `[${item.name}]을(를) ${item.cost} 포인트로 해금하여 방에 바로 장착하시겠습니까?`,
-      [
-        { text: '취소', style: 'cancel' },
-        {
-          text: '해금 & 장착 💖',
-          onPress: () => {
-            if (onDeductPoints) onDeductPoints(item.cost);
-
-            // 1. Mark as unlocked
-            const newUnlocked = Array.from(new Set([...unlockedFurnitureIds, item.id]));
-            setUnlockedFurnitureIds(newUnlocked);
-            AsyncStorage.setItem('PETMONG_UNLOCKED_FURNITURE', JSON.stringify(newUnlocked)).catch(() => {});
-
-            // 2. Equip to the designated slot
-            const otherSlots = (placedFurniture || []).filter(f => f.slotId !== item.slotId);
-            const targetSlot = ROOM_SLOTS.find(s => s.id === item.slotId);
-            const newPlacedItem = {
-              id: `placed-${item.id}`,
-              catalogId: item.id,
-              slotId: item.slotId,
-              name: item.name,
-              emoji: item.emoji,
-              x: targetSlot ? targetSlot.x : 42,
-              y: targetSlot ? targetSlot.y : 55,
-            };
-
-            const updated = [...otherSlots, newPlacedItem];
-            if (onUpdatePlacedFurniture) onUpdatePlacedFurniture(updated);
-
-            setShopModalVisible(false);
-            Alert.alert('장착 완료! ✨', `[${item.name}]이(가) 방에 예쁘게 배치되었습니다!`);
-          },
-        },
-      ]
-    );
-  };
-
-  const handleEquipUnlocked = (item) => {
-    const otherSlots = (placedFurniture || []).filter(f => f.slotId !== item.slotId);
-    const targetSlot = ROOM_SLOTS.find(s => s.id === item.slotId);
-    const newPlacedItem = {
-      id: `placed-${item.id}`,
-      catalogId: item.id,
-      slotId: item.slotId,
-      name: item.name,
-      emoji: item.emoji,
-      x: targetSlot ? targetSlot.x : 42,
-      y: targetSlot ? targetSlot.y : 55,
-    };
-
-    const updated = [...otherSlots, newPlacedItem];
-    if (onUpdatePlacedFurniture) onUpdatePlacedFurniture(updated);
-    setShopModalVisible(false);
-    Alert.alert('교체 완료! 🛋️', `[${item.name}]으로 방 배치를 변경했습니다.`);
-  };
-
-  const handleUnequipSlot = (slotId) => {
-    const updated = (placedFurniture || []).filter(f => f.slotId !== slotId);
-    if (onUpdatePlacedFurniture) onUpdatePlacedFurniture(updated);
-    setShopModalVisible(false);
-    Alert.alert('해제 완료 🧹', '해당 슬롯의 가구를 보관함에 넣었습니다.');
-  };
-
-  const handlePressSlot = (slot) => {
-    setSelectedSlotId(slot.id);
-    setShopModalVisible(true);
-  };
-
-  const filteredCatalog = FURNITURE_CATALOG.filter((f) => f.slotId === selectedSlotId);
-
   return (
-    <View style={styles.container}>
-      {/* Sub-header Bar */}
-      <View style={styles.subHeaderBar}>
-        <View style={styles.headerTextGroup}>
-          <Text style={styles.subHeaderTitle}>반려몽 🐾</Text>
-          <Text style={styles.subHeaderSub} numberOfLines={1} ellipsizeMode="tail">
-            {myCharacter ? `${myCharacter.name} (${myCharacter.personality})` : '가족 AI 펫과 방 꾸미기'}
-          </Text>
-        </View>
+    <View style={styles.fullscreenContainer}>
+      {/* Fullscreen High-Resolution Room Background Image (Hardware Accelerated by expo-image) */}
+      <ExpoImage
+        source={ROOM_BACKGROUNDS[activeRoomTheme] || ROOM_BACKGROUNDS.cottage}
+        style={styles.fullscreenBg}
+        contentFit="cover"
+        transition={0}
+        priority="high"
+        cachePolicy="memory-disk"
+      />
 
-        <TouchableOpacity
-          style={styles.openShopBtn}
-          onPress={() => setShopModalVisible(true)}
-          activeOpacity={0.8}
+      {/* Top Floating Glass Header (Family Room Tabs & Quick Actions) */}
+      <View style={styles.topFloatingHeader}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.familyTabsScroll}
+          contentContainerStyle={styles.familyTabsRow}
         >
-          <Layers size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
-          <Text style={styles.openShopBtnText}>방 꾸미기</Text>
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Points Status Bar */}
-        <View style={styles.pointsBarCard}>
-          <View style={styles.pointsBarLeft}>
-            <Trophy size={18} color="#F1C40F" style={{ marginRight: 6 }} />
-            <Text style={styles.pointsBarLabel}>사용 가능한 포인트</Text>
-          </View>
-          <Text style={styles.pointsBarValue}>{points} P</Text>
-        </View>
-
-        {/* Main Pet Room Interactive Canvas */}
-        <View style={styles.canvasCard}>
-          {/* Room Header & Quick Action Toolbar */}
-          <View style={styles.canvasHeader}>
-            <View style={styles.canvasTitleGroup}>
-              <Text style={styles.canvasTitle}>우리 가족 아늑한 방</Text>
-              <Text style={styles.canvasAreaSubtitle}>
-                {myCharacter ? `${myCharacter.name}와 함께하는 공간` : '반려몽 생성 필요'}
-              </Text>
-            </View>
-
-            {!myCharacter && (
-              <TouchableOpacity
-                style={[styles.logBtn, { backgroundColor: '#FFEBEB' }]}
-                onPress={() => setCreateModalVisible(true)}
-              >
-                <Sparkles size={13} color="#FF7E82" style={{ marginRight: 4 }} />
-                <Text style={[styles.logBtnText, { color: '#FF7E82' }]}>반려몽 만들기</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Quick Control Toolbar (Room Theme, Family Book, Daily Touch) */}
-          <View style={styles.roomActionBar}>
-            {/* Room Theme Selector Button */}
-            <TouchableOpacity
-              style={styles.roomActionBtn}
-              onPress={() => setThemeModalVisible(true)}
-              activeOpacity={0.8}
-            >
-              <Palette size={14} color="#D9534F" style={{ marginRight: 4 }} />
-              <Text style={styles.roomActionBtnEmoji}>
-                {ROOM_THEMES.find(t => t.id === roomTheme)?.emoji || '🏡'}
-              </Text>
-              <Text style={styles.roomActionBtnText}>
-                {ROOM_THEMES.find(t => t.id === roomTheme)?.name || '테마 변경'}
-              </Text>
-            </TouchableOpacity>
-
-            {/* Family Petmong Book Button */}
-            <TouchableOpacity
-              style={[styles.roomActionBtn, styles.roomActionBtnBlue]}
-              onPress={() => setFamilyBookModalVisible(true)}
-              activeOpacity={0.8}
-            >
-              <BookOpen size={14} color="#3B82F6" style={{ marginRight: 4 }} />
-              <Text style={[styles.roomActionBtnText, { color: '#2563EB' }]}>
-                도감 ({petmongCharacters.length})
-              </Text>
-            </TouchableOpacity>
-
-            {/* Daily Pet Touch Progress Chip */}
-            {myCharacter && (
-              <View
-                style={[
-                  styles.roomTouchChip,
-                  dailyTouchCount >= MAX_DAILY_TOUCH
-                    ? styles.roomTouchChipDone
-                    : styles.roomTouchChipProgress,
-                ]}
-              >
-                {dailyTouchCount >= MAX_DAILY_TOUCH ? (
-                  <>
-                    <Sparkles size={13} color="#059669" style={{ marginRight: 4 }} />
-                    <Text style={styles.roomTouchChipTextDone}>오늘 완료 🎉</Text>
-                  </>
-                ) : (
-                  <>
-                    <Heart size={13} color="#FF4D6D" fill="#FF4D6D" style={{ marginRight: 4 }} />
-                    <Text style={styles.roomTouchChipTextProgress}>
-                      쓰다듬기 {dailyTouchCount}/{MAX_DAILY_TOUCH}
-                    </Text>
-                  </>
-                )}
-              </View>
-            )}
-          </View>
-
-          {/* Interactive Room Canvas */}
+          {/* My Room Chip */}
           <TouchableOpacity
-            activeOpacity={1}
-            onPress={() => setSelectedFurnitureId(null)}
-            style={styles.canvasContainer}
+            style={[
+              styles.familyRoomChip,
+              selectedRoomUserId === currentUserProfile?.id && styles.familyRoomChipActive,
+            ]}
+            onPress={() => setSelectedRoomUserId(currentUserProfile?.id)}
+            activeOpacity={0.8}
           >
-            {/* High-Resolution Game Art Room Background Image */}
-            <Image
-              source={ROOM_BACKGROUNDS[roomTheme]}
-              style={styles.roomBgImage}
-              resizeMode="cover"
-            />
-
-            {/* Sumone-Style Fixed Room Slots & Equipped Objects */}
-            {ROOM_SLOTS.map((slot) => {
-              const equipped = (placedFurniture || []).find(f => f.slotId === slot.id);
-              // Enrich equipped item with full catalog definition (e.g. image asset)
-              const catalogItem = equipped ? FURNITURE_CATALOG.find(c => c.id === equipped.catalogId) : null;
-              const mergedEquipped = equipped
-                ? { ...equipped, image: catalogItem?.image || equipped.image }
-                : null;
-
-              return (
-                <RoomSlotObject
-                  key={slot.id}
-                  slot={slot}
-                  equippedItem={mergedEquipped}
-                  onPressSlot={handlePressSlot}
-                  styles={styles}
-                />
-              );
-            })}
-
-            {/* Autonomous Roaming Family Petmongs in Background (Optimized for up to MAX_ACTIVE_ROAMING concurrent pets) */}
-            {familyCharacters.slice(0, MAX_ACTIVE_ROAMING).map((char, index) => {
-              const owner = familyMembers.find(m => m.id === char.user_id);
-              return (
-                <RoamingFamilyPetmong
-                  key={char.id}
-                  char={char}
-                  owner={owner}
-                  index={index}
-                  placedFurniture={placedFurniture}
-                  subBubbleCharId={subBubbleCharId}
-                  subBubbleText={subBubbleText}
-                  onPress={() => handleSubCharPress(char)}
-                  styles={styles}
-                />
-              );
-            })}
-
-            {/* My Main Petmong Character (Standing naturally in the room) */}
+            <Text style={styles.familyRoomChipAvatar}>🏠</Text>
+            <Text
+              style={[
+                styles.familyRoomChipText,
+                selectedRoomUserId === currentUserProfile?.id && styles.familyRoomChipTextActive,
+              ]}
+            >
+              내 방
+            </Text>
             {myCharacter && (
-              <Animated.View
-                style={[
-                  styles.mainCharContainer,
-                  { transform: [{ translateY: Animated.add(floatAnim, bounceAnim) }] },
-                ]}
-              >
-                {/* Speech Bubble */}
-                {bubbleVisible && (
-                  <Animated.View
-                    style={[
-                      styles.speechBubbleContainer,
-                      {
-                        opacity: bubbleAnim,
-                        transform: [
-                          { scale: bubbleAnim },
-                          { translateY: bubbleAnim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) },
-                        ],
-                      },
-                    ]}
-                  >
-                    <Text style={styles.speechBubbleText}>{bubbleText}</Text>
-                    <View style={styles.speechBubbleArrow} />
-                  </Animated.View>
-                )}
-
-                {/* Floating Heart & EXP Toast on Tap */}
-                {heartVisible && (
-                  <Animated.View
-                    style={[
-                      styles.floatingHeartContainer,
-                      {
-                        opacity: heartAnim.interpolate({ inputRange: [0, 0.2, 0.8, 1], outputRange: [0, 1, 0.9, 0] }),
-                        transform: [
-                          { translateY: heartAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -50] }) },
-                          { scale: heartAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.6, 1.3, 1] }) },
-                        ],
-                      },
-                    ]}
-                  >
-                    <Heart size={26} color="#FF4D6D" fill="#FF4D6D" />
-                    <Text
-                      style={[
-                        styles.touchExpText,
-                        dailyTouchCount >= MAX_DAILY_TOUCH && styles.touchExpTextDone,
-                      ]}
-                    >
-                      {dailyTouchCount < MAX_DAILY_TOUCH
-                        ? `+3 EXP (${dailyTouchCount}/${MAX_DAILY_TOUCH})`
-                        : dailyTouchCount === MAX_DAILY_TOUCH
-                        ? `+3 EXP (${MAX_DAILY_TOUCH}/${MAX_DAILY_TOUCH} 완료)`
-                        : '❤️ 애정 가득 (오늘 완료)'}
-                    </Text>
-                  </Animated.View>
-                )}
-
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={handlePetTap}
-                  style={styles.charTouchArea}
-                >
-                  {/* Foreground Owner Badge: [내 기분] [이름] 반려몽 */}
-                  <View style={styles.myCharOwnerBadge}>
-                    <View style={styles.myCharMoodWrap}>
-                      <MoodIcon mood={currentUserProfile?.mood || '😊'} size={13} />
-                    </View>
-                    <Text style={styles.myCharOwnerBadgeText}>
-                      {currentUserProfile?.name || '내'} 반려몽
-                    </Text>
-                  </View>
-
-                  {/* Character Sprite directly in room */}
-                  {myCharacter.image_url ? (
-                    <View style={styles.mainCharImageWrapper}>
-                      {Platform.OS === 'web' ? (
-                        <img
-                          src={mainCharTransparentUrl || transparentImageCache.get(myCharacter.image_url) || myCharacter.image_url}
-                          alt={myCharacter.name}
-                          style={{
-                            width: 100,
-                            height: 100,
-                            objectFit: 'contain',
-                            mixBlendMode: 'multiply',
-                            display: 'block',
-                            pointerEvents: 'none',
-                            userSelect: 'none',
-                            opacity: (mainCharTransparentUrl || transparentImageCache.has(myCharacter.image_url) || myCharacter.image_url.startsWith('data:image/png')) ? 1 : 0,
-                            transition: 'opacity 0.15s ease-in',
-                          }}
-                        />
-                      ) : (
-                        <Image
-                          source={{ uri: mainCharTransparentUrl || transparentImageCache.get(myCharacter.image_url) || myCharacter.image_url }}
-                          style={[
-                            styles.mainCharImage,
-                            { opacity: (mainCharTransparentUrl || transparentImageCache.has(myCharacter.image_url) || myCharacter.image_url.startsWith('data:image/png')) ? 1 : 0 }
-                          ]}
-                          resizeMode="contain"
-                        />
-                      )}
-                    </View>
-                  ) : (
-                    <Text style={styles.mainCharEmoji}>{myCharacter.emoji || '🐶'}</Text>
-                  )}
-
-                  {/* Soft Natural Ground Contact Shadow under feet */}
-                  <View style={styles.charGroundShadow} />
-
-                  {/* Cute Touch Hint (shown while daily touch is active) */}
-                  {dailyTouchCount < MAX_DAILY_TOUCH && (
-                    <View style={styles.touchHintBadge}>
-                      <Sparkles size={9} color="#FFFFFF" style={{ marginRight: 2 }} />
-                      <Text style={styles.touchHintText}>톡톡!</Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              </Animated.View>
+              <Text style={{ fontSize: 11, marginLeft: 3 }}>
+                {myCharacter.emoji || '🐾'}
+              </Text>
             )}
           </TouchableOpacity>
 
-          {/* Dedicated My Petmong Status & Growth Card below Canvas */}
-          {myCharacter && (
-            <View style={styles.petStatusCardBelow}>
-              <View style={styles.petStatusCardLeft}>
-                <View style={styles.petStatusMoodWrap}>
-                  <MoodIcon mood={currentUserProfile?.mood || '😊'} size={15} />
-                </View>
-                <View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={styles.petStatusCardName}>{myCharacter.name}</Text>
-                    <View style={styles.personalityTag}>
-                      <Text style={styles.personalityTagText}>{myCharacter.personality || '다정한'}</Text>
-                    </View>
-                    <Text style={styles.petStatusCardLevel}>Lv.{myCharacter.level || 1}</Text>
-                  </View>
-                  <Text style={styles.petStatusCardSub}>
-                    {currentUserProfile?.name || '내'} 반려몽 • {myCharacter.species || '반려동물'}
+          {/* Other Family Members' Rooms Chips */}
+          {familyMembers
+            .filter((m) => m.id !== currentUserProfile?.id)
+            .map((member) => {
+              const memberPet = petmongCharacters.find(c => c.user_id === member.id);
+              const isSelected = selectedRoomUserId === member.id;
+              return (
+                <TouchableOpacity
+                  key={member.id}
+                  style={[
+                    styles.familyRoomChip,
+                    isSelected && styles.familyRoomChipActive,
+                  ]}
+                  onPress={() => setSelectedRoomUserId(member.id)}
+                  activeOpacity={0.8}
+                >
+                  <UserAvatar avatar={member.avatar} size={18} style={{ marginRight: 6 }} />
+                  <Text
+                    style={[
+                      styles.familyRoomChipText,
+                      isSelected && styles.familyRoomChipTextActive,
+                    ]}
+                  >
+                    {member.name}의 방
                   </Text>
-                </View>
-              </View>
+                  {memberPet && (
+                    <Text style={{ fontSize: 11, marginLeft: 3 }}>
+                      {memberPet.emoji || '🐾'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+        </ScrollView>
 
-              <View style={styles.petStatusCardRight}>
-                <View style={styles.petStatusExpRow}>
-                  <Text style={styles.petStatusExpLabel}>경험치</Text>
-                  <Text style={styles.petStatusExpVal}>{myCharacter.exp || 0} / 100</Text>
-                </View>
-                <View style={styles.petStatusExpBarBg}>
-                  <View style={[styles.petStatusExpBarFill, { width: `${Math.min(100, myCharacter.exp || 0)}%` }]} />
-                </View>
-              </View>
-            </View>
-          )}
+        {/* Top Right Action Icons */}
+        <View style={styles.topActionsRow}>
+          {/* Room Theme Selector (Active for my room, informs owner theme when visiting) */}
+          <TouchableOpacity
+            style={[styles.topActionIconBtn, isVisitingOther && { opacity: 0.85 }]}
+            onPress={() => {
+              if (isVisitingOther) {
+                const currentThemeObj = ROOM_THEMES.find(t => t.id === activeRoomTheme) || ROOM_THEMES[0];
+                Alert.alert(
+                  '방 테마 안내 🏡',
+                  `${displayedOwner?.name || '가족'} 님이 설정한 '${currentThemeObj.name}' 테마입니다.\n방 테마 변경은 '내 방'에서 자유롭게 하실 수 있어요!`
+                );
+              } else {
+                setThemeModalVisible(true);
+              }
+            }}
+            activeOpacity={0.8}
+          >
+            <Palette size={14} color="#D9534F" />
+            <Text style={styles.topActionBtnText}>테마</Text>
+          </TouchableOpacity>
 
-          <Text style={styles.canvasGuideText}>
-            💡 반려몽을 톡톡 터치하면 애정 대사와 함께 +3 EXP를 획득합니다! (오늘: {Math.min(dailyTouchCount, MAX_DAILY_TOUCH)}/{MAX_DAILY_TOUCH}회, 매일 자정 초기화)
-          </Text>
+          {/* Family Pet Book Modal */}
+          <TouchableOpacity
+            style={[styles.topActionIconBtn, styles.topActionIconBtnBlue]}
+            onPress={() => setFamilyBookModalVisible(true)}
+            activeOpacity={0.8}
+          >
+            <BookOpen size={14} color="#2563EB" />
+            <Text style={[styles.topActionBtnText, { color: '#2563EB' }]}>
+              도감 ({petmongCharacters.length})
+            </Text>
+          </TouchableOpacity>
         </View>
-      </ScrollView>
+      </View>
+
+      {/* Main Fullscreen Interactive Room Game Engine */}
+      {displayedCharacter ? (
+        <PetmongGameEngine
+          character={displayedCharacter}
+          owner={displayedOwner}
+          isVisiting={isVisitingOther}
+          visitorCharacter={myCharacter}
+          theme={activeRoomTheme}
+          insets={insets}
+          vitals={petVitals}
+          onUpdateVitals={handleUpdateVitals}
+          onGainExp={handleGameGainExp}
+          onAwardPoints={onAwardPoints}
+          dailyCareCount={dailyCareCount}
+          maxDailyCare={MAX_DAILY_CARE}
+          onCareAction={handleGameCareAction}
+          transparentUrl={displayedTransparentUrl || transparentImageCache.get(displayedCharacter.image_url)}
+        />
+      ) : (
+        /* Empty Room Banner */
+        <View style={styles.fullscreenOverlayCanvas} pointerEvents="box-none">
+          <View style={styles.createPromptBanner}>
+            <Text style={styles.createPromptTitle}>
+              {isVisitingOther
+                ? `${displayedOwner?.name || '가족'} 님의 방`
+                : '아늑한 우리 가족의 방 🏡'}
+            </Text>
+            <Text style={styles.createPromptSub}>
+              {isVisitingOther
+                ? '아직 반려몽이 태어나지 않은 방입니다.'
+                : '나를 쏙 닮은 귀여운 AI 반려몽을 입주시켜보세요!'}
+            </Text>
+            {!isVisitingOther && (
+              <TouchableOpacity
+                style={styles.createPromptBtn}
+                onPress={() => setCreateModalVisible(true)}
+                activeOpacity={0.8}
+              >
+                <Sparkles size={16} color="#FFFFFF" />
+                <Text style={styles.createPromptBtnText}>반려몽 태어나기 🐣</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      )}
 
       {/* AI Character Creation Modal (FamLink Unified Style - Identical to SmallTalkScreen) */}
       <Modal
@@ -1632,158 +2043,94 @@ export default function InteriorScreen({
         </View>
       </Modal>
 
-      {/* Sumone-Style Room Object Shop Modal (슬롯별 오브젝트 잠금 해제 및 장착) */}
+      {/* 4-Stage Evolution Milestone Celebration Modal */}
       <Modal
-        animationType="slide"
+        animationType="fade"
         transparent={true}
-        visible={shopModalVisible}
-        onRequestClose={() => setShopModalVisible(false)}
+        visible={evolutionModalVisible}
+        onRequestClose={handleCloseEvolutionModal}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalView}>
-            <View style={styles.modalHeaderRow}>
-              <View style={styles.modalHeaderTitleRow}>
-                <Layers size={20} color="#FF7E82" style={{ marginRight: 6 }} />
-                <Text style={styles.modalHeader}>우리 가족 방 꾸미기 🛋️</Text>
-              </View>
-              <TouchableOpacity onPress={() => setShopModalVisible(false)}>
-                <X size={20} color="#8E8E93" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Slot Tabs */}
-            <View style={styles.categoryTabRow}>
-              {ROOM_SLOTS.map((slot) => {
-                const isEquippedInSlot = (placedFurniture || []).some(f => f.slotId === slot.id);
-                return (
-                  <TouchableOpacity
-                    key={slot.id}
-                    style={[
-                      styles.categoryTab,
-                      selectedSlotId === slot.id && styles.categoryTabActive,
-                    ]}
-                    onPress={() => setSelectedSlotId(slot.id)}
-                    activeOpacity={0.8}
-                  >
-                    <Text
-                      style={[
-                        styles.categoryTabText,
-                        selectedSlotId === slot.id && styles.categoryTabTextActive,
-                      ]}
-                    >
-                      {slot.name} {isEquippedInSlot ? '✨' : ''}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {/* Active Slot Header & Unequip Button */}
-            {(() => {
-              const currentSlotObj = ROOM_SLOTS.find(s => s.id === selectedSlotId);
-              const equippedInCurrentSlot = (placedFurniture || []).find(f => f.slotId === selectedSlotId);
-
-              return (
-                <View style={styles.slotCurrentBanner}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.slotBannerTitle}>{currentSlotObj?.name || '슬롯'}</Text>
-                    <Text style={styles.slotBannerSub}>
-                      {equippedInCurrentSlot ? `현재 장착: ${equippedInCurrentSlot.emoji} ${equippedInCurrentSlot.name}` : '현재 비어 있음 (미배치)'}
-                    </Text>
-                  </View>
-                  {equippedInCurrentSlot && (
-                    <TouchableOpacity
-                      style={styles.unequipBtn}
-                      onPress={() => handleUnequipSlot(selectedSlotId)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.unequipBtnText}>슬롯 비우기</Text>
-                    </TouchableOpacity>
-                  )}
+        <View style={styles.evolutionOverlay}>
+          <View style={styles.evolutionCard}>
+            <Text style={styles.evolutionHeaderEmoji}>🎊✨🎉</Text>
+            <Text style={styles.evolutionTitle}>반려몽 단계 진화!</Text>
+            
+            {evolutionData && (
+              <>
+                <View style={[styles.evolutionStagePill, { backgroundColor: evolutionData.stage.badgeColor }]}>
+                  <Text style={styles.evolutionStagePillText}>
+                    Stage {evolutionData.stage.stage} • {evolutionData.stage.stageTitle}
+                  </Text>
                 </View>
-              );
-            })()}
 
-            {/* Catalog Grid for Current Slot */}
-            <ScrollView style={styles.catalogList} showsVerticalScrollIndicator={false}>
-              {filteredCatalog.map((item) => {
-                const isUnlocked = unlockedFurnitureIds.includes(item.id);
-                const isEquipped = (placedFurniture || []).some(f => f.catalogId === item.id || f.id === `placed-${item.id}`);
-
-                return (
-                  <View key={item.id} style={[styles.catalogCard, isEquipped && styles.catalogCardEquipped]}>
-                    <View style={styles.catalogEmojiBox}>
-                      {item.image ? (
-                        Platform.OS === 'web' ? (
-                          <img
-                            src={item.image}
-                            alt={item.name}
-                            style={{
-                              width: 38,
-                              height: 38,
-                              objectFit: 'contain',
-                              mixBlendMode: 'multiply',
-                              display: 'block',
-                            }}
-                          />
-                        ) : (
-                          <Image
-                            source={item.image}
-                            style={{ width: 38, height: 38 }}
-                            resizeMode="contain"
-                          />
-                        )
-                      ) : (
-                        <Text style={styles.catalogEmoji}>{item.emoji}</Text>
-                      )}
-                    </View>
-
-                    <View style={styles.catalogInfo}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <Text style={styles.catalogName}>{item.name}</Text>
-                        {isEquipped ? (
-                          <View style={styles.equippedBadge}>
-                            <Text style={styles.equippedBadgeText}>장착 중</Text>
-                          </View>
-                        ) : isUnlocked ? (
-                          <View style={styles.unlockedBadge}>
-                            <Text style={styles.unlockedBadgeText}>보유 중</Text>
-                          </View>
-                        ) : null}
-                      </View>
-                      <Text style={styles.catalogDesc}>{item.desc}</Text>
-                      {!isUnlocked && (
-                        <Text style={styles.catalogPrice}>{item.cost} P</Text>
-                      )}
-                    </View>
-
-                    {isEquipped ? (
-                      <View style={styles.alreadyEquippedBtn}>
-                        <Check size={14} color="#059669" style={{ marginRight: 2 }} />
-                        <Text style={styles.alreadyEquippedBtnText}>배치됨</Text>
-                      </View>
-                    ) : isUnlocked ? (
-                      <TouchableOpacity
-                        style={styles.equipBtn}
-                        onPress={() => handleEquipUnlocked(item)}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={styles.equipBtnText}>장착하기</Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <TouchableOpacity
-                        style={styles.buyBtn}
-                        onPress={() => handleUnlockAndEquip(item)}
-                        activeOpacity={0.8}
-                      >
-                        <Lock size={12} color="#FFFFFF" style={{ marginRight: 4 }} />
-                        <Text style={styles.buyBtnText}>해금</Text>
-                      </TouchableOpacity>
-                    )}
+                {/* AI Image Evolution Loading Indicator */}
+                {evolutionData.isAiEvolving ? (
+                  <View style={styles.evolutionGeneratingBox}>
+                    <ActivityIndicator size="small" color="#EB2F96" />
+                    <Text style={styles.evolutionGeneratingText}>
+                      기존 모습을 바탕으로 AI가 성장한 버전을 생성하는 중입니다... 🎨
+                    </Text>
                   </View>
-                );
-              })}
-            </ScrollView>
+                ) : (
+                  /* Comparison View (Before vs After) */
+                  <View style={styles.evolutionComparisonRow}>
+                    <View style={styles.evolutionPreviewBox}>
+                      <Text style={styles.evolutionPreviewLabel}>Lv.{evolutionData.previousLevel} 이전</Text>
+                      {evolutionData.previousImageUrl || evolutionData.character.image_url ? (
+                        <Image
+                          source={{ uri: evolutionData.previousImageUrl || evolutionData.character.image_url }}
+                          style={{ width: 55, height: 55, borderRadius: 28 }}
+                          resizeMode="contain"
+                        />
+                      ) : (
+                        <Text style={styles.evolutionPreviewEmoji}>
+                          {getEvolvedEmoji(evolutionData.character.emoji, evolutionData.previousLevel)}
+                        </Text>
+                      )}
+                    </View>
+
+                    <ChevronRight size={22} color="#FF7E82" />
+
+                    <View style={[styles.evolutionPreviewBox, styles.evolutionPreviewBoxActive]}>
+                      <Text style={[styles.evolutionPreviewLabel, { color: '#D48806', fontWeight: '800' }]}>
+                        Lv.{evolutionData.newLevel} 진화 ✨
+                      </Text>
+                      {evolutionData.character.image_url ? (
+                        <Image
+                          source={{ uri: evolutionData.newImageUrl || evolutionData.character.image_url }}
+                          style={{ width: 70, height: 70, borderRadius: 35 }}
+                          resizeMode="contain"
+                        />
+                      ) : (
+                        <Text style={[styles.evolutionPreviewEmoji, { fontSize: 44 }]}>
+                          {getEvolvedEmoji(evolutionData.character.emoji, evolutionData.newLevel)}
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                )}
+
+                <Text style={styles.evolutionDesc}>
+                  {evolutionData.character.name}이(가) 가족의 깊은 애정과 사랑으로 {evolutionData.stage.name}(으)로 멋지게 진화했습니다!
+                  {'\n'}{evolutionData.stage.desc}
+                </Text>
+
+                <View style={styles.evolutionBonusBadge}>
+                  <Sparkles size={14} color="#52C41A" />
+                  <Text style={styles.evolutionBonusText}>
+                    성장 효과: 방 안 캐릭터 크기 확대 & 단계별 전용 오라 해금!
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.evolutionConfirmBtn}
+                  onPress={handleCloseEvolutionModal}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.evolutionConfirmBtnText}>멋지게 자란 모습 확인하기 💖</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -1856,8 +2203,9 @@ export default function InteriorScreen({
 
                     <View style={styles.bookPetInfo}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                        <UserAvatar avatar={owner?.avatar} size={16} />
                         <Text style={styles.bookPetOwnerName}>
-                          {owner?.avatar || '👤'} {owner?.name || '가족'} {isMine ? '(나)' : ''}
+                          {owner?.name || '가족'} {isMine ? '(나)' : ''}
                         </Text>
                         {isMine ? (
                           <View style={styles.bookTagMine}>
@@ -1929,12 +2277,12 @@ export default function InteriorScreen({
             </View>
 
             <Text style={styles.modalSubDesc}>
-              원하는 분위기의 빈 방을 선택하고, 가구와 소품을 자유롭게 장착해보세요!
+              원하는 분위기의 방을 선택하여 우리 가족만의 아늑한 힐링 공간을 꾸며보세요!
             </Text>
 
             <View style={{ gap: 12, marginTop: 4 }}>
               {ROOM_THEMES.map((theme) => {
-                const isSelected = roomTheme === theme.id;
+                const isSelected = activeRoomTheme === theme.id;
                 return (
                   <TouchableOpacity
                     key={theme.id}
@@ -1942,10 +2290,7 @@ export default function InteriorScreen({
                       styles.themeCardItem,
                       isSelected && styles.themeCardItemActive,
                     ]}
-                    onPress={() => {
-                      setRoomTheme(theme.id);
-                      setThemeModalVisible(false);
-                    }}
+                    onPress={() => handleSelectTheme(theme.id)}
                     activeOpacity={0.8}
                   >
                     <View style={styles.themeCardIconWrap}>

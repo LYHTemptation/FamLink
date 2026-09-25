@@ -34,6 +34,7 @@ import {
   IconClose,
 } from './icons';
 import { colors, typography, commonStyles } from '../theme';
+import UserAvatar from './UserAvatar';
 
 const FAMILY_MEMBERS = {
   mom: { name: '엄마', avatar: '👩‍🦰', color: '#FF7E82' },
@@ -513,7 +514,7 @@ export default function CalendarScreen({
                         </View>
 
                         <View style={styles.creatorTag}>
-                          <Text style={styles.creatorAvatar}>{creatorInfo.avatar}</Text>
+                          <UserAvatar avatar={creatorInfo.avatar} size={16} style={{ marginRight: 4 }} />
                           <Text style={[styles.creatorName, { color: creatorInfo.color }]}>
                             {creatorInfo.name}
                           </Text>

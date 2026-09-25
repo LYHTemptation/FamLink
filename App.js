@@ -23,6 +23,7 @@ import {
   TabPetIcon,
   TabFamilyIcon,
 } from './components/icons';
+import UserAvatar from './components/UserAvatar';
 
 // Web Polyfill for Alert.alert (react-native-web has empty stub alert() {})
 if (Platform.OS === 'web') {
@@ -227,6 +228,18 @@ export default function App() {
   });
 
   const [currentScreen, setCurrentScreen] = useState('chat'); // chat, calendar, smalltalk, shopping, album, family
+  const [visitedScreens, setVisitedScreens] = useState(new Set(['chat', 'interior']));
+
+  useEffect(() => {
+    if (currentScreen) {
+      setVisitedScreens(prev => {
+        if (prev.has(currentScreen)) return prev;
+        const next = new Set(prev);
+        next.add(currentScreen);
+        return next;
+      });
+    }
+  }, [currentScreen]);
   const [userModalVisible, setUserModalVisible] = useState(false);
   const [celebrationVisible, setCelebrationVisible] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState([]);
@@ -906,6 +919,33 @@ export default function App() {
     }
   };
 
+  const handleUpdateProfile = async (updates) => {
+    if (isSupabaseReady && profile) {
+      try {
+        const { error } = await supabase
+          .from('profiles')
+          .update(updates)
+          .eq('id', profile.id);
+        if (error) throw error;
+        const updatedProfile = { ...profile, ...updates };
+        setProfile(updatedProfile);
+        setFamilyMembersList(prev => prev.map(m => m.id === profile.id ? { ...m, ...updates } : m));
+        Alert.alert('프로필 저장 완료 ✨', '프로필 정보가 성공적으로 변경되었습니다!');
+      } catch (e) {
+        showError(e, '프로필 업데이트에 실패했습니다.');
+      }
+    } else {
+      const updatedProfile = { ...profile, ...updates };
+      setProfile(updatedProfile);
+      const myIdentifier = profile?.id || currentUser;
+      const updatedMembers = familyMembersList.map(m =>
+        (m.id === myIdentifier || (m.role === myIdentifier && !m.id)) ? { ...m, ...updates } : m
+      );
+      setFamilyMembersList(updatedMembers);
+      Alert.alert('프로필 저장 완료 ✨', '프로필 정보가 변경되었습니다.');
+    }
+  };
+
   const handleAddItem = async (itemData) => {
     const nowIso = new Date().toISOString();
     const repType = itemData.repeat_type || 'none';
@@ -1316,6 +1356,26 @@ export default function App() {
         .from('family_points')
         .update({ points: newPoints })
         .eq('family_id', profile.family_id);
+    }
+  };
+
+  const handleAwardFamilyPoints = async (earnedAmount, reason = '반려몽 행복 수확') => {
+    if (earnedAmount <= 0) return;
+    const newPoints = points + earnedAmount;
+    setPoints(newPoints);
+    logPointTransaction('earn', earnedAmount, reason, newPoints, 'petmong');
+
+    if (isSupabaseReady && profile?.family_id) {
+      try {
+        await supabase
+          .from('family_points')
+          .update({ points: newPoints })
+          .eq('family_id', profile.family_id);
+      } catch (e) {
+        console.log('Error awarding family points:', e);
+      }
+    } else {
+      saveLocalState(newPoints, messages, events, smallTalk, rewardsList, userCoupons, shoppingItems, pointHistory);
     }
   };
 
@@ -1898,124 +1958,175 @@ export default function App() {
   };
 
   const renderActiveScreen = () => {
-    switch (currentScreen) {
-      case 'chat':
-        return (
-          <ChatScreen
-            messages={messages}
-            currentUser={currentUser}
-            currentUserProfile={profile}
-            onSendMessage={handleSendMessage}
-            onMarkAsRead={handleMarkMessagesAsRead}
-            memberCount={familyMembersList.length}
-            familyMembers={familyMembersList}
-            smallTalk={smallTalk}
-            onNavigateScreen={setCurrentScreen}
-            customRooms={customRooms}
-            onCreateCustomRoom={handleCreateCustomRoom}
-          />
-        );
-      case 'calendar':
-        return (
-          <CalendarScreen
-            events={events}
-            currentUser={currentUser}
-            currentUserProfile={profile}
-            familyMembers={familyMembersList}
-            onAddEvent={handleAddEvent}
-            onUpdateEvent={handleUpdateEvent}
-            onDeleteEvent={handleDeleteEvent}
-          />
-        );
-      case 'smalltalk':
-        return (
-          <SmallTalkScreen
-            smallTalkState={smallTalk}
-            currentUser={currentUser}
-            currentUserProfile={profile}
-            points={points}
-            pointHistory={pointHistory}
-            onAddResponse={handleAddResponse}
-            onRedeemReward={handleRedeemReward}
-            onDeductPoints={handleDeductPoints}
-            familyMembers={familyMembersList}
-            rewardsList={rewardsList}
-            onAddReward={handleAddReward}
-            onUpdateReward={handleUpdateReward}
-            onDeleteReward={handleDeleteReward}
-            userCoupons={userCoupons}
-            onUseCoupon={handleUseCoupon}
-            coopGoal={coopGoal}
-            onUpdateCoopGoal={handleUpdateCoopGoal}
-            messages={messages}
-            onSendOrderNotice={handleSendOrderNotice}
-            shoppingItems={shoppingItems}
-            onAddItem={handleAddItem}
-            onToggleItem={handleToggleItem}
-            onDeleteItem={handleDeleteItem}
-            onClearCompleted={handleClearCompletedItems}
-            onToggleRepeat={handleToggleRepeat}
-          />
-        );
-      case 'shopping':
-        return (
-          <ShoppingListScreen
-            shoppingItems={shoppingItems}
-            currentUserProfile={profile}
-            familyMembers={familyMembersList}
-            onAddItem={handleAddItem}
-            onToggleItem={handleToggleItem}
-            onDeleteItem={handleDeleteItem}
-            onClearCompleted={handleClearCompletedItems}
-            onToggleRepeat={handleToggleRepeat}
-          />
-        );
-      case 'album':
-        return (
-          <PhotoAlbumScreen
-            currentUser={currentUser}
-            familyMembers={familyMembersList}
-            messages={messages}
-            smallTalkState={smallTalk}
-            currentUserProfile={profile}
-            onSendOrderNotice={handleSendOrderNotice}
-            points={points}
-            onDeductPoints={handleDeductPoints}
-          />
-        );
-      case 'interior':
-        return (
-          <InteriorScreen
-            points={points}
-            onDeductPoints={(cost) => handleDeductPoints(cost, '가구 구매')}
-            placedFurniture={placedFurniture}
-            onUpdatePlacedFurniture={handleUpdatePlacedFurniture}
-            floorPlanUrl={floorPlanUrl}
-            onUpdateFloorPlan={handleUpdateFloorPlan}
-            currentUser={currentUser}
-            currentUserProfile={profile}
-            familyId={profile.family_id}
-            petmongCharacters={petmongCharacters}
-            setPetmongCharacters={setPetmongCharacters}
-            onAwardExp={handleAwardPetmongExp}
-            familyMembers={familyMembersList}
-          />
-        );
-      case 'family':
-        return (
-          <FamilyScreen
-            familyCode={profile.family_code}
-            familyMembersList={familyMembersList}
-            currentUserProfile={profile}
-            onUpdateMood={handleUpdateMood}
-            onlineUsers={onlineUsers}
-            onLogout={handleLogout}
-            onNavigateScreen={setCurrentScreen}
-          />
-        );
-      default:
-        return <View style={styles.flexOne} />;
-    }
+    return (
+      <View style={styles.flexOne}>
+        {visitedScreens.has('chat') && (
+          <View
+            style={[
+              styles.screenLayer,
+              currentScreen === 'chat' ? styles.screenLayerVisible : styles.screenLayerHidden,
+            ]}
+            pointerEvents={currentScreen === 'chat' ? 'auto' : 'none'}
+          >
+            <ChatScreen
+              messages={messages}
+              currentUser={currentUser}
+              currentUserProfile={profile}
+              onSendMessage={handleSendMessage}
+              onMarkAsRead={handleMarkMessagesAsRead}
+              memberCount={familyMembersList.length}
+              familyMembers={familyMembersList}
+              smallTalk={smallTalk}
+              onNavigateScreen={setCurrentScreen}
+              customRooms={customRooms}
+              onCreateCustomRoom={handleCreateCustomRoom}
+            />
+          </View>
+        )}
+        {visitedScreens.has('interior') && (
+          <View
+            style={[
+              styles.screenLayer,
+              currentScreen === 'interior' ? styles.screenLayerVisible : styles.screenLayerHidden,
+            ]}
+            pointerEvents={currentScreen === 'interior' ? 'auto' : 'none'}
+          >
+            <InteriorScreen
+              points={points}
+              onDeductPoints={(cost) => handleDeductPoints(cost, '가구 구매')}
+              onAwardPoints={handleAwardFamilyPoints}
+              placedFurniture={placedFurniture}
+              onUpdatePlacedFurniture={handleUpdatePlacedFurniture}
+              floorPlanUrl={floorPlanUrl}
+              onUpdateFloorPlan={handleUpdateFloorPlan}
+              currentUser={currentUser}
+              currentUserProfile={profile}
+              familyId={profile?.family_id}
+              petmongCharacters={petmongCharacters}
+              setPetmongCharacters={setPetmongCharacters}
+              onAwardExp={handleAwardPetmongExp}
+              familyMembers={familyMembersList}
+            />
+          </View>
+        )}
+        {visitedScreens.has('smalltalk') && (
+          <View
+            style={[
+              styles.screenLayer,
+              currentScreen === 'smalltalk' ? styles.screenLayerVisible : styles.screenLayerHidden,
+            ]}
+            pointerEvents={currentScreen === 'smalltalk' ? 'auto' : 'none'}
+          >
+            <SmallTalkScreen
+              smallTalkState={smallTalk}
+              currentUser={currentUser}
+              currentUserProfile={profile}
+              points={points}
+              pointHistory={pointHistory}
+              onAddResponse={handleAddResponse}
+              onRedeemReward={handleRedeemReward}
+              onDeductPoints={handleDeductPoints}
+              familyMembers={familyMembersList}
+              rewardsList={rewardsList}
+              onAddReward={handleAddReward}
+              onUpdateReward={handleUpdateReward}
+              onDeleteReward={handleDeleteReward}
+              userCoupons={userCoupons}
+              onUseCoupon={handleUseCoupon}
+              coopGoal={coopGoal}
+              onUpdateCoopGoal={handleUpdateCoopGoal}
+              messages={messages}
+              onSendOrderNotice={handleSendOrderNotice}
+              shoppingItems={shoppingItems}
+              onAddItem={handleAddItem}
+              onToggleItem={handleToggleItem}
+              onDeleteItem={handleDeleteItem}
+              onClearCompleted={handleClearCompletedItems}
+              onToggleRepeat={handleToggleRepeat}
+            />
+          </View>
+        )}
+        {visitedScreens.has('calendar') && (
+          <View
+            style={[
+              styles.screenLayer,
+              currentScreen === 'calendar' ? styles.screenLayerVisible : styles.screenLayerHidden,
+            ]}
+            pointerEvents={currentScreen === 'calendar' ? 'auto' : 'none'}
+          >
+            <CalendarScreen
+              events={events}
+              currentUser={currentUser}
+              currentUserProfile={profile}
+              familyMembers={familyMembersList}
+              onAddEvent={handleAddEvent}
+              onUpdateEvent={handleUpdateEvent}
+              onDeleteEvent={handleDeleteEvent}
+            />
+          </View>
+        )}
+        {visitedScreens.has('album') && (
+          <View
+            style={[
+              styles.screenLayer,
+              currentScreen === 'album' ? styles.screenLayerVisible : styles.screenLayerHidden,
+            ]}
+            pointerEvents={currentScreen === 'album' ? 'auto' : 'none'}
+          >
+            <PhotoAlbumScreen
+              currentUser={currentUser}
+              familyMembers={familyMembersList}
+              messages={messages}
+              smallTalkState={smallTalk}
+              currentUserProfile={profile}
+              onSendOrderNotice={handleSendOrderNotice}
+              points={points}
+              onDeductPoints={handleDeductPoints}
+            />
+          </View>
+        )}
+        {visitedScreens.has('family') && (
+          <View
+            style={[
+              styles.screenLayer,
+              currentScreen === 'family' ? styles.screenLayerVisible : styles.screenLayerHidden,
+            ]}
+            pointerEvents={currentScreen === 'family' ? 'auto' : 'none'}
+          >
+            <FamilyScreen
+              familyCode={profile?.family_code}
+              familyMembersList={familyMembersList}
+              currentUserProfile={profile}
+              onUpdateMood={handleUpdateMood}
+              onUpdateProfile={handleUpdateProfile}
+              onlineUsers={onlineUsers}
+              onLogout={handleLogout}
+              onNavigateScreen={setCurrentScreen}
+            />
+          </View>
+        )}
+        {visitedScreens.has('shopping') && (
+          <View
+            style={[
+              styles.screenLayer,
+              currentScreen === 'shopping' ? styles.screenLayerVisible : styles.screenLayerHidden,
+            ]}
+            pointerEvents={currentScreen === 'shopping' ? 'auto' : 'none'}
+          >
+            <ShoppingListScreen
+              shoppingItems={shoppingItems}
+              currentUserProfile={profile}
+              familyMembers={familyMembersList}
+              onAddItem={handleAddItem}
+              onToggleItem={handleToggleItem}
+              onDeleteItem={handleDeleteItem}
+              onClearCompleted={handleClearCompletedItems}
+              onToggleRepeat={handleToggleRepeat}
+            />
+          </View>
+        )}
+      </View>
+    );
   };
 
   // Loading indicator for database syncing
@@ -2072,7 +2183,7 @@ export default function App() {
                 onPress={() => setCurrentScreen('family')}
                 activeOpacity={0.7}
               >
-                <Text style={styles.switcherAvatar}>{activeMember.avatar}</Text>
+                <UserAvatar avatar={activeMember.avatar} size={22} style={{ marginRight: 6 }} />
                 <Text style={styles.switcherName}>{activeMember.name} (시뮬)</Text>
               </TouchableOpacity>
             ) : (
@@ -2081,7 +2192,7 @@ export default function App() {
                 onPress={() => setCurrentScreen('family')}
                 activeOpacity={0.7}
               >
-                <Text style={styles.switcherAvatar}>{activeMember.avatar}</Text>
+                <UserAvatar avatar={activeMember.avatar} size={22} style={{ marginRight: 6 }} />
                 <Text style={styles.switcherName}>{profile.name}</Text>
               </TouchableOpacity>
             )}
@@ -2188,7 +2299,7 @@ export default function App() {
                       ]}
                       onPress={() => switchUser(member)}
                     >
-                      <Text style={styles.memberSelectAvatar}>{member.avatar}</Text>
+                      <UserAvatar avatar={member.avatar} size={36} style={{ marginBottom: 4 }} />
                       <Text style={[styles.memberSelectName, isCurrent && { fontWeight: 'bold', color: member.color }]}>
                         {member.name}
                       </Text>
@@ -2344,6 +2455,22 @@ const styles = StyleSheet.create({
   screenArea: {
     flex: 1,
     backgroundColor: '#F8F9FA',
+    position: 'relative',
+  },
+  screenLayer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  screenLayerVisible: {
+    opacity: 1,
+    zIndex: 10,
+  },
+  screenLayerHidden: {
+    opacity: 0,
+    zIndex: -1,
   },
   tabbar: {
     height: 56,

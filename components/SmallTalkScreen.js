@@ -45,6 +45,7 @@ import {
 import FamilyStorybookModal from './FamilyStorybookModal';
 import { colors, typography, commonStyles } from '../theme';
 import ShoppingListScreen from './ShoppingListScreen';
+import UserAvatar from './UserAvatar';
 
 const DEFAULT_COOP_GOALS = [
   { id: 'g1', title: '주말 패밀리 맛집 외식 데이', targetPoints: 3000, category: 'dinner', desc: '온 가족이 다 함께 먹고 싶은 메뉴 자유 외식' },
@@ -780,9 +781,12 @@ export default function SmallTalkScreen({
 
               return (
                 <View key={isDbProfile ? (item.id || item.role) : roleKey} style={styles.memberRow}>
-                  <View style={[styles.avatarBox, { backgroundColor: memberColor + '15' }]}>
-                    <Text style={styles.avatarText}>{memberAvatar}</Text>
-                  </View>
+                  <UserAvatar
+                    avatar={memberAvatar}
+                    size={36}
+                    borderColor={memberColor + '40'}
+                    style={{ marginRight: 10 }}
+                  />
 
                   <View style={styles.memberInfo}>
                     <View style={styles.memberNameRow}>
@@ -1655,13 +1659,6 @@ export default function SmallTalkScreen({
                 ))
               )}
             </ScrollView>
-
-            <TouchableOpacity
-              style={styles.modalSubmitButton}
-              onPress={() => setAchievedGoalsModalVisible(false)}
-            >
-              <Text style={styles.modalSubmitButtonText}>확인</Text>
-            </TouchableOpacity>
           </View>
         </View>
       </Modal>

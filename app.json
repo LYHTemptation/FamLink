@@ -28,7 +28,8 @@
     },
     "owner": "yon_know",
     "plugins": [
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-image"
     ]
   }
 }

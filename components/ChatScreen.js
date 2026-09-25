@@ -27,6 +27,7 @@ import {
   IconClose,
 } from './icons';
 import { colors, typography, commonStyles } from '../theme';
+import UserAvatar from './UserAvatar';
 
 export default function ChatScreen({
   messages,
@@ -503,9 +504,12 @@ export default function ChatScreen({
     return (
       <View style={[styles.messageRow, isMe ? styles.myRow : styles.otherRow]}>
         {!isMe && (
-          <View style={[styles.avatarContainer, { backgroundColor: senderInfo.color + '20', borderColor: senderInfo.color }]}>
-            <Text style={styles.avatarText}>{senderInfo.avatar}</Text>
-          </View>
+          <UserAvatar
+            avatar={senderInfo.avatar}
+            size={36}
+            borderColor={senderInfo.color}
+            style={{ marginRight: 8, marginTop: 2 }}
+          />
         )}
         <View style={styles.messageContent}>
           {!isMe && (
@@ -594,13 +598,18 @@ export default function ChatScreen({
               }}
               activeOpacity={0.7}
             >
-              <View style={[styles.roomAvatarBox, { backgroundColor: item.color + '20' }]}>
-                {item.id === 'family-group' ? (
+              {item.id === 'family-group' ? (
+                <View style={[styles.roomAvatarBox, { backgroundColor: item.color + '20' }]}>
                   <Users size={20} color={item.color} />
-                ) : (
-                  <Text style={styles.roomAvatarText}>{item.avatar}</Text>
-                )}
-              </View>
+                </View>
+              ) : (
+                <UserAvatar
+                  avatar={item.avatar}
+                  size={48}
+                  borderColor={item.color + '40'}
+                  style={{ marginRight: 12 }}
+                />
+              )}
 
               <View style={styles.roomInfoContent}>
                 <View style={styles.roomTitleRow}>
@@ -707,7 +716,7 @@ export default function ChatScreen({
                         style={[styles.memberCheckChip, isSelected && styles.memberCheckChipSelected]}
                         onPress={() => handleToggleMemberSelect(memberKey)}
                       >
-                        <Text style={styles.memberCheckAvatar}>{avatar}</Text>
+                        <UserAvatar avatar={avatar} size={22} style={{ marginRight: 6 }} />
                         <Text style={[styles.memberCheckName, isSelected && styles.memberCheckNameSelected]}>
                           {name}
                         </Text>

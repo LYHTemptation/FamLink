@@ -19,34 +19,42 @@ Notifications.setNotificationHandler({
 export async function registerForPushNotificationsAsync(projectId) {
   let token;
 
+  // 1. 웹 브라우저 환경에서는 네이티브 푸시 알림 등록 건너뛰기
+  if (Platform.OS === 'web') {
+    return null;
+  }
+
+  // 2. Android Expo Go(SDK 53+)에서는 원격 푸시가 미지원되므로 개발 빌드(dev-client)가 아닐 경우 조용히 건너뜁니다
+  const isExpoGo = Constants?.appOwnership === 'expo' || Constants?.executionEnvironment === 'storeClient';
+  if (Platform.OS === 'android' && isExpoGo) {
+    console.log('ℹ️ Expo Go 환경에서는 원격 푸시 알림이 지원되지 않습니다. (개발 빌드 eas build 권장)');
+    return null;
+  }
+
   // 에뮬레이터 검사 (실제 실기기에서만 푸시 토큰 발급 가능)
   if (Device.isDevice) {
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-
-    if (finalStatus !== 'granted') {
-      console.log('푸시 알림 권한 거부됨');
-      return null;
-    }
-
-    const resolvedProjectId =
-      projectId ||
-      Constants?.expoConfig?.extra?.eas?.projectId ||
-      Constants?.easConfig?.projectId;
-
-    if (!resolvedProjectId) {
-      console.warn(
-        '⚠️ Push Token 발급을 위한 Expo projectId가 설정되지 않았습니다. app.json의 extra.eas.projectId 또는 npx eas-cli project:init 명령으로 개설 후 등록해 주세요.'
-      );
-      return null;
-    }
-
     try {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+
+      if (finalStatus !== 'granted') {
+        return null;
+      }
+
+      const resolvedProjectId =
+        projectId ||
+        Constants?.expoConfig?.extra?.eas?.projectId ||
+        Constants?.easConfig?.projectId;
+
+      if (!resolvedProjectId) {
+        return null;
+      }
+
       const pushTokenData = await Notifications.getExpoPushTokenAsync({
         projectId: resolvedProjectId,
       });
