@@ -24,6 +24,7 @@ import {
 } from 'lucide-react-native';
 import { getEvolutionStage, getEvolvedEmoji } from '../lib/petmongEvolution';
 import SnackCatchGame from './minigames/SnackCatchGame';
+import KeepyUppyGame from './minigames/KeepyUppyGame';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
@@ -54,10 +55,11 @@ export default function PetmongGameEngine({
 }) {
   // Tool & Menu States
   const [isMenuOpen, setIsMenuOpen] = useState(false); // Radial Care Hub open/closed
-  const [activeTool, setActiveTool] = useState('none'); // 'none' | 'feed' | 'bath'
+  const [activeTool, setActiveTool] = useState('none'); // 'none' | 'feed' | 'play' | 'bath'
   const [isLightsOff, setIsLightsOff] = useState(false);
   const [showConditionPopup, setShowConditionPopup] = useState(false);
   const [isSnackGameVisible, setIsSnackGameVisible] = useState(false);
+  const [isKeepyUppyGameVisible, setIsKeepyUppyGameVisible] = useState(false);
 
   // Pet Action State: 'idle' | 'walking' | 'eating' | 'playing' | 'bathing' | 'sleeping' | 'happy'
   const [petAction, setPetAction] = useState('idle');
@@ -737,6 +739,81 @@ export default function PetmongGameEngine({
       )}
 
       {/* ------------------------------------------------------------- */}
+      {/* 3-B. FLOATING PLAY DRAWER (Slides up smoothly when Play active) */}
+      {/* ------------------------------------------------------------- */}
+      {activeTool === 'play' && (
+        <View style={styles.floatingSnackDrawer}>
+          <View style={styles.snackDrawerHeader}>
+            <Text style={[styles.snackDrawerTitle, { color: '#0284C7' }]}>
+              반려몽 놀아주기 & 핑퐁 랠리 ⚽
+            </Text>
+            <TouchableOpacity onPress={() => setActiveTool('none')} style={styles.snackCloseBtn}>
+              <X size={16} color="#8E8E93" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Action A: Interactive Mini-Game Launcher */}
+          <TouchableOpacity
+            style={[styles.snackGameBanner, { backgroundColor: '#F0F9FF', borderColor: '#BAE6FD' }]}
+            onPress={() => {
+              setActiveTool('none');
+              setIsKeepyUppyGameVisible(true);
+            }}
+            activeOpacity={0.85}
+          >
+            <View style={styles.snackGameBannerLeft}>
+              <View style={[styles.snackGameTag, { backgroundColor: '#0284C7' }]}>
+                <Flame size={12} color="#FFF" style={{ marginRight: 3 }} />
+                <Text style={styles.snackGameTagText}>제2탄 체류형 게임</Text>
+              </View>
+              <Text style={styles.snackGameTitle}>🎮 핑퐁 리프팅 랠리 도전!</Text>
+              <Text style={styles.snackGameSubtitle}>
+                손가락 패들로 공을 튕겨 반려몽과 환상의 랠리 도전!
+              </Text>
+            </View>
+            <View style={[styles.snackGameStartBadge, { backgroundColor: '#0284C7', shadowColor: '#0284C7' }]}>
+              <Text style={styles.snackGameStartText}>START ⚡</Text>
+            </View>
+          </TouchableOpacity>
+
+          <View style={styles.snackDrawerDivider}>
+            <Text style={styles.snackDrawerDividerText}>또는 방 안에서 가볍게 공 던져주기</Text>
+          </View>
+
+          {/* Action B: Quick Toss in Room */}
+          <TouchableOpacity
+            style={[
+              styles.snackCard,
+              {
+                width: '100%',
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingVertical: 11,
+                paddingHorizontal: 14,
+                backgroundColor: '#F8FAFC',
+                borderColor: '#E2E8F0',
+              },
+            ]}
+            onPress={() => {
+              setActiveTool('none');
+              handleLaunchBall();
+            }}
+            activeOpacity={0.75}
+          >
+            <Text style={[styles.snackEmoji, { fontSize: 24, marginRight: 10, marginBottom: 0 }]}>⚽</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.snackName, { fontSize: 12 }]}>가볍게 공 던져주기</Text>
+              <Text style={{ fontSize: 10, color: '#64748B', marginTop: 1 }}>
+                방 안에서 공을 튀기며 빠르게 놀아줍니다
+              </Text>
+            </View>
+            <Text style={[styles.snackExp, { color: '#0284C7', fontWeight: '800', marginRight: 4 }]}>+6 EXP</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* ------------------------------------------------------------- */}
       {/* 4. RADIAL FLOATING CARE HUB (Minimal 95% Open Layout) */}
       {/* ------------------------------------------------------------- */}
       <View style={styles.floatingHubContainer} pointerEvents="box-none">
@@ -771,8 +848,8 @@ export default function PetmongGameEngine({
 
           {/* Play Ball Button */}
           <TouchableOpacity
-            style={[styles.careMiniOrb, ballActive && styles.careMiniOrbActive]}
-            onPress={handleLaunchBall}
+            style={[styles.careMiniOrb, (activeTool === 'play' || ballActive) && styles.careMiniOrbActive]}
+            onPress={() => setActiveTool(prev => prev === 'play' ? 'none' : 'play')}
             activeOpacity={0.8}
           >
             <Text style={styles.careOrbIcon}>⚽</Text>
@@ -837,6 +914,30 @@ export default function PetmongGameEngine({
           if (onAwardPoints) onAwardPoints(points, '간식 캐치 미니게임');
           setPetAction('happy');
           setDialogue(`와구와구 정말 배불러요! ${score}점 기록, 최고 ${maxCombo}콤보 달성! 💖`);
+          spawnHeartToast(`+${exp} EXP & +${points}P 🏆`);
+        }}
+      />
+
+      {/* ------------------------------------------------------------- */}
+      {/* 6. INTERACTIVE KEEPY-UPPY PING-PONG MINI-GAME MODAL */}
+      {/* ------------------------------------------------------------- */}
+      <KeepyUppyGame
+        visible={isKeepyUppyGameVisible}
+        character={character}
+        transparentUrl={transparentUrl}
+        onClose={() => setIsKeepyUppyGameVisible(false)}
+        onGameComplete={({ score, exp, points, maxRally }) => {
+          if (onUpdateVitals) {
+            onUpdateVitals(prev => ({
+              ...prev,
+              happiness: 100,
+              energy: Math.max(0, (prev.energy || 95) - 6),
+            }));
+          }
+          if (onGainExp) onGainExp(exp);
+          if (onAwardPoints) onAwardPoints(points, '핑퐁 리프팅 랠리');
+          setPetAction('happy');
+          setDialogue(`환상의 랠리였어요 몽! ${maxRally}회 연속 성공, ${score}점 달성! ⚽🎉`);
           spawnHeartToast(`+${exp} EXP & +${points}P 🏆`);
         }}
       />
