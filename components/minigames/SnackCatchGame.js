@@ -7,7 +7,6 @@ import {
   Animated,
   Dimensions,
   Platform,
-  Modal,
   PanResponder,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
@@ -386,22 +385,10 @@ export default function SnackCatchGame({
   const currentGrade = getGameGrade(score);
 
   return (
-    <Modal
-      visible={visible}
-      animationType="fade"
-      transparent={true}
-      presentationStyle="overFullScreen"
-      statusBarTranslucent={true}
-      onRequestClose={onClose}
+    <View
+      style={styles.gameFullscreenOverlay}
+      {...panResponder.panHandlers}
     >
-      <View style={[styles.gameContainer, { width: screenWidth, height: screenHeight }]}>
-        {/* --------------------------------------------------------- */}
-        {/* FULLSCREEN TOUCH CAPTURE LAYER FOR 1:1 RESPONSIVE SWIPING */}
-        {/* --------------------------------------------------------- */}
-        <View
-          style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0, 0, 0, 0.001)', zIndex: 10 }]}
-          {...panResponder.panHandlers}
-        />
 
         {/* --------------------------------------------------------- */}
         {/* TOP STATUS HUD BAR */}
@@ -620,15 +607,22 @@ export default function SnackCatchGame({
             </View>
           </View>
         )}
-      </View>
-    </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  gameContainer: {
+  gameFullscreenOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
     backgroundColor: '#FFF9F2',
-    position: 'relative',
+    zIndex: 99999,
+    elevation: 99999,
     overflow: 'hidden',
   },
   topHudBar: {
