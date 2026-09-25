@@ -444,10 +444,7 @@ export default function PetmongGameEngine({
   );
 
   return (
-    <View
-      style={[styles.engineContainer, isSnackGameVisible && { zIndex: 99999, elevation: 99999 }]}
-      pointerEvents="box-none"
-    >
+    <View style={styles.engineContainer} pointerEvents="box-none">
       {/* 1. Real-time Lights Out Overlay */}
       <Animated.View
         style={[

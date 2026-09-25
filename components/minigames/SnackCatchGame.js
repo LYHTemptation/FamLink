@@ -7,10 +7,12 @@ import {
   Animated,
   Dimensions,
   Platform,
-  PanResponder,
+  Modal,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { Trophy, Sparkles, Heart, X, Flame, RotateCcw, Check, Clock } from 'lucide-react-native';
+
+const { width: INITIAL_WIDTH, height: INITIAL_HEIGHT } = Dimensions.get('window');
 
 // Game Configuration
 const GAME_DURATION = 30; // 30 seconds
@@ -60,7 +62,16 @@ export default function SnackCatchGame({
   const [toasts, setToasts] = useState([]);
   const [isStunned, setIsStunned] = useState(false);
 
-  // State Refs for physics and gesture handlers (eliminates stale closures)
+  // Bulletproof Character Position via React State (100% reliable on iOS/Android/Web)
+  const [petX, setPetX] = useState((INITIAL_WIDTH - PET_WIDTH) / 2);
+  const [petDirection, setPetDirection] = useState(1); // 1 = right, -1 = left
+  const currentPetX = useRef((INITIAL_WIDTH - PET_WIDTH) / 2);
+
+  // Animation values for squish bite and fever pulse
+  const petBounce = useRef(new Animated.Value(1)).current;
+  const feverPulse = useRef(new Animated.Value(1)).current;
+
+  // State Refs for physics and callbacks
   const gameStateRef = useRef(gameState);
   gameStateRef.current = gameState;
 
@@ -78,31 +89,12 @@ export default function SnackCatchGame({
 
   const itemsRef = useRef([]);
 
-  // Character Movement & Animation Values (USE_NATIVE_DRIVER: false for 100% reliable gesture tracking)
-  const petX = useRef(new Animated.Value((screenWidth - PET_WIDTH) / 2)).current;
-  const currentPetX = useRef((screenWidth - PET_WIDTH) / 2);
-  const petBounce = useRef(new Animated.Value(1)).current;
-  const petScaleX = useRef(new Animated.Value(1)).current; // 1 = right, -1 = left
-
-  // Fever Visual Pulse Animation
-  const feverPulse = useRef(new Animated.Value(1)).current;
-
   // Timers & Loop Refs
   const gameTimerRef = useRef(null);
   const spawnTimerRef = useRef(null);
   const animFrameRef = useRef(null);
   const feverTimerRef = useRef(null);
   const stunTimerRef = useRef(null);
-
-  // Sync petX animated value to currentPetX ref
-  useEffect(() => {
-    const listenerId = petX.addListener(({ value }) => {
-      currentPetX.current = value;
-    });
-    return () => {
-      petX.removeListener(listenerId);
-    };
-  }, [petX]);
 
   // -----------------------------------------------------------------
   // Move Pet to Target X (Direct Finger Tracking with 0ms Lag)
@@ -113,36 +105,14 @@ export default function SnackCatchGame({
     const targetX = Math.max(10, Math.min(stageWidth - PET_WIDTH - 10, touchX - PET_WIDTH / 2));
 
     if (targetX < currentPetX.current - 2) {
-      petScaleX.setValue(-1);
+      setPetDirection(-1);
     } else if (targetX > currentPetX.current + 2) {
-      petScaleX.setValue(1);
+      setPetDirection(1);
     }
 
     currentPetX.current = targetX;
-    petX.setValue(targetX);
-  }, [petX, petScaleX]);
-
-  // -----------------------------------------------------------------
-  // Fullscreen PanResponder for Silky Smooth Responsive Swiping
-  // -----------------------------------------------------------------
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onStartShouldSetPanResponderCapture: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponderCapture: () => true,
-      onPanResponderGrant: (evt, gestureState) => {
-        if (gameStateRef.current !== 'playing' || isStunnedRef.current) return;
-        const touchX = gestureState.x0 || evt.nativeEvent.pageX || evt.nativeEvent.locationX;
-        movePetTo(touchX);
-      },
-      onPanResponderMove: (evt, gestureState) => {
-        if (gameStateRef.current !== 'playing' || isStunnedRef.current) return;
-        const touchX = gestureState.moveX || evt.nativeEvent.pageX || evt.nativeEvent.locationX;
-        movePetTo(touchX);
-      },
-    })
-  ).current;
+    setPetX(targetX);
+  }, []);
 
   // -----------------------------------------------------------------
   // Start / Reset Game
@@ -161,11 +131,11 @@ export default function SnackCatchGame({
     setToasts([]);
     itemsRef.current = [];
 
-    petX.setValue(initialPetX);
+    setPetX(initialPetX);
     currentPetX.current = initialPetX;
-    petScaleX.setValue(1);
+    setPetDirection(1);
     setGameState('playing');
-  }, [petX, petScaleX]);
+  }, []);
 
   // -----------------------------------------------------------------
   // Fever Mode Controller
@@ -219,7 +189,7 @@ export default function SnackCatchGame({
       id: `item_${Date.now()}_${Math.random()}`,
       ...template,
       x: startX,
-      y: 75, // Spawn right below the top HUD
+      y: 75,
       speed,
     };
 
@@ -385,11 +355,26 @@ export default function SnackCatchGame({
   const currentGrade = getGameGrade(score);
 
   return (
-    <View
-      style={styles.gameFullscreenOverlay}
-      {...panResponder.panHandlers}
+    <Modal
+      visible={visible}
+      animationType="fade"
+      transparent={false}
+      statusBarTranslucent={true}
+      onRequestClose={onClose}
     >
-
+      <View
+        style={[styles.gameContainer, { width: screenWidth, height: screenHeight }]}
+        onTouchStart={
+          gameState === 'playing' && !isStunned
+            ? (e) => movePetTo(e.nativeEvent.pageX)
+            : undefined
+        }
+        onTouchMove={
+          gameState === 'playing' && !isStunned
+            ? (e) => movePetTo(e.nativeEvent.pageX)
+            : undefined
+        }
+      >
         {/* --------------------------------------------------------- */}
         {/* TOP STATUS HUD BAR */}
         {/* --------------------------------------------------------- */}
@@ -475,16 +460,16 @@ export default function SnackCatchGame({
         </View>
 
         {/* --------------------------------------------------------- */}
-        {/* PET ACTOR SPRITE (Controlled by User Swipe & Buttons) */}
+        {/* PET ACTOR SPRITE (Controlled by User Swipe & Taps) */}
         {/* --------------------------------------------------------- */}
         <Animated.View
           style={[
             styles.petPlayerContainer,
             {
+              left: petX,
               transform: [
-                { translateX: petX },
                 { scaleY: petBounce },
-                { scaleX: petScaleX },
+                { scaleX: petDirection },
                 { scale: isFever ? feverPulse : 1.0 },
               ],
             },
@@ -514,7 +499,7 @@ export default function SnackCatchGame({
         </Animated.View>
 
         {/* --------------------------------------------------------- */}
-        {/* READY / START OVERLAY (Full-Screen Dimensioned Backdrop) */}
+        {/* READY / START OVERLAY (Full-Screen Centered Modal) */}
         {/* --------------------------------------------------------- */}
         {gameState === 'ready' && (
           <View style={[styles.overlayCenter, { width: screenWidth, height: screenHeight }]}>
@@ -534,7 +519,11 @@ export default function SnackCatchGame({
                 </Text>
               </View>
 
-              <TouchableOpacity style={styles.startBtn} onPress={startGame} activeOpacity={0.85}>
+              <TouchableOpacity
+                style={styles.startBtn}
+                onPress={startGame}
+                activeOpacity={0.85}
+              >
                 <Text style={styles.startBtnText}>게임 시작하기 🚀</Text>
               </TouchableOpacity>
             </View>
@@ -542,7 +531,7 @@ export default function SnackCatchGame({
         )}
 
         {/* --------------------------------------------------------- */}
-        {/* GAME OVER RESULT OVERLAY (Full-Screen Dimensioned Backdrop) */}
+        {/* GAME OVER RESULT OVERLAY (Full-Screen Centered Modal) */}
         {/* --------------------------------------------------------- */}
         {gameState === 'gameover' && (
           <View style={[styles.overlayCenter, { width: screenWidth, height: screenHeight }]}>
@@ -607,27 +596,20 @@ export default function SnackCatchGame({
             </View>
           </View>
         )}
-    </View>
+      </View>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  gameFullscreenOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    width: '100%',
-    height: '100%',
+  gameContainer: {
     backgroundColor: '#FFF9F2',
-    zIndex: 99999,
-    elevation: 99999,
+    position: 'relative',
     overflow: 'hidden',
   },
   topHudBar: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 52 : 28,
+    top: Platform.OS === 'ios' ? 54 : 32,
     left: 16,
     right: 16,
     flexDirection: 'row',
@@ -681,7 +663,7 @@ const styles = StyleSheet.create({
   },
   comboRow: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 100 : 76,
+    top: Platform.OS === 'ios' ? 104 : 80,
     left: 0,
     right: 0,
     alignItems: 'center',
@@ -714,6 +696,7 @@ const styles = StyleSheet.create({
   },
   playField: {
     ...StyleSheet.absoluteFillObject,
+    zIndex: 25,
   },
   fallingItemBox: {
     position: 'absolute',
@@ -731,7 +714,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: FLOOR_HEIGHT,
-    zIndex: 30,
+    zIndex: 20,
   },
   stageWoodFloor: {
     flex: 1,
@@ -742,7 +725,7 @@ const styles = StyleSheet.create({
     borderColor: '#E6D2C0',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingBottom: Platform.OS === 'ios' ? 20 : 10,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 12,
     paddingHorizontal: 20,
     shadowColor: '#8D6E63',
     shadowOffset: { width: 0, height: -3 },
@@ -768,7 +751,6 @@ const styles = StyleSheet.create({
   petPlayerContainer: {
     position: 'absolute',
     bottom: FLOOR_HEIGHT - 12,
-    left: 0,
     width: PET_WIDTH,
     height: PET_HEIGHT,
     alignItems: 'center',
