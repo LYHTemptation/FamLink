@@ -11,26 +11,24 @@ import {
   PanResponder,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
-import { Trophy, Sparkles, Heart, X, Flame, RotateCcw, Check, Clock } from 'lucide-react-native';
+import { Trophy, Sparkles, Heart, X, Flame, RotateCcw, Check, Clock, ChevronLeft, ChevronRight } from 'lucide-react-native';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const USE_NATIVE_DRIVER = Platform.OS !== 'web';
-
-// Game Boundaries & Configuration
+// Game Configuration
 const GAME_DURATION = 30; // 30 seconds
-const PET_WIDTH = 90;
-const PET_HEIGHT = 90;
-const ITEM_SIZE = 42;
-const SPAWN_INTERVAL = 620; // ms between items
+const PET_WIDTH = 84;
+const PET_HEIGHT = 84;
+const ITEM_SIZE = 44;
+const FLOOR_HEIGHT = 110; // Bottom stage floor height
+const SPAWN_INTERVAL = 550; // ms between items
 
 // Falling Items Table
 const ITEMS_TABLE = [
-  { type: 'apple', emoji: '🍎', name: '사과', score: 10, exp: 1, isHazard: false },
-  { type: 'meat', emoji: '🍖', name: '고기', score: 20, exp: 2, isHazard: false },
-  { type: 'cake', emoji: '🍰', name: '케이크', score: 30, exp: 3, isHazard: false },
-  { type: 'star', emoji: '⭐', name: '별사탕', score: 50, exp: 5, isHazard: false },
-  { type: 'pepper', emoji: '🌶️', name: '매운고추', score: -15, exp: 0, isHazard: true },
-  { type: 'bomb', emoji: '💣', name: '폭탄', score: -25, exp: 0, isHazard: true },
+  { type: 'apple', emoji: '🍎', name: '사과', score: 10, isHazard: false },
+  { type: 'meat', emoji: '🍖', name: '고기', score: 20, isHazard: false },
+  { type: 'cake', emoji: '🍰', name: '케이크', score: 30, isHazard: false },
+  { type: 'star', emoji: '⭐', name: '별사탕', score: 50, isHazard: false },
+  { type: 'pepper', emoji: '🌶️', name: '매운고추', score: -15, isHazard: true },
+  { type: 'bomb', emoji: '💣', name: '폭탄', score: -25, isHazard: true },
 ];
 
 export default function SnackCatchGame({
@@ -40,6 +38,18 @@ export default function SnackCatchGame({
   onClose,
   onGameComplete,
 }) {
+  // Screen Dimensions with live listener
+  const [dimensions, setDimensions] = useState(Dimensions.get('window'));
+  const screenWidth = dimensions.width;
+  const screenHeight = dimensions.height;
+
+  useEffect(() => {
+    const sub = Dimensions.addEventListener('change', ({ window }) => {
+      setDimensions(window);
+    });
+    return () => sub?.remove?.();
+  }, []);
+
   // Game Lifecycle States
   const [gameState, setGameState] = useState('ready'); // 'ready' | 'playing' | 'gameover'
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
@@ -51,23 +61,41 @@ export default function SnackCatchGame({
   const [toasts, setToasts] = useState([]);
   const [isStunned, setIsStunned] = useState(false);
 
-  // Character Movement & Physics Animation
-  const petX = useRef(new Animated.Value((SCREEN_WIDTH - PET_WIDTH) / 2)).current;
-  const currentPetX = useRef((SCREEN_WIDTH - PET_WIDTH) / 2);
+  // State Refs for physics and gesture handlers (eliminates stale closures)
+  const gameStateRef = useRef(gameState);
+  gameStateRef.current = gameState;
+
+  const isStunnedRef = useRef(isStunned);
+  isStunnedRef.current = isStunned;
+
+  const isFeverRef = useRef(isFever);
+  isFeverRef.current = isFever;
+
+  const screenWidthRef = useRef(screenWidth);
+  screenWidthRef.current = screenWidth;
+
+  const screenHeightRef = useRef(screenHeight);
+  screenHeightRef.current = screenHeight;
+
+  const itemsRef = useRef([]);
+
+  // Character Movement & Animation Values (USE_NATIVE_DRIVER: false for 100% reliable gesture tracking)
+  const petX = useRef(new Animated.Value((screenWidth - PET_WIDTH) / 2)).current;
+  const currentPetX = useRef((screenWidth - PET_WIDTH) / 2);
   const petBounce = useRef(new Animated.Value(1)).current;
-  const petDirection = useRef(1); // 1 = right, -1 = left
+  const petScaleX = useRef(new Animated.Value(1)).current; // 1 = right, -1 = left
 
   // Fever Visual Pulse Animation
   const feverPulse = useRef(new Animated.Value(1)).current;
 
-  // Game Loop Timers
+  // Timers & Loop Refs
   const gameTimerRef = useRef(null);
   const spawnTimerRef = useRef(null);
   const animFrameRef = useRef(null);
   const feverTimerRef = useRef(null);
   const stunTimerRef = useRef(null);
 
-  // Sync petX animated value to currentPetX ref for collision detection
+  // Sync petX animated value to currentPetX ref
   useEffect(() => {
     const listenerId = petX.addListener(({ value }) => {
       currentPetX.current = value;
@@ -77,39 +105,73 @@ export default function SnackCatchGame({
     };
   }, [petX]);
 
-  // Touch / Pan Controls for Moving Pet Left & Right
+  // -----------------------------------------------------------------
+  // Move Pet to Target X (Direct Finger Tracking with 0ms Lag)
+  // -----------------------------------------------------------------
+  const movePetTo = useCallback((touchX, isTap = false) => {
+    if (typeof touchX !== 'number' || isNaN(touchX)) return;
+    const stageWidth = screenWidthRef.current;
+    const targetX = Math.max(10, Math.min(stageWidth - PET_WIDTH - 10, touchX - PET_WIDTH / 2));
+
+    if (targetX < currentPetX.current - 2) {
+      petScaleX.setValue(-1);
+    } else if (targetX > currentPetX.current + 2) {
+      petScaleX.setValue(1);
+    }
+
+    currentPetX.current = targetX;
+
+    if (isTap) {
+      Animated.spring(petX, {
+        toValue: targetX,
+        friction: 7,
+        tension: 110,
+        useNativeDriver: false,
+      }).start();
+    } else {
+      // Direct 1:1 Instant Finger Follow (Zero Latency)
+      petX.setValue(targetX);
+    }
+  }, [petX, petScaleX]);
+
+  // Step Move for Left/Right Assist Buttons
+  const stepPetMove = useCallback((offset) => {
+    if (gameStateRef.current !== 'playing' || isStunnedRef.current) return;
+    const nextX = currentPetX.current + offset;
+    movePetTo(nextX + PET_WIDTH / 2, true);
+  }, [movePetTo]);
+
+  // -----------------------------------------------------------------
+  // PanResponder with Capture to Ensure Full Touch Priority on iOS/Android
+  // -----------------------------------------------------------------
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (evt) => {
-        if (gameState !== 'playing' || isStunned) return;
-        movePetTo(evt.nativeEvent.pageX);
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        return Math.abs(gestureState.dx) > 1;
       },
-      onPanResponderMove: (evt) => {
-        if (gameState !== 'playing' || isStunned) return;
-        movePetTo(evt.nativeEvent.pageX);
+      onMoveShouldSetPanResponderCapture: () => true,
+      onPanResponderGrant: (evt, gestureState) => {
+        if (gameStateRef.current !== 'playing' || isStunnedRef.current) return;
+        const touchX = gestureState.x0 || evt.nativeEvent.pageX || evt.nativeEvent.locationX;
+        movePetTo(touchX, true);
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        if (gameStateRef.current !== 'playing' || isStunnedRef.current) return;
+        const touchX = gestureState.moveX || evt.nativeEvent.pageX || evt.nativeEvent.locationX;
+        movePetTo(touchX, false);
       },
     })
   ).current;
 
-  const movePetTo = (touchX) => {
-    const targetX = Math.max(12, Math.min(SCREEN_WIDTH - PET_WIDTH - 12, touchX - PET_WIDTH / 2));
-    if (targetX < currentPetX.current) {
-      petDirection.current = -1;
-    } else if (targetX > currentPetX.current) {
-      petDirection.current = 1;
-    }
-    Animated.spring(petX, {
-      toValue: targetX,
-      friction: 8,
-      tension: 100,
-      useNativeDriver: USE_NATIVE_DRIVER,
-    }).start();
-  };
-
+  // -----------------------------------------------------------------
   // Start / Reset Game
+  // -----------------------------------------------------------------
   const startGame = useCallback(() => {
+    const stageWidth = screenWidthRef.current;
+    const initialPetX = (stageWidth - PET_WIDTH) / 2;
+
     setScore(0);
     setCombo(0);
     setMaxCombo(0);
@@ -118,10 +180,13 @@ export default function SnackCatchGame({
     setIsStunned(false);
     setItems([]);
     setToasts([]);
-    petX.setValue((SCREEN_WIDTH - PET_WIDTH) / 2);
-    currentPetX.current = (SCREEN_WIDTH - PET_WIDTH) / 2;
+    itemsRef.current = [];
+
+    petX.setValue(initialPetX);
+    currentPetX.current = initialPetX;
+    petScaleX.setValue(1);
     setGameState('playing');
-  }, [petX]);
+  }, [petX, petScaleX]);
 
   // -----------------------------------------------------------------
   // Fever Mode Controller
@@ -132,8 +197,8 @@ export default function SnackCatchGame({
 
     Animated.loop(
       Animated.sequence([
-        Animated.timing(feverPulse, { toValue: 1.08, duration: 250, useNativeDriver: USE_NATIVE_DRIVER }),
-        Animated.timing(feverPulse, { toValue: 1.0, duration: 250, useNativeDriver: USE_NATIVE_DRIVER }),
+        Animated.timing(feverPulse, { toValue: 1.08, duration: 250, useNativeDriver: false }),
+        Animated.timing(feverPulse, { toValue: 1.0, duration: 250, useNativeDriver: false }),
       ])
     ).start();
 
@@ -147,107 +212,55 @@ export default function SnackCatchGame({
   // Floating Toast Notification
   const triggerToast = (text, color = '#FF4D6D') => {
     const id = `toast_${Date.now()}_${Math.random()}`;
-    const x = Math.max(30, Math.min(SCREEN_WIDTH - 120, currentPetX.current + 10));
-    const y = SCREEN_HEIGHT * 0.72;
+    const x = Math.max(30, Math.min(screenWidthRef.current - 120, currentPetX.current + 8));
+    const y = screenHeightRef.current - FLOOR_HEIGHT - 65;
     setToasts(prev => [...prev.slice(-4), { id, text, color, x, y }]);
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
-    }, 900);
+    }, 850);
   };
 
   // -----------------------------------------------------------------
   // Spawn Falling Item
   // -----------------------------------------------------------------
   const spawnItem = useCallback(() => {
-    if (gameState !== 'playing') return;
+    if (gameStateRef.current !== 'playing') return;
 
+    const stageWidth = screenWidthRef.current;
     let pool = ITEMS_TABLE;
-    if (isFever) {
-      // During fever: only high-score treats and stars, no hazards!
+    if (isFeverRef.current) {
       pool = ITEMS_TABLE.filter(i => !i.isHazard);
     }
 
     const template = pool[Math.floor(Math.random() * pool.length)];
-    const startX = Math.max(20, Math.min(SCREEN_WIDTH - ITEM_SIZE - 20, Math.random() * (SCREEN_WIDTH - ITEM_SIZE)));
-    const speed = isFever ? 4.5 + Math.random() * 2 : 3.2 + Math.random() * 1.8;
+    const startX = Math.max(20, Math.min(stageWidth - ITEM_SIZE - 20, Math.random() * (stageWidth - ITEM_SIZE)));
+    const speed = isFeverRef.current ? 6.2 + Math.random() * 2.0 : 4.8 + Math.random() * 1.8;
 
     const newItem = {
       id: `item_${Date.now()}_${Math.random()}`,
       ...template,
       x: startX,
-      y: -ITEM_SIZE,
+      y: 75, // Spawn right below the top HUD
       speed,
     };
 
-    setItems(prev => [...prev.slice(-18), newItem]);
-  }, [gameState, isFever]);
-
-  // -----------------------------------------------------------------
-  // Main Physics & Collision Detection Loop (60 FPS)
-  // -----------------------------------------------------------------
-  useEffect(() => {
-    if (gameState !== 'playing') return;
-
-    const petHitY = SCREEN_HEIGHT * 0.77;
-    const petHitHeight = PET_HEIGHT;
-
-    const updatePhysics = () => {
-      setItems(prevItems => {
-        const nextItems = [];
-
-        for (let i = 0; i < prevItems.length; i++) {
-          const item = prevItems[i];
-          const nextY = item.y + item.speed;
-
-          // Check Collision with Pet Catch Box
-          const isCollidingY = nextY + ITEM_SIZE >= petHitY && nextY <= petHitY + petHitHeight * 0.65;
-          const isCollidingX =
-            item.x + ITEM_SIZE >= currentPetX.current - 12 &&
-            item.x <= currentPetX.current + PET_WIDTH + 12;
-
-          if (isCollidingY && isCollidingX) {
-            // Collision HIT!
-            handleItemCollected(item);
-            continue; // Item consumed, do not push to nextItems
-          }
-
-          // Off-screen bottom
-          if (nextY > SCREEN_HEIGHT + 30) {
-            if (!item.isHazard) {
-              // Missed food resets combo
-              setCombo(0);
-            }
-            continue;
-          }
-
-          nextItems.push({ ...item, y: nextY });
-        }
-
-        return nextItems;
-      });
-
-      animFrameRef.current = requestAnimationFrame(updatePhysics);
-    };
-
-    animFrameRef.current = requestAnimationFrame(updatePhysics);
-    return () => {
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    };
-  }, [gameState]);
+    itemsRef.current.push(newItem);
+    setItems([...itemsRef.current]);
+  }, []);
 
   // -----------------------------------------------------------------
   // Item Collected Handler
   // -----------------------------------------------------------------
-  const handleItemCollected = (item) => {
-    // 1. Pet Bite Squish Bounce Animation
+  const handleItemCollected = useCallback((item) => {
+    // 1. Pet Squish Bounce
     Animated.sequence([
-      Animated.timing(petBounce, { toValue: 0.78, duration: 80, useNativeDriver: USE_NATIVE_DRIVER }),
-      Animated.timing(petBounce, { toValue: 1.22, duration: 110, useNativeDriver: USE_NATIVE_DRIVER }),
-      Animated.timing(petBounce, { toValue: 1.0, duration: 100, useNativeDriver: USE_NATIVE_DRIVER }),
+      Animated.timing(petBounce, { toValue: 0.78, duration: 70, useNativeDriver: false }),
+      Animated.timing(petBounce, { toValue: 1.22, duration: 90, useNativeDriver: false }),
+      Animated.timing(petBounce, { toValue: 1.0, duration: 80, useNativeDriver: false }),
     ]).start();
 
     if (item.isHazard) {
-      // Stun & Score Penalty
+      // Penalty & Stun
       setCombo(0);
       setScore(s => Math.max(0, s + item.score));
       triggerToast(`${item.name}! ${item.score} 💥`, '#DC2626');
@@ -256,17 +269,17 @@ export default function SnackCatchGame({
       if (stunTimerRef.current) clearTimeout(stunTimerRef.current);
       stunTimerRef.current = setTimeout(() => {
         setIsStunned(false);
-      }, 750);
+      }, 700);
     } else {
-      // Success Treat Catch
-      const multiplier = isFever ? 2 : 1;
+      // Food Catch Success
+      const multiplier = isFeverRef.current ? 2 : 1;
       const pointsGained = item.score * multiplier;
       setScore(s => s + pointsGained);
 
       setCombo(c => {
         const nextCombo = c + 1;
         setMaxCombo(m => Math.max(m, nextCombo));
-        if (nextCombo === 8 && !isFever) {
+        if (nextCombo === 8 && !isFeverRef.current) {
           activateFeverMode();
         }
         return nextCombo;
@@ -274,14 +287,75 @@ export default function SnackCatchGame({
 
       triggerToast(`+${pointsGained} 냠냠! 😋`, '#10B981');
     }
-  };
+  }, [activateFeverMode, petBounce]);
 
   // -----------------------------------------------------------------
-  // Game Loop Timers (Clock countdown & Spawner)
+  // Main Physics & Collision Detection Loop
   // -----------------------------------------------------------------
   useEffect(() => {
+    if (gameState !== 'playing') return;
+
+    let isRunning = true;
+
+    const updatePhysics = () => {
+      if (!isRunning || gameStateRef.current !== 'playing') return;
+
+      const stageHeight = screenHeightRef.current;
+      const petHitY = stageHeight - FLOOR_HEIGHT - PET_HEIGHT + 10;
+      const nextActiveItems = [];
+
+      for (let i = 0; i < itemsRef.current.length; i++) {
+        const item = itemsRef.current[i];
+        const nextY = item.y + item.speed;
+
+        // Collision Check
+        const isCollidingY = nextY + ITEM_SIZE >= petHitY && nextY <= petHitY + PET_HEIGHT * 0.75;
+        const isCollidingX =
+          item.x + ITEM_SIZE >= currentPetX.current - 14 &&
+          item.x <= currentPetX.current + PET_WIDTH + 14;
+
+        if (isCollidingY && isCollidingX) {
+          handleItemCollected(item);
+          continue; // Consumed
+        }
+
+        // Off-screen bottom
+        if (nextY > stageHeight - FLOOR_HEIGHT + 20) {
+          if (!item.isHazard) {
+            setCombo(0);
+          }
+          continue;
+        }
+
+        nextActiveItems.push({ ...item, y: nextY });
+      }
+
+      itemsRef.current = nextActiveItems;
+      setItems(nextActiveItems);
+
+      animFrameRef.current = requestAnimationFrame(updatePhysics);
+    };
+
+    animFrameRef.current = requestAnimationFrame(updatePhysics);
+
+    return () => {
+      isRunning = false;
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    };
+  }, [gameState, handleItemCollected]);
+
+  // Finish Game
+  const finishGame = useCallback(() => {
+    setGameState('gameover');
+    if (gameTimerRef.current) clearInterval(gameTimerRef.current);
+    if (spawnTimerRef.current) clearInterval(spawnTimerRef.current);
+    if (feverTimerRef.current) clearTimeout(feverTimerRef.current);
+    if (stunTimerRef.current) clearTimeout(stunTimerRef.current);
+  }, []);
+
+  // Game Loop Timers
+  useEffect(() => {
     if (gameState === 'playing') {
-      // Clock Timer
       gameTimerRef.current = setInterval(() => {
         setTimeLeft(t => {
           if (t <= 1) {
@@ -293,28 +367,18 @@ export default function SnackCatchGame({
         });
       }, 1000);
 
-      // Item Spawner
       spawnTimerRef.current = setInterval(() => {
         spawnItem();
-      }, isFever ? SPAWN_INTERVAL * 0.55 : SPAWN_INTERVAL);
+      }, isFever ? SPAWN_INTERVAL * 0.6 : SPAWN_INTERVAL);
     }
 
     return () => {
       if (gameTimerRef.current) clearInterval(gameTimerRef.current);
       if (spawnTimerRef.current) clearInterval(spawnTimerRef.current);
     };
-  }, [gameState, isFever, spawnItem]);
+  }, [gameState, isFever, spawnItem, finishGame]);
 
-  // Finish Game & Calculate Rewards
-  const finishGame = useCallback(() => {
-    setGameState('gameover');
-    if (gameTimerRef.current) clearInterval(gameTimerRef.current);
-    if (spawnTimerRef.current) clearInterval(spawnTimerRef.current);
-    if (feverTimerRef.current) clearTimeout(feverTimerRef.current);
-    if (stunTimerRef.current) clearTimeout(stunTimerRef.current);
-  }, []);
-
-  // Compute Final Grade & Rewards
+  // Compute Grade & Rewards
   const getGameGrade = (finalScore) => {
     if (finalScore >= 750) return { grade: 'S', color: '#FAAD14', title: '간식 마스터 👑' };
     if (finalScore >= 500) return { grade: 'A', color: '#52C41A', title: '폭풍 먹방 🌟' };
@@ -342,15 +406,27 @@ export default function SnackCatchGame({
   const currentGrade = getGameGrade(score);
 
   return (
-    <Modal visible={visible} animationType="fade" transparent={false} onRequestClose={onClose}>
-      <View style={styles.gameContainer} {...panResponder.panHandlers}>
+    <Modal
+      visible={visible}
+      animationType="fade"
+      transparent={true}
+      presentationStyle="overFullScreen"
+      statusBarTranslucent={true}
+      onRequestClose={onClose}
+    >
+      <View style={[styles.gameContainer, { width: screenWidth, height: screenHeight }]}>
         {/* --------------------------------------------------------- */}
-        {/* TOP STATUS HUD */}
+        {/* FULLSCREEN TOUCH CAPTURE LAYER FOR SMOOTH SWIPING */}
         {/* --------------------------------------------------------- */}
-        <View style={styles.topHudBar}>
+        <View style={StyleSheet.absoluteFillObject} {...panResponder.panHandlers} />
+
+        {/* --------------------------------------------------------- */}
+        {/* TOP STATUS HUD BAR */}
+        {/* --------------------------------------------------------- */}
+        <View style={styles.topHudBar} pointerEvents="box-none">
           {/* Time Counter */}
           <View style={[styles.hudPill, timeLeft <= 5 && styles.hudPillUrgent]}>
-            <Clock size={16} color={timeLeft <= 5 ? '#FF4D4F' : '#333'} />
+            <Clock size={16} color={timeLeft <= 5 ? '#FF4D4F' : '#FF7E82'} />
             <Text style={[styles.hudPillText, timeLeft <= 5 && { color: '#FF4D4F' }]}>
               {timeLeft}초
             </Text>
@@ -364,12 +440,12 @@ export default function SnackCatchGame({
 
           {/* Close Game Button */}
           <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.8}>
-            <X size={20} color="#666" />
+            <X size={18} color="#666" />
           </TouchableOpacity>
         </View>
 
         {/* Combo & Fever Indicator */}
-        <View style={styles.comboRow}>
+        <View style={styles.comboRow} pointerEvents="none">
           {combo >= 2 && (
             <View style={[styles.comboBadge, isFever && styles.feverBadge]}>
               {isFever && <Flame size={16} color="#FFF" style={{ marginRight: 4 }} />}
@@ -417,7 +493,41 @@ export default function SnackCatchGame({
         ))}
 
         {/* --------------------------------------------------------- */}
-        {/* PET ACTOR SPRITE (Controlled by User Swipe) */}
+        {/* BOTTOM STAGE PLATFORM (Grounded Room Stage) */}
+        {/* --------------------------------------------------------- */}
+        <View style={styles.bottomStageArea} pointerEvents="box-none">
+          <View style={styles.stageWoodFloor}>
+            <View style={styles.stageWoodHighlight} />
+
+            {/* Touch Assist Step Buttons */}
+            {gameState === 'playing' && (
+              <View style={styles.stageControlsRow}>
+                <TouchableOpacity
+                  style={styles.stepBtn}
+                  onPress={() => stepPetMove(-55)}
+                  activeOpacity={0.7}
+                >
+                  <ChevronLeft size={20} color="#8D6E63" />
+                  <Text style={styles.stepBtnText}>왼쪽</Text>
+                </TouchableOpacity>
+
+                <Text style={styles.stageGuideText}>화면 스와이프 or 버튼 탭</Text>
+
+                <TouchableOpacity
+                  style={styles.stepBtn}
+                  onPress={() => stepPetMove(55)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.stepBtnText}>오른쪽</Text>
+                  <ChevronRight size={20} color="#8D6E63" />
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* --------------------------------------------------------- */}
+        {/* PET ACTOR SPRITE (Controlled by User Swipe & Buttons) */}
         {/* --------------------------------------------------------- */}
         <Animated.View
           style={[
@@ -426,7 +536,7 @@ export default function SnackCatchGame({
               transform: [
                 { translateX: petX },
                 { scaleY: petBounce },
-                { scaleX: petDirection.current },
+                { scaleX: petScaleX },
                 { scale: isFever ? feverPulse : 1.0 },
               ],
             },
@@ -451,35 +561,28 @@ export default function SnackCatchGame({
             </View>
           )}
 
-          {/* Catch Plate / Shadow */}
+          {/* Ground Contact Shadow */}
           <View style={styles.playerShadow} />
         </Animated.View>
 
-        {/* Guidance Prompt at Bottom */}
-        {gameState === 'playing' && (
-          <View style={styles.swipeGuideBox} pointerEvents="none">
-            <Text style={styles.swipeGuideText}>👈 화면을 좌우로 문질러 간식을 받아먹으세요! 👉</Text>
-          </View>
-        )}
-
         {/* --------------------------------------------------------- */}
-        {/* READY / START OVERLAY */}
+        {/* READY / START OVERLAY (Full-Screen Dimensioned Backdrop) */}
         {/* --------------------------------------------------------- */}
         {gameState === 'ready' && (
-          <View style={styles.overlayCenter}>
+          <View style={[styles.overlayCenter, { width: screenWidth, height: screenHeight }]}>
             <View style={styles.readyCard}>
               <Text style={styles.readyHeaderEmoji}>🍖✨😋</Text>
               <Text style={styles.readyTitle}>와구와구 간식 캐치!</Text>
               <Text style={styles.readyDesc}>
-                30초 동안 하늘에서 떨어지는 맛있는 간식을{'\n'}
-                반려몽을 좌우로 조작하여 마음껏 먹여주세요!
+                하늘에서 떨어지는 맛있는 간식을{'\n'}
+                반려몽을 좌우로 조작하여 마음껏 받아먹이세요!
               </Text>
 
               <View style={styles.rulePillBox}>
                 <Text style={styles.rulePillText}>🍎 🍖 🍰 간식 = +점수 & 콤보!</Text>
                 <Text style={styles.rulePillText}>💣 🌶️ 폭탄/고추 = -점수 & 기절!</Text>
                 <Text style={[styles.rulePillText, { color: '#FF7E82', fontWeight: '800' }]}>
-                  🔥 8콤보 달성 시 피버 타임 발동!
+                  🔥 8콤보 달성 시 2배 FEVER TIME!
                 </Text>
               </View>
 
@@ -491,10 +594,10 @@ export default function SnackCatchGame({
         )}
 
         {/* --------------------------------------------------------- */}
-        {/* GAME OVER RESULT OVERLAY */}
+        {/* GAME OVER RESULT OVERLAY (Full-Screen Dimensioned Backdrop) */}
         {/* --------------------------------------------------------- */}
         {gameState === 'gameover' && (
-          <View style={styles.overlayCenter}>
+          <View style={[styles.overlayCenter, { width: screenWidth, height: screenHeight }]}>
             <View style={styles.resultCard}>
               <Text style={styles.resultHeaderEmoji}>🎉🎊</Text>
               <Text style={styles.resultTitle}>먹방 타임 종료!</Text>
@@ -563,14 +666,13 @@ export default function SnackCatchGame({
 
 const styles = StyleSheet.create({
   gameContainer: {
-    flex: 1,
     backgroundColor: '#FFF9F2',
     position: 'relative',
     overflow: 'hidden',
   },
   topHudBar: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 54 : 32,
+    top: Platform.OS === 'ios' ? 52 : 28,
     left: 16,
     right: 16,
     flexDirection: 'row',
@@ -581,9 +683,9 @@ const styles = StyleSheet.create({
   hudPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 7,
     borderRadius: 20,
     borderWidth: 1.5,
     borderColor: '#FFE2D1',
@@ -613,10 +715,10 @@ const styles = StyleSheet.create({
     color: '#D48806',
   },
   closeBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
@@ -624,7 +726,7 @@ const styles = StyleSheet.create({
   },
   comboRow: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 104 : 82,
+    top: Platform.OS === 'ios' ? 100 : 76,
     left: 0,
     right: 0,
     alignItems: 'center',
@@ -635,12 +737,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#FF7E82',
     paddingHorizontal: 16,
-    paddingVertical: 6,
+    paddingVertical: 5,
     borderRadius: 16,
     shadowColor: '#FF7E82',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.35,
-    shadowRadius: 6,
+    shadowRadius: 5,
     elevation: 3,
   },
   feverBadge: {
@@ -650,7 +752,7 @@ const styles = StyleSheet.create({
     transform: [{ scale: 1.1 }],
   },
   comboText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '900',
     color: '#FFFFFF',
     letterSpacing: 0.5,
@@ -668,9 +770,72 @@ const styles = StyleSheet.create({
   fallingItemEmoji: {
     fontSize: 34,
   },
+  bottomStageArea: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: FLOOR_HEIGHT,
+    zIndex: 30,
+  },
+  stageWoodFloor: {
+    flex: 1,
+    backgroundColor: '#F3E5D8',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    borderTopWidth: 3,
+    borderColor: '#E6D2C0',
+    justifyContent: 'flex-end',
+    paddingBottom: Platform.OS === 'ios' ? 26 : 14,
+    paddingHorizontal: 20,
+    shadowColor: '#8D6E63',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  stageWoodHighlight: {
+    position: 'absolute',
+    top: 0,
+    left: 40,
+    right: 40,
+    height: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+    borderRadius: 2,
+  },
+  stageControlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  stepBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E6D2C0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  stepBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#8D6E63',
+  },
+  stageGuideText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#A1887F',
+  },
   petPlayerContainer: {
     position: 'absolute',
-    bottom: Platform.OS === 'ios' ? 110 : 80,
+    bottom: FLOOR_HEIGHT - 12,
     left: 0,
     width: PET_WIDTH,
     height: PET_HEIGHT,
@@ -683,14 +848,14 @@ const styles = StyleSheet.create({
     height: PET_HEIGHT,
   },
   petPlayerEmoji: {
-    fontSize: 66,
+    fontSize: 60,
   },
   petStunned: {
     opacity: 0.65,
   },
   stunBadge: {
     position: 'absolute',
-    top: -14,
+    top: -12,
     backgroundColor: '#DC2626',
     paddingHorizontal: 8,
     paddingVertical: 2,
@@ -702,10 +867,10 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   playerShadow: {
-    width: 60,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: 'rgba(0, 0, 0, 0.12)',
+    width: 54,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(141, 110, 99, 0.25)',
     position: 'absolute',
     bottom: 2,
   },
@@ -714,27 +879,17 @@ const styles = StyleSheet.create({
     zIndex: 55,
   },
   floatingToastText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '900',
     textShadowColor: 'rgba(255, 255, 255, 0.9)',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
   },
-  swipeGuideBox: {
-    position: 'absolute',
-    bottom: Platform.OS === 'ios' ? 50 : 25,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
-  swipeGuideText: {
-    fontSize: 13,
-    color: '#B08873',
-    fontWeight: '600',
-  },
   overlayCenter: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
@@ -748,53 +903,57 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
     elevation: 8,
   },
   readyHeaderEmoji: {
-    fontSize: 48,
+    fontSize: 42,
     marginBottom: 8,
   },
   readyTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '900',
-    color: '#1C1C1E',
+    color: '#2D3436',
     marginBottom: 8,
   },
   readyDesc: {
     fontSize: 13,
-    color: '#666666',
+    color: '#636E72',
     textAlign: 'center',
     lineHeight: 19,
     marginBottom: 16,
   },
   rulePillBox: {
     width: '100%',
-    backgroundColor: '#FFF9F2',
-    padding: 12,
+    backgroundColor: '#FFF4EB',
     borderRadius: 14,
-    gap: 6,
+    padding: 12,
     marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#FFE8D6',
+    gap: 6,
   },
   rulePillText: {
     fontSize: 12,
+    color: '#D46B08',
     fontWeight: '700',
-    color: '#555555',
+    textAlign: 'center',
   },
   startBtn: {
     width: '100%',
     backgroundColor: '#FF7E82',
-    paddingVertical: 15,
-    borderRadius: 14,
+    paddingVertical: 14,
+    borderRadius: 16,
     alignItems: 'center',
+    shadowColor: '#FF7E82',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 4,
   },
   startBtnText: {
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: '900',
     color: '#FFFFFF',
   },
   resultCard: {
@@ -805,38 +964,38 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
     elevation: 8,
   },
   resultHeaderEmoji: {
-    fontSize: 42,
+    fontSize: 40,
     marginBottom: 6,
   },
   resultTitle: {
     fontSize: 20,
     fontWeight: '900',
-    color: '#1C1C1E',
-    marginBottom: 8,
+    color: '#2D3436',
+    marginBottom: 10,
   },
   gradePill: {
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    borderRadius: 14,
     marginBottom: 16,
   },
   gradePillText: {
     fontSize: 13,
-    fontWeight: '800',
+    fontWeight: '900',
     color: '#FFFFFF',
   },
   resultScoreBox: {
     width: '100%',
     backgroundColor: '#FFFBE6',
-    borderWidth: 1,
-    borderColor: '#FFE58F',
     borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#FFE58F',
     padding: 14,
     alignItems: 'center',
     marginBottom: 14,
@@ -844,29 +1003,27 @@ const styles = StyleSheet.create({
   resultScoreLabel: {
     fontSize: 12,
     color: '#8C6B00',
-    fontWeight: '600',
-    marginBottom: 2,
+    fontWeight: '700',
+    marginBottom: 4,
   },
   resultScoreVal: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: '900',
     color: '#D48806',
-    marginBottom: 4,
   },
   resultMaxCombo: {
     fontSize: 12,
     color: '#FA8C16',
-    fontWeight: '700',
+    fontWeight: '800',
+    marginTop: 4,
   },
   rewardsBox: {
     width: '100%',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 14,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 16,
     padding: 12,
     gap: 8,
     marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
   },
   rewardRow: {
     flexDirection: 'row',
@@ -876,41 +1033,46 @@ const styles = StyleSheet.create({
   rewardText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#374151',
+    color: '#2D3436',
   },
   resultBtnRow: {
     flexDirection: 'row',
-    width: '100%',
     gap: 10,
+    width: '100%',
   },
   retryBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F0F5FF',
+    paddingVertical: 12,
+    backgroundColor: '#E6F7FF',
+    borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: '#ADC6FF',
-    paddingVertical: 13,
-    borderRadius: 12,
+    borderColor: '#91D5FF',
   },
   retryBtnText: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#2F54EB',
+    color: '#1890FF',
   },
   claimBtn: {
-    flex: 1,
+    flex: 1.3,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 12,
     backgroundColor: '#FF7E82',
-    paddingVertical: 13,
-    borderRadius: 12,
+    borderRadius: 14,
+    shadowColor: '#FF7E82',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 3,
   },
   claimBtnText: {
     fontSize: 14,
-    fontWeight: '800',
+    fontWeight: '900',
     color: '#FFFFFF',
   },
 });
