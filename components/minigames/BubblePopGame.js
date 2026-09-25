@@ -18,6 +18,7 @@ const { width: INITIAL_WIDTH, height: INITIAL_HEIGHT } = Dimensions.get('window'
 const GAME_DURATION = 25; // 25 seconds
 const SPAWN_INTERVAL = 400; // ms
 const MAX_BUBBLES = 18;
+const MAX_TIME_BONUSES = 2; // Maximum times a player can get +3s per game
 
 // Bubble types configuration
 const BUBBLE_TYPES = [
@@ -53,6 +54,7 @@ export default function BubblePopGame({
   const [cleanliness, setCleanliness] = useState(0); // 0% ~ 100%
   const [combo, setCombo] = useState(0);
   const [maxCombo, setMaxCombo] = useState(0);
+  const [timeBonusCount, setTimeBonusCount] = useState(0);
   const [isSparkleFever, setIsSparkleFever] = useState(false);
   const [bubbles, setBubbles] = useState([]);
   const [popEffects, setPopEffects] = useState([]);
@@ -75,6 +77,7 @@ export default function BubblePopGame({
   const bubblesRef = useRef([]);
   const isSparkleFeverRef = useRef(false);
   const lastPopTimeRef = useRef(0);
+  const timeBonusCountRef = useRef(0);
 
   // Timers
   const gameTimerRef = useRef(null);
@@ -118,6 +121,8 @@ export default function BubblePopGame({
     setCleanliness(0);
     setCombo(0);
     setMaxCombo(0);
+    setTimeBonusCount(0);
+    timeBonusCountRef.current = 0;
     setTimeLeft(GAME_DURATION);
     setIsSparkleFever(false);
     setBubbles([]);
@@ -173,11 +178,16 @@ export default function BubblePopGame({
     const stageWidth = screenWidthRef.current;
     const stageHeight = screenHeightRef.current;
 
-    // Pick type by weight
-    const totalWeight = BUBBLE_TYPES.reduce((acc, t) => acc + t.weight, 0);
+    // Pick type by weight (exclude timer bubble if maximum bonus limit reached)
+    let availableTypes = BUBBLE_TYPES;
+    if (timeBonusCountRef.current >= MAX_TIME_BONUSES) {
+      availableTypes = BUBBLE_TYPES.filter(t => t.type !== 'timer');
+    }
+
+    const totalWeight = availableTypes.reduce((acc, t) => acc + t.weight, 0);
     let rand = Math.random() * totalWeight;
-    let chosenType = BUBBLE_TYPES[0];
-    for (const t of BUBBLE_TYPES) {
+    let chosenType = availableTypes[0];
+    for (const t of availableTypes) {
       if (rand < t.weight) {
         chosenType = t;
         break;
@@ -264,10 +274,17 @@ export default function BubblePopGame({
     setPoppedCount(p => p + 1);
     setCleanliness(c => Math.min(100, Math.round(c + (bubble.type === 'soap' ? 6 : 3))));
 
-    // Extra Time bonus for timer bubble
+    // Extra Time bonus for timer bubble (Capped to MAX_TIME_BONUSES)
     if (bubble.addTime) {
-      setTimeLeft(t => Math.min(30, t + bubble.addTime));
-      triggerToast(`+${bubble.addTime}초 시간 보너스! ⏱️`, '#10B981', popX, popY);
+      if (timeBonusCountRef.current < MAX_TIME_BONUSES) {
+        timeBonusCountRef.current += 1;
+        const currentCount = timeBonusCountRef.current;
+        setTimeBonusCount(currentCount);
+        setTimeLeft(t => Math.min(GAME_DURATION, t + bubble.addTime));
+        triggerToast(`+${bubble.addTime}초 시간 보너스! (${currentCount}/${MAX_TIME_BONUSES}) ⏱️`, '#10B981', popX, popY);
+      } else {
+        triggerToast(`+${addedScore} 팡! 🫧`, bubble.color, popX, popY);
+      }
     } else {
       triggerToast(`+${addedScore} 팡! 🫧`, bubble.color, popX, popY);
     }
@@ -333,6 +350,8 @@ export default function BubblePopGame({
     setCleanliness(0);
     setCombo(0);
     setMaxCombo(0);
+    setTimeBonusCount(0);
+    timeBonusCountRef.current = 0;
     setTimeLeft(GAME_DURATION);
     setIsSparkleFever(false);
     setBubbles([]);
@@ -665,7 +684,7 @@ export default function BubblePopGame({
                 <View style={styles.readyBubbleItem}>
                   <Text style={{ fontSize: 32 }}>⏱️</Text>
                   <Text style={styles.readyBubbleLabel}>시간 연장</Text>
-                  <Text style={[styles.readyBubblePoints, { color: '#10B981' }]}>+3초</Text>
+                  <Text style={[styles.readyBubblePoints, { color: '#10B981' }]}>+3초 (최대 2회)</Text>
                 </View>
                 <View style={styles.readyBubbleItem}>
                   <Text style={{ fontSize: 32 }}>🧼</Text>
@@ -680,6 +699,12 @@ export default function BubblePopGame({
                   <Text style={styles.instructionEmoji}>👆</Text>
                   <Text style={styles.instructionText}>
                     올라오는 거품을 연속 탭하거나 손가락으로 쓱- 슬라이스하여 터트립니다.
+                  </Text>
+                </View>
+                <View style={styles.instructionItem}>
+                  <Text style={styles.instructionEmoji}>⏱️</Text>
+                  <Text style={styles.instructionText}>
+                    시계 버블 터치 시 +3초 시간 연장 (게임당 최대 2회 제한).
                   </Text>
                 </View>
                 <View style={styles.instructionItem}>
