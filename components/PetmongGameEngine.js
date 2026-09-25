@@ -26,6 +26,7 @@ import { getEvolutionStage, getEvolvedEmoji } from '../lib/petmongEvolution';
 import SnackCatchGame from './minigames/SnackCatchGame';
 import KeepyUppyGame from './minigames/KeepyUppyGame';
 import BubblePopGame from './minigames/BubblePopGame';
+import DreamConstellationGame from './minigames/DreamConstellationGame';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
@@ -56,12 +57,13 @@ export default function PetmongGameEngine({
 }) {
   // Tool & Menu States
   const [isMenuOpen, setIsMenuOpen] = useState(false); // Radial Care Hub open/closed
-  const [activeTool, setActiveTool] = useState('none'); // 'none' | 'feed' | 'play' | 'bath'
+  const [activeTool, setActiveTool] = useState('none'); // 'none' | 'feed' | 'play' | 'bath' | 'sleep'
   const [isLightsOff, setIsLightsOff] = useState(false);
   const [showConditionPopup, setShowConditionPopup] = useState(false);
   const [isSnackGameVisible, setIsSnackGameVisible] = useState(false);
   const [isKeepyUppyGameVisible, setIsKeepyUppyGameVisible] = useState(false);
   const [isBubbleGameVisible, setIsBubbleGameVisible] = useState(false);
+  const [isDreamGameVisible, setIsDreamGameVisible] = useState(false);
 
   // Pet Action State: 'idle' | 'walking' | 'eating' | 'playing' | 'bathing' | 'sleeping' | 'happy'
   const [petAction, setPetAction] = useState('idle');
@@ -890,6 +892,85 @@ export default function PetmongGameEngine({
       )}
 
       {/* ------------------------------------------------------------- */}
+      {/* 3-D. FLOATING SLEEP DRAWER (Slides up smoothly when Sleep active) */}
+      {/* ------------------------------------------------------------- */}
+      {activeTool === 'sleep' && (
+        <View style={[styles.floatingSnackDrawer, { backgroundColor: 'rgba(15, 23, 42, 0.98)', borderColor: '#4F46E5' }]}>
+          <View style={styles.snackDrawerHeader}>
+            <Text style={[styles.snackDrawerTitle, { color: '#A5B4FC' }]}>
+              반려몽 수면 & 꿈나라 별자리 🌙
+            </Text>
+            <TouchableOpacity onPress={() => setActiveTool('none')} style={styles.snackCloseBtn}>
+              <X size={16} color="#94A3B8" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Action A: Interactive Mini-Game Launcher */}
+          <TouchableOpacity
+            style={[styles.snackGameBanner, { backgroundColor: '#1E1B4B', borderColor: '#6366F1' }]}
+            onPress={() => {
+              setActiveTool('none');
+              setIsDreamGameVisible(true);
+            }}
+            activeOpacity={0.85}
+          >
+            <View style={styles.snackGameBannerLeft}>
+              <View style={[styles.snackGameTag, { backgroundColor: '#4F46E5' }]}>
+                <Flame size={12} color="#FFF" style={{ marginRight: 3 }} />
+                <Text style={styles.snackGameTagText}>제4탄 체류형 게임</Text>
+              </View>
+              <Text style={[styles.snackGameTitle, { color: '#F8FAFC' }]}>
+                🎮 꿈나라 별자리 잇기 도전!
+              </Text>
+              <Text style={[styles.snackGameSubtitle, { color: '#CBD5E1' }]}>
+                밤하늘 별을 순서대로 이어 별자리를 완성하고 꿀잠 에너지 충전!
+              </Text>
+            </View>
+            <View style={[styles.snackGameStartBadge, { backgroundColor: '#4F46E5', shadowColor: '#4F46E5' }]}>
+              <Text style={styles.snackGameStartText}>START ⚡</Text>
+            </View>
+          </TouchableOpacity>
+
+          <View style={styles.snackDrawerDivider}>
+            <Text style={[styles.snackDrawerDividerText, { color: '#64748B' }]}>
+              또는 스탠드 조명 끄고 바로 재우기
+            </Text>
+          </View>
+
+          {/* Action B: Immediate Lights Off & Sleep */}
+          <TouchableOpacity
+            style={[
+              styles.snackCard,
+              {
+                width: '100%',
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingVertical: 11,
+                paddingHorizontal: 14,
+                backgroundColor: '#1E293B',
+                borderColor: '#334155',
+              },
+            ]}
+            onPress={() => {
+              setActiveTool('none');
+              handleToggleLights();
+            }}
+            activeOpacity={0.75}
+          >
+            <Text style={[styles.snackEmoji, { fontSize: 24, marginRight: 10, marginBottom: 0 }]}>🌙</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.snackName, { fontSize: 12, color: '#F8FAFC' }]}>조명 끄고 재우기</Text>
+              <Text style={{ fontSize: 10, color: '#94A3B8', marginTop: 1 }}>
+                방 조명을 어둡게 끄고 반려몽이 누워 쿨쿨 자도록 합니다
+              </Text>
+            </View>
+            <Text style={[styles.snackExp, { color: '#38BDF8', fontWeight: '800', marginRight: 4 }]}>에너지 +100%</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* ------------------------------------------------------------- */}
       {/* 4. RADIAL FLOATING CARE HUB (Minimal 95% Open Layout) */}
       {/* ------------------------------------------------------------- */}
       <View style={styles.floatingHubContainer} pointerEvents="box-none">
@@ -950,8 +1031,14 @@ export default function PetmongGameEngine({
 
           {/* Lights / Sleep Button */}
           <TouchableOpacity
-            style={[styles.careMiniOrb, isLightsOff && styles.careMiniOrbNight]}
-            onPress={handleToggleLights}
+            style={[styles.careMiniOrb, (activeTool === 'sleep' || isLightsOff) && styles.careMiniOrbNight]}
+            onPress={() => {
+              if (isLightsOff) {
+                handleToggleLights();
+              } else {
+                setActiveTool(prev => prev === 'sleep' ? 'none' : 'sleep');
+              }
+            }}
             activeOpacity={0.8}
           >
             <Text style={styles.careOrbIcon}>{isLightsOff ? '☀️' : '🌙'}</Text>
@@ -1039,6 +1126,30 @@ export default function PetmongGameEngine({
           setPetAction('happy');
           setDialogue(`뽀득뽀득 기분 최고 몽! 청결도 100% 완충, ${poppedCount}개 버블 팝! 🫧✨`);
           spawnHeartToast(`+${exp} EXP & +${points}P 🧼`);
+        }}
+      />
+
+      {/* ------------------------------------------------------------- */}
+      {/* 8. INTERACTIVE DREAM CONSTELLATION MINI-GAME MODAL */}
+      {/* ------------------------------------------------------------- */}
+      <DreamConstellationGame
+        visible={isDreamGameVisible}
+        character={character}
+        transparentUrl={transparentUrl}
+        onClose={() => setIsDreamGameVisible(false)}
+        onGameComplete={({ score, completedCount, exp, points }) => {
+          if (onUpdateVitals) {
+            onUpdateVitals(prev => ({
+              ...prev,
+              energy: 100,
+              happiness: Math.min(100, (prev.happiness || 85) + 20),
+            }));
+          }
+          if (onGainExp) onGainExp(exp);
+          if (onAwardPoints) onAwardPoints(points, '꿈나라 별자리 잇기');
+          setPetAction('sleeping');
+          setDialogue(`반려몽이 아름다운 별자리 꿈을 꾸며 깊은 잠에 빠졌어요... 에너지 100% 완충! 🌙✨`);
+          spawnHeartToast(`+${exp} EXP & +${points}P 🌙`);
         }}
       />
     </View>

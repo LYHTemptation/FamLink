@@ -34,8 +34,9 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v56.0.0/ before 
   - **연동 액션**: 목욕하기 (`🧼`)
   - **스펙**: 반려몽 몸 주변에 피어오르는 무수한 비누방울을 손가락으로 연속 탭/스와이프하여 팡팡 터트리는 쾌감 액션. 황금 거품/시간 연장 거품 기믹, 청결도 100% 게이지 달성 보상.
   - **파일**: `components/minigames/BubblePopGame.js`
-- [ ] **제4탄 [꿈나라 별자리 잇기] (Dream Constellation)**:
+- [x] **제4탄 [꿈나라 별자리 잇기] (Dream Constellation)**:
   - **연동 액션**: 재우기 (`🌙`)
   - **스펙**: 밤하늘 천장의 빛나는 별들을 순서대로 선으로 이어 별자리를 완성하는 힐링 감성 퍼즐. 완성 시 꿀잠 에너지 완충 + 다음 날 아침 깜짝 보물상자 선물 연동.
+  - **파일**: `components/minigames/DreamConstellationGame.js`
 
 
