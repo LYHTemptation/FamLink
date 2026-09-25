@@ -17,7 +17,8 @@ import { Trophy, Sparkles, X, Moon, Star, RotateCcw, Check, Clock, Zap, Gift } f
 const { width: INITIAL_WIDTH, height: INITIAL_HEIGHT } = Dimensions.get('window');
 
 const GAME_DURATION = 40; // 40 seconds relaxed healing time
-const STAR_RADIUS = 18;
+const STAR_RADIUS = 22;
+const STAR_HIT_RADIUS = 28;
 
 // 4 Exquisite Constellation Puzzles
 const CONSTELLATIONS = [
@@ -26,11 +27,11 @@ const CONSTELLATIONS = [
     name: '꼬마 곰자리',
     emoji: '🐻',
     stars: [
-      { id: 1, normX: 0.22, normY: 0.22 },
-      { id: 2, normX: 0.38, normY: 0.16 },
-      { id: 3, normX: 0.58, normY: 0.24 },
+      { id: 1, normX: 0.22, normY: 0.24 },
+      { id: 2, normX: 0.38, normY: 0.20 },
+      { id: 3, normX: 0.58, normY: 0.26 },
       { id: 4, normX: 0.74, normY: 0.36 },
-      { id: 5, normX: 0.52, normY: 0.48 },
+      { id: 5, normX: 0.50, normY: 0.48 },
     ],
   },
   {
@@ -38,12 +39,12 @@ const CONSTELLATIONS = [
     name: '우주 하트자리',
     emoji: '💖',
     stars: [
-      { id: 1, normX: 0.50, normY: 0.24 },
-      { id: 2, normX: 0.30, normY: 0.15 },
-      { id: 3, normX: 0.18, normY: 0.30 },
-      { id: 4, normX: 0.50, normY: 0.50 },
-      { id: 5, normX: 0.82, normY: 0.30 },
-      { id: 6, normX: 0.70, normY: 0.15 },
+      { id: 1, normX: 0.50, normY: 0.26 },
+      { id: 2, normX: 0.30, normY: 0.20 },
+      { id: 3, normX: 0.20, normY: 0.32 },
+      { id: 4, normX: 0.50, normY: 0.48 },
+      { id: 5, normX: 0.80, normY: 0.32 },
+      { id: 6, normX: 0.70, normY: 0.20 },
     ],
   },
   {
@@ -52,9 +53,9 @@ const CONSTELLATIONS = [
     emoji: '👑',
     stars: [
       { id: 1, normX: 0.20, normY: 0.44 },
-      { id: 2, normX: 0.25, normY: 0.22 },
-      { id: 3, normX: 0.50, normY: 0.34 },
-      { id: 4, normX: 0.75, normY: 0.22 },
+      { id: 2, normX: 0.28, normY: 0.25 },
+      { id: 3, normX: 0.50, normY: 0.36 },
+      { id: 4, normX: 0.72, normY: 0.25 },
       { id: 5, normX: 0.80, normY: 0.44 },
     ],
   },
@@ -63,12 +64,12 @@ const CONSTELLATIONS = [
     name: '반려몽 수호자리',
     emoji: '🐾',
     stars: [
-      { id: 1, normX: 0.25, normY: 0.22 },
-      { id: 2, normX: 0.45, normY: 0.16 },
-      { id: 3, normX: 0.65, normY: 0.20 },
-      { id: 4, normX: 0.78, normY: 0.32 },
-      { id: 5, normX: 0.62, normY: 0.48 },
-      { id: 6, normX: 0.35, normY: 0.46 },
+      { id: 1, normX: 0.26, normY: 0.24 },
+      { id: 2, normX: 0.46, normY: 0.20 },
+      { id: 3, normX: 0.68, normY: 0.22 },
+      { id: 4, normX: 0.78, normY: 0.34 },
+      { id: 5, normX: 0.60, normY: 0.48 },
+      { id: 6, normX: 0.34, normY: 0.46 },
     ],
   },
 ];
@@ -276,6 +277,8 @@ export default function DreamConstellationGame({
           }
         }, 1200);
       }
+    } else if (targetStarId > nextExpectedId) {
+      triggerToast(`💡 ${nextExpectedId}번 별을 먼저 연결해주세요!`, '#FBBF24', starPixelX, starPixelY);
     }
   }, [currentConstellation, constCompleteAnim, finishGame, triggerToast]);
 
@@ -294,7 +297,7 @@ export default function DreamConstellationGame({
       const targetPixelY = targetStar.normY * screenHeightRef.current;
       const dist = Math.hypot(touchX - targetPixelX, touchY - targetPixelY);
 
-      if (dist <= STAR_RADIUS * 1.6) {
+      if (dist <= STAR_HIT_RADIUS * 1.5) {
         handleConnectStar(targetStar.id, targetPixelX, targetPixelY);
         return;
       }
@@ -403,6 +406,19 @@ export default function DreamConstellationGame({
     }
   }
 
+  // Constellation blueprint outline guide lines
+  const guideLines = [];
+  for (let i = 0; i < currentConstellation.stars.length - 1; i++) {
+    const fromStar = currentConstellation.stars[i];
+    const toStar = currentConstellation.stars[i + 1];
+    guideLines.push({
+      fromX: fromStar.normX * screenWidth,
+      fromY: fromStar.normY * screenHeight,
+      toX: toStar.normX * screenWidth,
+      toY: toStar.normY * screenHeight,
+    });
+  }
+
   // Active dragging line from the latest connected star
   const latestStar = currentConstellation.stars.find(
     s => s.id === connectedStarIds[connectedStarIds.length - 1]
@@ -478,13 +494,32 @@ export default function DreamConstellationGame({
         {/* --------------------------------------------------------- */}
         {/* SVG CONSTELLATION CONNECTION LINES LAYER */}
         {/* --------------------------------------------------------- */}
-        <Svg style={StyleSheet.absoluteFillObject} pointerEvents="none">
+        <Svg
+          width={screenWidth}
+          height={screenHeight}
+          style={StyleSheet.absoluteFillObject}
+          pointerEvents="none"
+        >
           <Defs>
             <LinearGradient id="beamGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <Stop offset="0%" stopColor="#38BDF8" stopOpacity="0.9" />
-              <Stop offset="100%" stopColor="#818CF8" stopOpacity="0.9" />
+              <Stop offset="0%" stopColor="#38BDF8" stopOpacity="0.95" />
+              <Stop offset="100%" stopColor="#818CF8" stopOpacity="0.95" />
             </LinearGradient>
           </Defs>
+
+          {/* Faint Constellation Blueprint Guide Lines */}
+          {guideLines.map((line, idx) => (
+            <Line
+              key={`guide_line_${idx}`}
+              x1={line.fromX}
+              y1={line.fromY}
+              x2={line.toX}
+              y2={line.toY}
+              stroke="rgba(148, 163, 184, 0.35)"
+              strokeWidth="1.8"
+              strokeDasharray="5, 5"
+            />
+          ))}
 
           {/* Connected Starlight Lines */}
           {connectedLines.map((line, idx) => (
@@ -496,8 +531,8 @@ export default function DreamConstellationGame({
                 x2={line.toX}
                 y2={line.toY}
                 stroke="#38BDF8"
-                strokeWidth="6"
-                strokeOpacity="0.35"
+                strokeWidth="7"
+                strokeOpacity="0.4"
               />
               {/* Core starlight line */}
               <Line
@@ -506,7 +541,7 @@ export default function DreamConstellationGame({
                 x2={line.toX}
                 y2={line.toY}
                 stroke="url(#beamGrad)"
-                strokeWidth="2.5"
+                strokeWidth="3"
               />
             </G>
           ))}
@@ -518,10 +553,10 @@ export default function DreamConstellationGame({
               y1={dragLineFromY}
               x2={dragCurrentPos.x}
               y2={dragCurrentPos.y}
-              stroke="#A5B4FC"
-              strokeWidth="2"
-              strokeDasharray="5, 5"
-              strokeOpacity="0.75"
+              stroke="#FDE047"
+              strokeWidth="2.5"
+              strokeDasharray="4, 4"
+              strokeOpacity="0.85"
             />
           )}
         </Svg>
@@ -541,27 +576,52 @@ export default function DreamConstellationGame({
                 <TouchableOpacity
                   key={`star_${star.id}`}
                   style={[
-                    styles.starNode,
+                    styles.starTouchArea,
                     {
-                      left: pixelX - STAR_RADIUS,
-                      top: pixelY - STAR_RADIUS,
-                      backgroundColor: isConnected ? '#38BDF8' : isNext ? '#F59E0B' : '#1E293B',
-                      borderColor: isConnected ? '#BAE6FD' : isNext ? '#FDE68A' : '#475569',
-                      transform: [{ scale: isNext ? 1.18 : 1.0 }],
+                      left: pixelX - STAR_HIT_RADIUS,
+                      top: pixelY - STAR_HIT_RADIUS,
                     },
                   ]}
                   onPress={() => handleConnectStar(star.id, pixelX, pixelY)}
-                  activeOpacity={0.7}
+                  activeOpacity={0.75}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                  {isNext && <View style={styles.nextStarPulseAura} />}
-                  <Text
+                  <View
                     style={[
-                      styles.starNumberText,
-                      { color: isConnected || isNext ? '#0F172A' : '#94A3B8' },
+                      styles.starGlowCircle,
+                      isConnected && styles.starGlowConnected,
+                      isNext && styles.starGlowNext,
                     ]}
                   >
-                    {star.id}
-                  </Text>
+                    {/* Pulsing Target Beacon Aura */}
+                    {isNext && <View style={styles.nextStarPulseAura} />}
+
+                    {/* Radiant Star Icon */}
+                    <Star
+                      size={isConnected ? 22 : isNext ? 26 : 20}
+                      color={isConnected ? '#38BDF8' : isNext ? '#F59E0B' : '#FDE047'}
+                      fill={isConnected ? '#38BDF8' : isNext ? '#F59E0B' : '#FEF08A'}
+                    />
+
+                    {/* Star Number Badge */}
+                    <View
+                      style={[
+                        styles.starNumberBadge,
+                        isConnected && styles.starNumberBadgeConnected,
+                        isNext && styles.starNumberBadgeNext,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.starNumberText,
+                          isConnected && styles.starNumberTextConnected,
+                          isNext && styles.starNumberTextNext,
+                        ]}
+                      >
+                        {star.id}
+                      </Text>
+                    </View>
+                  </View>
                 </TouchableOpacity>
               );
             })}
@@ -879,33 +939,86 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
   },
-  starNode: {
+  starTouchArea: {
     position: 'absolute',
-    width: STAR_RADIUS * 2,
-    height: STAR_RADIUS * 2,
-    borderRadius: STAR_RADIUS,
-    borderWidth: 2,
+    width: STAR_HIT_RADIUS * 2,
+    height: STAR_HIT_RADIUS * 2,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#38BDF8',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.6,
-    shadowRadius: 6,
-    elevation: 6,
-    zIndex: 30,
+    zIndex: 35,
   },
-  starNumberText: {
-    fontSize: 12,
-    fontWeight: '900',
+  starGlowCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(30, 41, 59, 0.75)',
+    borderWidth: 2,
+    borderColor: 'rgba(254, 240, 138, 0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#FEF08A',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.65,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  starGlowConnected: {
+    backgroundColor: 'rgba(14, 165, 233, 0.25)',
+    borderColor: '#38BDF8',
+    shadowColor: '#38BDF8',
+    shadowOpacity: 0.9,
+    shadowRadius: 12,
+  },
+  starGlowNext: {
+    backgroundColor: 'rgba(245, 158, 11, 0.3)',
+    borderColor: '#F59E0B',
+    shadowColor: '#F59E0B',
+    shadowOpacity: 1.0,
+    shadowRadius: 14,
+    transform: [{ scale: 1.15 }],
   },
   nextStarPulseAura: {
     position: 'absolute',
-    width: STAR_RADIUS * 2.8,
-    height: STAR_RADIUS * 2.8,
-    borderRadius: STAR_RADIUS * 1.4,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     borderWidth: 2,
-    borderColor: 'rgba(245, 158, 11, 0.65)',
+    borderColor: 'rgba(245, 158, 11, 0.8)',
+    borderStyle: 'dashed',
     zIndex: -1,
+  },
+  starNumberBadge: {
+    position: 'absolute',
+    bottom: -6,
+    right: -6,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#0F172A',
+    borderWidth: 1.5,
+    borderColor: '#FDE047',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  starNumberBadgeConnected: {
+    backgroundColor: '#0369A1',
+    borderColor: '#BAE6FD',
+  },
+  starNumberBadgeNext: {
+    backgroundColor: '#D97706',
+    borderColor: '#FEF3C7',
+  },
+  starNumberText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#FEF08A',
+  },
+  starNumberTextConnected: {
+    color: '#FFFFFF',
+  },
+  starNumberTextNext: {
+    color: '#FFFFFF',
   },
   shootingStarPill: {
     position: 'absolute',
