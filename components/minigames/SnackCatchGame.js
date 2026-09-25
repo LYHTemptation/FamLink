@@ -8,6 +8,7 @@ import {
   Dimensions,
   Platform,
   Modal,
+  Alert,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { Trophy, Sparkles, Heart, X, Flame, RotateCcw, Check, Clock } from 'lucide-react-native';
@@ -302,6 +303,83 @@ export default function SnackCatchGame({
     if (stunTimerRef.current) clearTimeout(stunTimerRef.current);
   }, []);
 
+  // Clean Reset to Ready state
+  const resetToReady = useCallback(() => {
+    if (gameTimerRef.current) {
+      clearInterval(gameTimerRef.current);
+      gameTimerRef.current = null;
+    }
+    if (spawnTimerRef.current) {
+      clearInterval(spawnTimerRef.current);
+      spawnTimerRef.current = null;
+    }
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+    if (feverTimerRef.current) {
+      clearTimeout(feverTimerRef.current);
+      feverTimerRef.current = null;
+    }
+    if (stunTimerRef.current) {
+      clearTimeout(stunTimerRef.current);
+      stunTimerRef.current = null;
+    }
+
+    const stageWidth = screenWidthRef.current;
+    const initialPetX = (stageWidth - PET_WIDTH) / 2;
+
+    setScore(0);
+    setCombo(0);
+    setMaxCombo(0);
+    setTimeLeft(GAME_DURATION);
+    setIsFever(false);
+    setIsStunned(false);
+    setItems([]);
+    setToasts([]);
+    itemsRef.current = [];
+
+    setPetX(initialPetX);
+    currentPetX.current = initialPetX;
+    setPetDirection(1);
+    setGameState('ready');
+  }, []);
+
+  // Handle User Close / Exit Button
+  const handleExitPress = useCallback(() => {
+    if (gameStateRef.current === 'playing') {
+      const doExit = () => {
+        resetToReady();
+        if (onClose) onClose();
+      };
+
+      if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined' && window.confirm('게임을 중단하고 나가시겠습니까? 진행 중인 점수는 저장되지 않습니다.')) {
+          doExit();
+        }
+      } else {
+        Alert.alert(
+          '게임 종료',
+          '게임을 중단하고 나가시겠습니까? 진행 중인 점수는 저장되지 않습니다.',
+          [
+            { text: '계속하기', style: 'cancel' },
+            { text: '나가기', style: 'destructive', onPress: doExit },
+          ]
+        );
+      }
+    } else {
+      resetToReady();
+      if (onClose) onClose();
+    }
+  }, [resetToReady, onClose]);
+
+  // Auto-reset when modal becomes invisible
+  useEffect(() => {
+    if (!visible) {
+      resetToReady();
+    }
+  }, [visible, resetToReady]);
+
   // Game Loop Timers
   useEffect(() => {
     if (gameState === 'playing') {
@@ -360,7 +438,7 @@ export default function SnackCatchGame({
       animationType="fade"
       transparent={false}
       statusBarTranslucent={true}
-      onRequestClose={onClose}
+      onRequestClose={handleExitPress}
     >
       <View
         style={[styles.gameContainer, { width: screenWidth, height: screenHeight }]}
@@ -394,7 +472,7 @@ export default function SnackCatchGame({
           </View>
 
           {/* Close Game Button */}
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.8}>
+          <TouchableOpacity onPress={handleExitPress} style={styles.closeBtn} activeOpacity={0.8}>
             <X size={18} color="#666" />
           </TouchableOpacity>
         </View>

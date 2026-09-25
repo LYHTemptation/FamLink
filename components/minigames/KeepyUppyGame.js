@@ -8,6 +8,7 @@ import {
   Dimensions,
   Platform,
   Modal,
+  Alert,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { Trophy, Sparkles, Heart, X, Flame, RotateCcw, Check, Zap } from 'lucide-react-native';
@@ -162,6 +163,70 @@ export default function KeepyUppyGame({
     setGameState('gameover');
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
   }, []);
+
+  // Clean Reset to Ready state
+  const resetToReady = useCallback(() => {
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+    const stageWidth = screenWidthRef.current;
+    const initialPaddle = (stageWidth - PADDLE_WIDTH) / 2;
+    const initialPet = (stageWidth - PET_SIZE) / 2;
+
+    paddleXRef.current = initialPaddle;
+    petXRef.current = initialPet;
+    setPaddleX(initialPaddle);
+    setPetX(initialPet);
+
+    setScore(0);
+    setRallyCount(0);
+    setMaxRally(0);
+    setLives(INITIAL_LIVES);
+    setIsGoldenBall(false);
+    setToasts([]);
+    rallyCountRef.current = 0;
+    livesRef.current = INITIAL_LIVES;
+    isGoldenBallRef.current = false;
+
+    resetBall(false);
+    setGameState('ready');
+  }, [resetBall]);
+
+  // Handle User Close / Exit Button
+  const handleExitPress = useCallback(() => {
+    if (gameStateRef.current === 'playing') {
+      const doExit = () => {
+        resetToReady();
+        if (onClose) onClose();
+      };
+
+      if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined' && window.confirm('게임을 중단하고 나가시겠습니까? 진행 중인 점수는 저장되지 않습니다.')) {
+          doExit();
+        }
+      } else {
+        Alert.alert(
+          '게임 종료',
+          '게임을 중단하고 나가시겠습니까? 진행 중인 점수는 저장되지 않습니다.',
+          [
+            { text: '계속하기', style: 'cancel' },
+            { text: '나가기', style: 'destructive', onPress: doExit },
+          ]
+        );
+      }
+    } else {
+      resetToReady();
+      if (onClose) onClose();
+    }
+  }, [resetToReady, onClose]);
+
+  // Auto-reset when modal becomes invisible
+  useEffect(() => {
+    if (!visible) {
+      resetToReady();
+    }
+  }, [visible, resetToReady]);
 
   // -----------------------------------------------------------------
   // 60FPS Game Loop & Physics
@@ -357,7 +422,7 @@ export default function KeepyUppyGame({
       animationType="fade"
       transparent={false}
       statusBarTranslucent={true}
-      onRequestClose={onClose}
+      onRequestClose={handleExitPress}
     >
       <View
         style={[styles.gameContainer, { width: screenWidth, height: screenHeight }]}
@@ -410,7 +475,7 @@ export default function KeepyUppyGame({
           </View>
 
           {/* Close Game Button */}
-          <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.8}>
+          <TouchableOpacity onPress={handleExitPress} style={styles.closeBtn} activeOpacity={0.8}>
             <X size={18} color="#475569" />
           </TouchableOpacity>
         </View>
