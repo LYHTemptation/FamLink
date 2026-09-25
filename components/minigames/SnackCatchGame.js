@@ -11,7 +11,7 @@ import {
   PanResponder,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
-import { Trophy, Sparkles, Heart, X, Flame, RotateCcw, Check, Clock, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { Trophy, Sparkles, Heart, X, Flame, RotateCcw, Check, Clock } from 'lucide-react-native';
 
 // Game Configuration
 const GAME_DURATION = 30; // 30 seconds
@@ -108,7 +108,7 @@ export default function SnackCatchGame({
   // -----------------------------------------------------------------
   // Move Pet to Target X (Direct Finger Tracking with 0ms Lag)
   // -----------------------------------------------------------------
-  const movePetTo = useCallback((touchX, isTap = false) => {
+  const movePetTo = useCallback((touchX) => {
     if (typeof touchX !== 'number' || isNaN(touchX)) return;
     const stageWidth = screenWidthRef.current;
     const targetX = Math.max(10, Math.min(stageWidth - PET_WIDTH - 10, touchX - PET_WIDTH / 2));
@@ -120,47 +120,27 @@ export default function SnackCatchGame({
     }
 
     currentPetX.current = targetX;
-
-    if (isTap) {
-      Animated.spring(petX, {
-        toValue: targetX,
-        friction: 7,
-        tension: 110,
-        useNativeDriver: false,
-      }).start();
-    } else {
-      // Direct 1:1 Instant Finger Follow (Zero Latency)
-      petX.setValue(targetX);
-    }
+    petX.setValue(targetX);
   }, [petX, petScaleX]);
 
-  // Step Move for Left/Right Assist Buttons
-  const stepPetMove = useCallback((offset) => {
-    if (gameStateRef.current !== 'playing' || isStunnedRef.current) return;
-    const nextX = currentPetX.current + offset;
-    movePetTo(nextX + PET_WIDTH / 2, true);
-  }, [movePetTo]);
-
   // -----------------------------------------------------------------
-  // PanResponder with Capture to Ensure Full Touch Priority on iOS/Android
+  // Fullscreen PanResponder for Silky Smooth Responsive Swiping
   // -----------------------------------------------------------------
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
-      onStartShouldSetPanResponderCapture: () => false,
-      onMoveShouldSetPanResponder: (evt, gestureState) => {
-        return Math.abs(gestureState.dx) > 1;
-      },
+      onStartShouldSetPanResponderCapture: () => true,
+      onMoveShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponderCapture: () => true,
       onPanResponderGrant: (evt, gestureState) => {
         if (gameStateRef.current !== 'playing' || isStunnedRef.current) return;
         const touchX = gestureState.x0 || evt.nativeEvent.pageX || evt.nativeEvent.locationX;
-        movePetTo(touchX, true);
+        movePetTo(touchX);
       },
       onPanResponderMove: (evt, gestureState) => {
         if (gameStateRef.current !== 'playing' || isStunnedRef.current) return;
         const touchX = gestureState.moveX || evt.nativeEvent.pageX || evt.nativeEvent.locationX;
-        movePetTo(touchX, false);
+        movePetTo(touchX);
       },
     })
   ).current;
@@ -416,9 +396,12 @@ export default function SnackCatchGame({
     >
       <View style={[styles.gameContainer, { width: screenWidth, height: screenHeight }]}>
         {/* --------------------------------------------------------- */}
-        {/* FULLSCREEN TOUCH CAPTURE LAYER FOR SMOOTH SWIPING */}
+        {/* FULLSCREEN TOUCH CAPTURE LAYER FOR 1:1 RESPONSIVE SWIPING */}
         {/* --------------------------------------------------------- */}
-        <View style={StyleSheet.absoluteFillObject} {...panResponder.panHandlers} />
+        <View
+          style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0, 0, 0, 0.001)', zIndex: 10 }]}
+          {...panResponder.panHandlers}
+        />
 
         {/* --------------------------------------------------------- */}
         {/* TOP STATUS HUD BAR */}
@@ -495,34 +478,12 @@ export default function SnackCatchGame({
         {/* --------------------------------------------------------- */}
         {/* BOTTOM STAGE PLATFORM (Grounded Room Stage) */}
         {/* --------------------------------------------------------- */}
-        <View style={styles.bottomStageArea} pointerEvents="box-none">
+        <View style={styles.bottomStageArea} pointerEvents="none">
           <View style={styles.stageWoodFloor}>
             <View style={styles.stageWoodHighlight} />
-
-            {/* Touch Assist Step Buttons */}
-            {gameState === 'playing' && (
-              <View style={styles.stageControlsRow}>
-                <TouchableOpacity
-                  style={styles.stepBtn}
-                  onPress={() => stepPetMove(-55)}
-                  activeOpacity={0.7}
-                >
-                  <ChevronLeft size={20} color="#8D6E63" />
-                  <Text style={styles.stepBtnText}>왼쪽</Text>
-                </TouchableOpacity>
-
-                <Text style={styles.stageGuideText}>화면 스와이프 or 버튼 탭</Text>
-
-                <TouchableOpacity
-                  style={styles.stepBtn}
-                  onPress={() => stepPetMove(55)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.stepBtnText}>오른쪽</Text>
-                  <ChevronRight size={20} color="#8D6E63" />
-                </TouchableOpacity>
-              </View>
-            )}
+            <Text style={styles.stageGuideText}>
+              👈 손가락으로 화면을 좌우로 쓱쓱 밀어 간식을 받아먹으세요! 👉
+            </Text>
           </View>
         </View>
 
@@ -785,8 +746,9 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 28,
     borderTopWidth: 3,
     borderColor: '#E6D2C0',
-    justifyContent: 'flex-end',
-    paddingBottom: Platform.OS === 'ios' ? 26 : 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingBottom: Platform.OS === 'ios' ? 20 : 10,
     paddingHorizontal: 20,
     shadowColor: '#8D6E63',
     shadowOffset: { width: 0, height: -3 },
@@ -803,35 +765,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.6)',
     borderRadius: 2,
   },
-  stageControlsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  stepBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E6D2C0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  stepBtnText: {
+  stageGuideText: {
     fontSize: 12,
     fontWeight: '700',
     color: '#8D6E63',
-  },
-  stageGuideText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#A1887F',
+    letterSpacing: -0.2,
   },
   petPlayerContainer: {
     position: 'absolute',
