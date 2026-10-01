@@ -25,8 +25,15 @@ import {
   Camera,
   RotateCcw,
   Trash2,
+  Gamepad2,
+  Play,
+  Flame,
 } from 'lucide-react-native';
 import UserAvatar from './UserAvatar';
+import SnackCatchGame from './minigames/SnackCatchGame';
+import KeepyUppyGame from './minigames/KeepyUppyGame';
+import BubblePopGame from './minigames/BubblePopGame';
+import DreamConstellationGame from './minigames/DreamConstellationGame';
 
 // 한국형 생활 행동 기반 아이콘 & 카테고리 스마트 매퍼
 export const getChoreIconMeta = (category, title = '') => {
@@ -88,17 +95,8 @@ export default function SmallTalkScreen({
   points = 0,
   pointHistory = [],
   onAddResponse,
-  onRedeemReward,
   onDeductPoints,
   familyMembers = [],
-  rewardsList = [],
-  onAddReward,
-  onUpdateReward,
-  onDeleteReward,
-  userCoupons = [],
-  onUseCoupon,
-  coopGoal,
-  onUpdateCoopGoal,
   messages = [],
   onSendOrderNotice,
   shoppingItems = [],
@@ -107,6 +105,9 @@ export default function SmallTalkScreen({
   onDeleteItem,
   onClearCompleted,
   onToggleRepeat,
+  petCharacter = null,
+  onAwardPetExp = null,
+  onAwardPoints = null,
 }) {
   // Figma 2대 서브탭: 'chores' (✅ 집안일) | 'games' (🎮 게임)
   const [activeTab, setActiveTab] = useState('chores');
@@ -131,10 +132,23 @@ export default function SmallTalkScreen({
   // 로컬 집안일 상태
   const [fallbackChores, setFallbackChores] = useState([]);
 
-  // 게임 실행 모달 상태 (가족 퀴즈, 짝 맞추기, 사진 챌린지)
-  const [quizModalVisible, setQuizModalVisible] = useState(false);
-  const [matchModalVisible, setMatchModalVisible] = useState(false);
-  const [photoModalVisible, setPhotoModalVisible] = useState(false);
+  // 1. 체류형 4대 반려몽 미니게임 모달 상태
+  const [isSnackGameVisible, setIsSnackGameVisible] = useState(false);
+  const [isKeepyUppyGameVisible, setIsKeepyUppyGameVisible] = useState(false);
+  const [isBubbleGameVisible, setIsBubbleGameVisible] = useState(false);
+  const [isDreamGameVisible, setIsDreamGameVisible] = useState(false);
+
+
+  // 반려몽 체류형 미니게임 완료 콜백
+  const handleCompletePetmongGame = (gameTitle, { score, points: awardedPts = 25 }) => {
+    if (onAwardPoints && awardedPts) {
+      onAwardPoints(awardedPts, `${gameTitle} 완료`);
+    }
+    Alert.alert(
+      '🎉 미니게임 완료!',
+      `${gameTitle}을(를) 멋지게 마쳤어요!\n🎁 +${awardedPts} 가족 포인트를 획득했습니다!`
+    );
+  };
 
   // 1. 가족 멤버 구성 (기본 4인: 엄마, 아빠, 지수, 민준)
   const membersList = useMemo(() => {
@@ -410,79 +424,6 @@ export default function SmallTalkScreen({
     setQuickAnswerText('');
   };
 
-  // -------------------------------------------------------------
-  // 게임 1: 가족 퀴즈 로직
-  // -------------------------------------------------------------
-  const [quizIndex, setQuizIndex] = useState(0);
-  const [quizScore, setQuizScore] = useState(0);
-  const QUIZ_QUESTIONS = [
-    { q: '우리 가족 반려몽이 가장 좋아하는 간식은?', options: ['🍗 닭다리', '🥦 브로콜리', '🍰 케이크', '🥕 당근'], ans: 0 },
-    { q: '오늘 함께하는 미션 완료 시 받을 수 있는 보너스는?', options: ['50점', '100점', '200점', '500점'], ans: 2 },
-    { q: '온 가족이 모이는 저녁 시간은 언제일까요?', options: ['오후 6시', '오후 7시', '오후 8시', '오후 9시'], ans: 1 },
-  ];
-
-  const handleSelectQuizAnswer = (optionIdx) => {
-    const isCorrect = optionIdx === QUIZ_QUESTIONS[quizIndex].ans;
-    if (isCorrect) {
-      setQuizScore(prev => prev + 50);
-      Alert.alert('정답입니다! 🎉', '+50 포인트를 획득했습니다!');
-    } else {
-      Alert.alert('아쉬워요!', '다음 문제에 도전해보세요!');
-    }
-
-    if (quizIndex + 1 < QUIZ_QUESTIONS.length) {
-      setQuizIndex(prev => prev + 1);
-    } else {
-      Alert.alert('퀴즈 완료! 🏆', `총 ${quizScore + (isCorrect ? 50 : 0)}점을 획득했습니다!`, [
-        {
-          text: '확인',
-          onPress: () => {
-            setQuizModalVisible(false);
-            setQuizIndex(0);
-            setQuizScore(0);
-          },
-        },
-      ]);
-    }
-  };
-
-  // -------------------------------------------------------------
-  // 게임 2: 짝 맞추기 (Memory Card Match)
-  // -------------------------------------------------------------
-  const [cards, setCards] = useState([
-    { id: 1, icon: '🐶', isFlipped: false, isMatched: false },
-    { id: 2, icon: '🍕', isFlipped: false, isMatched: false },
-    { id: 3, icon: '🐶', isFlipped: false, isMatched: false },
-    { id: 4, icon: '🌟', isFlipped: false, isMatched: false },
-    { id: 5, icon: '🍕', isFlipped: false, isMatched: false },
-    { id: 6, icon: '🌟', isFlipped: false, isMatched: false },
-  ]);
-  const [selectedCards, setSelectedCards] = useState([]);
-
-  const handleFlipCard = (card) => {
-    if (card.isFlipped || card.isMatched || selectedCards.length >= 2) return;
-
-    const nextCards = cards.map(c => c.id === card.id ? { ...c, isFlipped: true } : c);
-    setCards(nextCards);
-
-    const newSelected = [...selectedCards, card];
-    setSelectedCards(newSelected);
-
-    if (newSelected.length === 2) {
-      const [first, second] = newSelected;
-      if (first.icon === second.icon) {
-        setTimeout(() => {
-          setCards(prev => prev.map(c => (c.id === first.id || c.id === second.id) ? { ...c, isMatched: true } : c));
-          setSelectedCards([]);
-        }, 500);
-      } else {
-        setTimeout(() => {
-          setCards(prev => prev.map(c => (c.id === first.id || c.id === second.id) ? { ...c, isFlipped: false } : c));
-          setSelectedCards([]);
-        }, 800);
-      }
-    }
-  };
 
   return (
     <View style={styles.container}>
@@ -542,7 +483,7 @@ export default function SmallTalkScreen({
               <View style={styles.quickAnswerInputContainer}>
                 <TextInput
                   style={styles.quickAnswerInput}
-                  placeholder="오늘의 스몰톡 답변 남기기... (+20 EXP, +5P)"
+                  placeholder="오늘의 스몰톡 답변 남기기... (+5P, 대화 온기 충전)"
                   placeholderTextColor="#A8A29E"
                   value={quickAnswerText}
                   onChangeText={setQuickAnswerText}
@@ -862,94 +803,110 @@ export default function SmallTalkScreen({
               </Text>
             </View>
 
-            {/* 3대 인터랙티브 게임 카드 목록 */}
-            <View style={styles.gamesCardsList}>
-              {/* 게임 1: 가족 퀴즈 */}
-              <TouchableOpacity
-                style={styles.gameActionCard}
-                onPress={() => setQuizModalVisible(true)}
-                activeOpacity={0.85}
-              >
-                <View style={[styles.gameLargeIconBox, { backgroundColor: '#FDE68A' }]}>
-                  <Text style={styles.gameLargeIcon}>🧠</Text>
+            {/* 1. 반려몽과 함께하는 4대 액션 게임 */}
+            <View style={{ marginBottom: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, paddingHorizontal: 4 }}>
+                <Gamepad2 size={18} color="#FF6B47" style={{ marginRight: 6 }} />
+                <Text style={{ fontSize: 15, fontWeight: '800', color: '#1C1917' }}>반려몽 액션 놀이터</Text>
+                <View style={{ marginLeft: 8, backgroundColor: '#FFF0ED', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>
+                  <Text style={{ fontSize: 10, fontWeight: '800', color: '#FF6B47' }}>가족 포인트(P) 획득</Text>
                 </View>
+              </View>
+              <Text style={{ fontSize: 12, color: '#78716C', paddingHorizontal: 4, marginBottom: 10 }}>
+                가족 누구나 플레이하여 가족 포인트(P)를 함께 모아요!
+              </Text>
 
-                <View style={styles.gameInfoCol}>
-                  <View style={styles.gameTitleRow}>
-                    <Text style={styles.gameTitleText}>가족 퀴즈</Text>
-                    <View style={[styles.gameBadgePill, { backgroundColor: '#FDE68A' }]}>
-                      <Text style={[styles.gameBadgePillText, { color: '#78350F' }]}>지식</Text>
-                    </View>
+              <View style={styles.gamesCardsList}>
+                {/* 펫게임 1: 와구와구 간식 캐치 */}
+                <TouchableOpacity
+                  style={styles.gameActionCard}
+                  onPress={() => setIsSnackGameVisible(true)}
+                  activeOpacity={0.85}
+                >
+                  <View style={[styles.gameLargeIconBox, { backgroundColor: '#FFEDD5' }]}>
+                    <Text style={styles.gameLargeIcon}>🍎</Text>
                   </View>
-
-                  <Text style={styles.gameDescText}>온 가족이 함께 즐기는 재미있는 문제</Text>
-                  <Text style={styles.gamePointsText}>최대 150점</Text>
-                </View>
-
-                <Text style={styles.gameChevron}>›</Text>
-              </TouchableOpacity>
-
-              {/* 게임 2: 짝 맞추기 */}
-              <TouchableOpacity
-                style={styles.gameActionCard}
-                onPress={() => setMatchModalVisible(true)}
-                activeOpacity={0.85}
-              >
-                <View style={[styles.gameLargeIconBox, { backgroundColor: '#DDD6FE' }]}>
-                  <Text style={styles.gameLargeIcon}>🃏</Text>
-                </View>
-
-                <View style={styles.gameInfoCol}>
-                  <View style={styles.gameTitleRow}>
-                    <Text style={styles.gameTitleText}>짝 맞추기</Text>
-                    <View style={[styles.gameBadgePill, { backgroundColor: '#DDD6FE' }]}>
-                      <Text style={[styles.gameBadgePillText, { color: '#5B21B6' }]}>두뇌</Text>
+                  <View style={styles.gameInfoCol}>
+                    <View style={styles.gameTitleRow}>
+                      <Text style={styles.gameTitleText}>와구와구 간식 캐치</Text>
+                      <View style={[styles.gameBadgePill, { backgroundColor: '#FFEDD5' }]}>
+                        <Text style={[styles.gameBadgePillText, { color: '#C2410C' }]}>아케이드</Text>
+                      </View>
                     </View>
+                    <Text style={styles.gameDescText}>30초 동안 쏟아지는 사과/고기/케이크 캐치!</Text>
+                    <Text style={[styles.gamePointsText, { color: '#EA580C' }]}>최대 100 P 적립</Text>
                   </View>
+                  <Text style={styles.gameChevron}>›</Text>
+                </TouchableOpacity>
 
-                  <Text style={styles.gameDescText}>카드를 뒤집어 같은 그림을 찾아보세요</Text>
-                  <Text style={styles.gamePointsText}>최대 100점</Text>
-                </View>
-
-                <Text style={styles.gameChevron}>›</Text>
-              </TouchableOpacity>
-
-              {/* 게임 3: 사진 챌린지 */}
-              <TouchableOpacity
-                style={styles.gameActionCard}
-                onPress={() => setPhotoModalVisible(true)}
-                activeOpacity={0.85}
-              >
-                <View style={[styles.gameLargeIconBox, { backgroundColor: '#FBCFE8' }]}>
-                  <Text style={styles.gameLargeIcon}>📸</Text>
-                </View>
-
-                <View style={styles.gameInfoCol}>
-                  <View style={styles.gameTitleRow}>
-                    <Text style={styles.gameTitleText}>사진 챌린지</Text>
-                    <View style={[styles.gameBadgePill, { backgroundColor: '#FBCFE8' }]}>
-                      <Text style={[styles.gameBadgePillText, { color: '#9D174D' }]}>창의</Text>
+                {/* 펫게임 2: 핑퐁 리프팅 랠리 */}
+                <TouchableOpacity
+                  style={styles.gameActionCard}
+                  onPress={() => setIsKeepyUppyGameVisible(true)}
+                  activeOpacity={0.85}
+                >
+                  <View style={[styles.gameLargeIconBox, { backgroundColor: '#BAE6FD' }]}>
+                    <Text style={styles.gameLargeIcon}>⚽</Text>
+                  </View>
+                  <View style={styles.gameInfoCol}>
+                    <View style={styles.gameTitleRow}>
+                      <Text style={styles.gameTitleText}>핑퐁 리프팅 랠리</Text>
+                      <View style={[styles.gameBadgePill, { backgroundColor: '#BAE6FD' }]}>
+                        <Text style={[styles.gameBadgePillText, { color: '#0369A1' }]}>핑퐁액션</Text>
+                      </View>
                     </View>
+                    <Text style={styles.gameDescText}>손가락 패들로 공을 튕겨 올려 반려몽과 랠리 대결!</Text>
+                    <Text style={[styles.gamePointsText, { color: '#0284C7' }]}>최대 120 P 적립</Text>
                   </View>
+                  <Text style={styles.gameChevron}>›</Text>
+                </TouchableOpacity>
 
-                  <Text style={styles.gameDescText}>집 안 곳곳을 사진으로 찍고 포인트 받기</Text>
-                  <Text style={styles.gamePointsText}>최대 60점</Text>
-                </View>
+                {/* 펫게임 3: 뽀득뽀득 버블 팝 */}
+                <TouchableOpacity
+                  style={styles.gameActionCard}
+                  onPress={() => setIsBubbleGameVisible(true)}
+                  activeOpacity={0.85}
+                >
+                  <View style={[styles.gameLargeIconBox, { backgroundColor: '#99F6E4' }]}>
+                    <Text style={styles.gameLargeIcon}>🫧</Text>
+                  </View>
+                  <View style={styles.gameInfoCol}>
+                    <View style={styles.gameTitleRow}>
+                      <Text style={styles.gameTitleText}>뽀득뽀득 버블 팝</Text>
+                      <View style={[styles.gameBadgePill, { backgroundColor: '#99F6E4' }]}>
+                        <Text style={[styles.gameBadgePillText, { color: '#0F766E' }]}>스피드</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.gameDescText}>피어오르는 비누방울을 팡팡 터트리는 쾌감 액션!</Text>
+                    <Text style={[styles.gamePointsText, { color: '#0D9488' }]}>최대 100 P 적립</Text>
+                  </View>
+                  <Text style={styles.gameChevron}>›</Text>
+                </TouchableOpacity>
 
-                <Text style={styles.gameChevron}>›</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* 일일 보너스 배너 */}
-            <View style={styles.dailyBonusBanner}>
-              <Text style={styles.dailyBonusIcon}>🌟</Text>
-              <View style={styles.dailyBonusInfo}>
-                <Text style={styles.dailyBonusTitle}>일일 보너스</Text>
-                <Text style={styles.dailyBonusSub}>
-                  오늘 3가지 게임을 모두 완료하면 추가 50점을 드려요!
-                </Text>
+                {/* 펫게임 4: 꿈나라 별자리 잇기 */}
+                <TouchableOpacity
+                  style={styles.gameActionCard}
+                  onPress={() => setIsDreamGameVisible(true)}
+                  activeOpacity={0.85}
+                >
+                  <View style={[styles.gameLargeIconBox, { backgroundColor: '#C7D2FE' }]}>
+                    <Text style={styles.gameLargeIcon}>🌙</Text>
+                  </View>
+                  <View style={styles.gameInfoCol}>
+                    <View style={styles.gameTitleRow}>
+                      <Text style={styles.gameTitleText}>꿈나라 별자리 잇기</Text>
+                      <View style={[styles.gameBadgePill, { backgroundColor: '#C7D2FE' }]}>
+                        <Text style={[styles.gameBadgePillText, { color: '#4338CA' }]}>힐링퍼즐</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.gameDescText}>빛나는 별들을 순서대로 이어 별자리를 완성해요!</Text>
+                    <Text style={[styles.gamePointsText, { color: '#4F46E5' }]}>최대 150 P 적립</Text>
+                  </View>
+                  <Text style={styles.gameChevron}>›</Text>
+                </TouchableOpacity>
               </View>
             </View>
+
           </View>
         )}
 
@@ -996,7 +953,7 @@ export default function SmallTalkScreen({
                 style={styles.modalSubmitBtn}
                 onPress={handleSaveAnswer}
               >
-                <Text style={styles.modalSubmitBtnText}>답변 등록 (+20 EXP)</Text>
+                <Text style={styles.modalSubmitBtnText}>답변 등록 (+5P)</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1181,98 +1138,45 @@ export default function SmallTalkScreen({
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ========================================================= */}
-      {/* 모달 3: 가족 퀴즈 게임 모달                                */}
-      {/* ========================================================= */}
-      <Modal visible={quizModalVisible} transparent animationType="slide">
-        <View style={styles.modalBackdrop}>
-          <View style={styles.gameModalCard}>
-            <View style={styles.modalTopRow}>
-              <Text style={styles.modalMainTitle}>🧠 가족 퀴즈 (Q{quizIndex + 1}/3)</Text>
-              <TouchableOpacity onPress={() => setQuizModalVisible(false)}>
-                <X size={20} color="#78716C" />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.quizQuestionText}>{QUIZ_QUESTIONS[quizIndex]?.q}</Text>
-
-            <View style={styles.quizOptionsCol}>
-              {QUIZ_QUESTIONS[quizIndex]?.options.map((opt, oIdx) => (
-                <TouchableOpacity
-                  key={oIdx}
-                  style={styles.quizOptionBtn}
-                  onPress={() => handleSelectQuizAnswer(oIdx)}
-                >
-                  <Text style={styles.quizOptionText}>{opt}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        </View>
-      </Modal>
 
       {/* ========================================================= */}
-      {/* 모달 4: 짝 맞추기 게임 모달                                */}
+      {/* 반려몽 4대 체류형 액션 미니게임 모달                        */}
       {/* ========================================================= */}
-      <Modal visible={matchModalVisible} transparent animationType="slide">
-        <View style={styles.modalBackdrop}>
-          <View style={styles.gameModalCard}>
-            <View style={styles.modalTopRow}>
-              <Text style={styles.modalMainTitle}>🃏 짝 맞추기 게임</Text>
-              <TouchableOpacity onPress={() => setMatchModalVisible(false)}>
-                <X size={20} color="#78716C" />
-              </TouchableOpacity>
-            </View>
+      {/* 1. 와구와구 간식 캐치 */}
+      <SnackCatchGame
+        visible={isSnackGameVisible}
+        character={petCharacter}
+        transparentUrl={petCharacter?.image_url}
+        onClose={() => setIsSnackGameVisible(false)}
+        onGameComplete={(result) => handleCompletePetmongGame('와구와구 간식 캐치', result)}
+      />
 
-            <Text style={styles.gameModalSubtitle}>같은 이모지 카드 2장을 뒤집어 맞춰보세요!</Text>
+      {/* 2. 핑퐁 리프팅 랠리 */}
+      <KeepyUppyGame
+        visible={isKeepyUppyGameVisible}
+        character={petCharacter}
+        transparentUrl={petCharacter?.image_url}
+        onClose={() => setIsKeepyUppyGameVisible(false)}
+        onGameComplete={(result) => handleCompletePetmongGame('핑퐁 리프팅 랠리', result)}
+      />
 
-            <View style={styles.cardsGrid}>
-              {cards.map(card => (
-                <TouchableOpacity
-                  key={card.id}
-                  style={[styles.memoryCardBox, card.isFlipped && styles.memoryCardFlipped]}
-                  onPress={() => handleFlipCard(card)}
-                >
-                  <Text style={styles.memoryCardText}>
-                    {card.isFlipped || card.isMatched ? card.icon : '❓'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* 3. 뽀득뽀득 버블 팝 */}
+      <BubblePopGame
+        visible={isBubbleGameVisible}
+        character={petCharacter}
+        transparentUrl={petCharacter?.image_url}
+        onClose={() => setIsBubbleGameVisible(false)}
+        onGameComplete={(result) => handleCompletePetmongGame('뽀득뽀득 버블 팝', result)}
+      />
 
-      {/* ========================================================= */}
-      {/* 모달 5: 사진 챌린지 모달                                   */}
-      {/* ========================================================= */}
-      <Modal visible={photoModalVisible} transparent animationType="slide">
-        <View style={styles.modalBackdrop}>
-          <View style={styles.gameModalCard}>
-            <View style={styles.modalTopRow}>
-              <Text style={styles.modalMainTitle}>📸 사진 챌린지</Text>
-              <TouchableOpacity onPress={() => setPhotoModalVisible(false)}>
-                <X size={20} color="#78716C" />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.gameModalSubtitle}>
-              오늘의 미션: "가장 아늑한 우리 집 공간을 찍어주세요!"
-            </Text>
-
-            <TouchableOpacity
-              style={styles.photoUploadArea}
-              onPress={() => {
-                Alert.alert('미션 완료! 🎉', '+60 포인트가 가족 적립되었습니다!');
-                setPhotoModalVisible(false);
-              }}
-            >
-              <Camera size={44} color="#FF6B47" style={{ marginBottom: 8 }} />
-              <Text style={styles.photoUploadText}>사진 촬영 및 업로드</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {/* 4. 꿈나라 별자리 잇기 */}
+      <DreamConstellationGame
+        visible={isDreamGameVisible}
+        character={petCharacter}
+        transparentUrl={petCharacter?.image_url}
+        onClose={() => setIsDreamGameVisible(false)}
+        onGameComplete={(result) => handleCompletePetmongGame('꿈나라 별자리 잇기', result)}
+      />
     </View>
   );
 }

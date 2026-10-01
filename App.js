@@ -85,10 +85,6 @@ const FAMILY_MEMBERS = {
   daughter: { name: '딸', avatar: '👧', color: '#F39C12' },
 };
 
-const INITIAL_MOCK_REWARDS = [];
-
-const INITIAL_MOCK_USER_COUPONS = [];
-
 const INITIAL_MOCK_SHOPPING = [];
 
 const INITIAL_MOCK_POINT_HISTORY = [
@@ -176,14 +172,6 @@ const addDaysToDateStr = (dateStr, days) => {
   return `${ry}-${rm}-${rd}`;
 };
 
-const INITIAL_COOP_GOAL = {
-  id: 'g1',
-  title: '주말 패밀리 맛집 외식 데이',
-  targetPoints: 3000,
-  category: 'dinner',
-  desc: '온 가족이 다 함께 먹고 싶은 메뉴 자유 외식',
-};
-
 export default function App() {
   const [session, setSession] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -195,8 +183,6 @@ export default function App() {
   const [points, setPoints] = useState(120);
   const [messages, setMessages] = useState([]);
   const [events, setEvents] = useState([]);
-  const [rewardsList, setRewardsList] = useState([]);
-  const [userCoupons, setUserCoupons] = useState([]);
   const [shoppingItems, setShoppingItems] = useState(INITIAL_MOCK_SHOPPING);
   const [pointHistory, setPointHistory] = useState(INITIAL_MOCK_POINT_HISTORY);
   const [customRooms, setCustomRooms] = useState([]);
@@ -208,7 +194,6 @@ export default function App() {
     energy: 95,
   });
   const vitalsSyncTimerRef = useRef(null);
-  const [coopGoal, setCoopGoal] = useState(INITIAL_COOP_GOAL);
 
   const [smallTalk, setSmallTalk] = useState({
     topic: getTopicForToday(),
@@ -296,15 +281,6 @@ export default function App() {
         } catch (e) {}
       }
     });
-
-    AsyncStorage.getItem('FAMLINK_COOP_GOAL').then(val => {
-      if (val) {
-        try {
-          const parsed = JSON.parse(val);
-          if (parsed && parsed.title) setCoopGoal(parsed);
-        } catch (e) {}
-      }
-    });
   }, []);
 
   // 2. Real Database Sync (Supabase Real-time Subscription)
@@ -354,20 +330,6 @@ export default function App() {
       .channel(`realtime-profiles-${familyId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles', filter: `family_id=eq.${familyId}` }, () => {
         fetchRealProfiles(familyId);
-      })
-      .subscribe();
-
-    const rewardsChannel = supabase
-      .channel(`realtime-rewards-${familyId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'rewards', filter: `family_id=eq.${familyId}` }, () => {
-        fetchRealRewards(familyId);
-      })
-      .subscribe();
-
-    const couponsChannel = supabase
-      .channel(`realtime-coupons-${familyId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_coupons', filter: `family_id=eq.${familyId}` }, () => {
-        fetchRealUserCoupons(familyId);
       })
       .subscribe();
 
@@ -430,8 +392,6 @@ export default function App() {
       supabase.removeChannel(pointsChannel);
       supabase.removeChannel(responsesChannel);
       supabase.removeChannel(profilesChannel);
-      supabase.removeChannel(rewardsChannel);
-      supabase.removeChannel(couponsChannel);
       supabase.removeChannel(shoppingChannel);
       supabase.removeChannel(petmongChannel);
       supabase.removeChannel(presenceChannel);
@@ -519,8 +479,6 @@ export default function App() {
       fetchRealEvents(familyId),
       fetchRealSmallTalk(familyId),
       fetchRealProfiles(familyId),
-      fetchRealRewards(familyId),
-      fetchRealUserCoupons(familyId),
       fetchRealShoppingItems(familyId),
       fetchRealPetmongCharacters(familyId),
       fetchRealPetVitals(familyId),
@@ -713,24 +671,6 @@ export default function App() {
     }
   };
 
-  const fetchRealRewards = async (familyId) => {
-    const { data } = await supabase
-      .from('rewards')
-      .select('*')
-      .eq('family_id', familyId)
-      .order('created_at', { ascending: true });
-    if (data) setRewardsList(data);
-  };
-
-  const fetchRealUserCoupons = async (familyId) => {
-    const { data } = await supabase
-      .from('user_coupons')
-      .select('*')
-      .eq('family_id', familyId)
-      .order('created_at', { ascending: false });
-    if (data) setUserCoupons(data);
-  };
-
   const normalizeRecurringItems = (items) => {
     if (!items || !Array.isArray(items)) return items;
     const todayStr = getTodayString();
@@ -827,10 +767,6 @@ export default function App() {
         setMessages(parsed.messages ?? INITIAL_MOCK_DATA.messages);
         const filteredEvents = (parsed.events ?? []).filter(e => e && e.id !== 'e1' && e.id !== 'e2' && !e.title?.includes('가족 저녁 외식') && !e.title?.includes('엄마 생신'));
         setEvents(filteredEvents);
-        const filteredRewards = (parsed.rewardsList ?? []).filter(r => r && r.id !== 'r1' && r.id !== 'r2' && r.id !== 'r3' && !r.title?.includes('설거지') && !r.title?.includes('안마') && !r.title?.includes('치킨'));
-        const filteredUserCoupons = (parsed.userCoupons ?? []).filter(c => c && c.id !== 'uc1' && !c.title?.includes('설거지'));
-        setRewardsList(filteredRewards);
-        setUserCoupons(filteredUserCoupons);
         setShoppingItems(normalizeRecurringItems(parsed.shoppingItems ?? INITIAL_MOCK_SHOPPING));
         setPointHistory(parsed.pointHistory ?? INITIAL_MOCK_POINT_HISTORY);
 
@@ -847,8 +783,6 @@ export default function App() {
         setPoints(INITIAL_MOCK_DATA.points);
         setMessages(INITIAL_MOCK_DATA.messages);
         setEvents(INITIAL_MOCK_DATA.events);
-        setRewardsList(INITIAL_MOCK_REWARDS);
-        setUserCoupons(INITIAL_MOCK_USER_COUPONS);
         setShoppingItems(normalizeRecurringItems(INITIAL_MOCK_SHOPPING));
         setPointHistory(INITIAL_MOCK_POINT_HISTORY);
         setSmallTalk({
@@ -919,8 +853,6 @@ export default function App() {
     updatedMessages,
     updatedEvents,
     updatedSmallTalk,
-    updatedRewards = rewardsList,
-    updatedCoupons = userCoupons,
     updatedShopping = shoppingItems,
     updatedHistory = pointHistory
   ) => {
@@ -930,8 +862,6 @@ export default function App() {
         messages: updatedMessages,
         events: updatedEvents,
         smallTalk: updatedSmallTalk,
-        rewardsList: updatedRewards,
-        userCoupons: updatedCoupons,
         shoppingItems: updatedShopping,
         pointHistory: updatedHistory,
       };
@@ -959,7 +889,7 @@ export default function App() {
 
     setPointHistory(prev => {
       const updated = [newTx, ...prev];
-      saveLocalState(newBalance, messages, events, smallTalk, rewardsList, userCoupons, shoppingItems, updated);
+      saveLocalState(newBalance, messages, events, smallTalk, shoppingItems, updated);
       return updated;
     });
   };
@@ -1088,10 +1018,10 @@ export default function App() {
       } catch (e) {
         console.warn('Supabase chore insert notice:', e.message);
         // Persist locally if network/db issue occurs so user's chore is never lost
-        saveLocalState(points, messages, events, smallTalk, rewardsList, userCoupons, updated, pointHistory);
+        saveLocalState(points, messages, events, smallTalk, updated, pointHistory);
       }
     } else {
-      saveLocalState(points, messages, events, smallTalk, rewardsList, userCoupons, updated, pointHistory);
+      saveLocalState(points, messages, events, smallTalk, updated, pointHistory);
     }
   };
 
@@ -1243,7 +1173,7 @@ export default function App() {
       if (willEarnPoints) {
         logPointTransaction('earn', itemPoints, `함께/집안일 완료 (${item.title})`, newPoints, 'quest');
       }
-      saveLocalState(newPoints, messages, events, smallTalk, rewardsList, userCoupons, updated, pointHistory);
+      saveLocalState(newPoints, messages, events, smallTalk, updated, pointHistory);
     }
   };
 
@@ -1264,7 +1194,7 @@ export default function App() {
         console.error('Delete shopping item error:', e);
       }
     } else {
-      saveLocalState(points, messages, events, smallTalk, rewardsList, userCoupons, updated);
+      saveLocalState(points, messages, events, smallTalk, updated);
     }
   };
 
@@ -1297,7 +1227,7 @@ export default function App() {
         console.error('Clear completed shopping items error:', e);
       }
     } else {
-      saveLocalState(points, messages, events, smallTalk, rewardsList, userCoupons, updated);
+      saveLocalState(points, messages, events, smallTalk, updated);
     }
   };
 
@@ -1324,53 +1254,7 @@ export default function App() {
         console.error('Update repeat_type error:', err);
       }
     } else {
-      saveLocalState(points, messages, events, smallTalk, rewardsList, userCoupons, updated);
-    }
-  };
-
-  const handleUseCoupon = async (couponOrId) => {
-    const couponId = typeof couponOrId === 'object' ? couponOrId.id : couponOrId;
-    const targetCoupon = userCoupons.find(c => c.id === couponId) || (typeof couponOrId === 'object' ? couponOrId : null);
-
-    // 1. Optimistic instant UI update
-    const updated = userCoupons.map(c => c.id === couponId ? { ...c, status: 'used' } : c);
-    setUserCoupons(updated);
-
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(couponId);
-
-    if (isSupabaseReady && isUuid) {
-      try {
-        const { error } = await supabase
-          .from('user_coupons')
-          .update({ status: 'used' })
-          .eq('id', couponId);
-        if (error) console.log('user_coupons update error:', error);
-      } catch (e) {
-        console.log('Error updating coupon in DB:', e);
-      }
-    } else {
-      saveLocalState(points, messages, events, smallTalk, rewardsList, updated, shoppingItems, pointHistory);
-    }
-
-    // Automatically send announcement message to Family Group Chat!
-    if (targetCoupon) {
-      const myName = profile?.name || (familyMembersList.find(m => m.id === currentUser)?.name) || '가족';
-      const providerName = targetCoupon.provider || '가족';
-      const announcementText = `📢 [쿠폰 사용 알림] ${myName}님이 ${providerName}님에게 '${targetCoupon.title}' 쿠폰을 사용했습니다! 🎉`;
-
-      await handleSendMessage({
-        text: announcementText,
-        roomId: 'family-group',
-      });
-    }
-  };
-
-  const handleUpdateCoopGoal = async (newGoal) => {
-    setCoopGoal(newGoal);
-    try {
-      await AsyncStorage.setItem('FAMLINK_COOP_GOAL', JSON.stringify(newGoal));
-    } catch (e) {
-      console.log('Error saving coop goal', e);
+      saveLocalState(points, messages, events, smallTalk, updated);
     }
   };
 
@@ -1379,86 +1263,6 @@ export default function App() {
       text: noticeText,
       roomId: 'family-group',
     });
-  };
-
-  const handleRedeemReward = async (reward) => {
-    const cost = reward.cost;
-    if (points < cost) {
-      Alert.alert('포인트 부족', '포인트가 부족하여 쿠폰을 교환할 수 없습니다. 스몰톡 미션을 완료해보세요!');
-      return false;
-    }
-
-    const newPoints = points - cost;
-    const todayStr = getTodayString();
-    const expireDateStr = addDaysToDateStr(todayStr, 30);
-    const tempCouponId = `uc-${Date.now()}`;
-
-    const newCoupon = {
-      id: tempCouponId,
-      reward_id: reward.id,
-      title: reward.title,
-      cost: reward.cost,
-      provider: reward.provider,
-      status: 'available',
-      expire_date: expireDateStr,
-      created_at: new Date().toISOString(),
-    };
-
-    // 1. Optimistic instant UI update
-    setPoints(newPoints);
-    setUserCoupons(prev => [newCoupon, ...prev]);
-    logPointTransaction('spend', cost, `'${reward.title}' 쿠폰 교환`, newPoints, 'coupon');
-
-    if (isSupabaseReady) {
-      const isRewardUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reward.id);
-      const couponPayload = {
-        family_id: profile ? profile.family_id : null,
-        profile_id: profile?.id || session?.user?.id || null,
-        ...(isRewardUuid ? { reward_id: reward.id } : {}),
-        title: reward.title,
-        cost: reward.cost,
-        provider: reward.provider,
-        status: 'available',
-        expire_date: expireDateStr,
-      };
-
-      try {
-        const { error: ptsError } = await supabase
-          .from('family_points')
-          .update({ points: newPoints })
-          .eq('family_id', profile.family_id);
-        if (ptsError) console.log('family_points update error:', ptsError);
-
-        const { data: inserted, error: cError } = await supabase
-          .from('user_coupons')
-          .insert(couponPayload)
-          .select()
-          .single();
-
-        if (cError) {
-          console.log('user_coupons insert error:', cError);
-          if (cError.code === 'PGRST204' || (cError.message && cError.message.includes('expire_date'))) {
-            delete couponPayload.expire_date;
-            const { data: fallbackInserted, error: fallbackError } = await supabase
-              .from('user_coupons')
-              .insert(couponPayload)
-              .select()
-              .single();
-            if (!fallbackError && fallbackInserted) {
-              setUserCoupons(prev => prev.map(c => c.id === tempCouponId ? fallbackInserted : c));
-            }
-          }
-        } else if (inserted) {
-          setUserCoupons(prev => prev.map(c => c.id === tempCouponId ? inserted : c));
-        }
-      } catch (e) {
-        console.log('Error inserting coupon to DB:', e);
-      }
-    } else {
-      saveLocalState(newPoints, messages, events, smallTalk, rewardsList, [newCoupon, ...userCoupons], shoppingItems, pointHistory);
-    }
-
-    return true;
   };
 
   const handleDeductPoints = async (cost, reason = '포인트 사용') => {
@@ -1490,7 +1294,7 @@ export default function App() {
         console.log('Error awarding family points:', e);
       }
     } else {
-      saveLocalState(newPoints, messages, events, smallTalk, rewardsList, userCoupons, shoppingItems, pointHistory);
+      saveLocalState(newPoints, messages, events, smallTalk, shoppingItems, pointHistory);
     }
   };
 
@@ -1896,99 +1700,6 @@ export default function App() {
     }
   };
 
-  const handleAddReward = async (rewardData) => {
-    const tempId = `reward-${Date.now()}`;
-    const newReward = {
-      id: tempId,
-      title: rewardData.title,
-      cost: rewardData.cost,
-      description: rewardData.desc || rewardData.description,
-      provider: rewardData.provider,
-    };
-
-    // 1. Optimistic UI update immediately
-    const updated = [...rewardsList, newReward];
-    setRewardsList(updated);
-
-    if (isSupabaseReady && profile?.family_id) {
-      try {
-        const { data: inserted, error } = await supabase
-          .from('rewards')
-          .insert({
-            family_id: profile.family_id,
-            title: rewardData.title,
-            cost: rewardData.cost,
-            description: rewardData.desc || rewardData.description,
-            provider: rewardData.provider,
-          })
-          .select()
-          .single();
-
-        if (error) throw error;
-        if (inserted) {
-          setRewardsList(prev => prev.map(r => r.id === tempId ? inserted : r));
-        }
-      } catch (e) {
-        showError(e, '쿠폰 등록에 실패했습니다.');
-      }
-    } else {
-      saveLocalState(points, messages, events, smallTalk, updated);
-    }
-  };
-
-  const handleUpdateReward = async (rewardId, updatedData) => {
-    // 1. Optimistic UI update immediately
-    const updatedList = rewardsList.map(r => r.id === rewardId ? {
-      ...r,
-      title: updatedData.title,
-      cost: updatedData.cost,
-      description: updatedData.desc || updatedData.description,
-      provider: updatedData.provider,
-    } : r);
-    setRewardsList(updatedList);
-
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rewardId);
-    if (isSupabaseReady && isUuid) {
-      try {
-        const { error } = await supabase
-          .from('rewards')
-          .update({
-            title: updatedData.title,
-            cost: updatedData.cost,
-            description: updatedData.desc || updatedData.description,
-            provider: updatedData.provider,
-          })
-          .eq('id', rewardId);
-        if (error) console.log('Update reward error:', error);
-      } catch (e) {
-        showError(e, '쿠폰 수정에 실패했습니다.');
-      }
-    } else {
-      saveLocalState(points, messages, events, smallTalk, updatedList, userCoupons, shoppingItems, pointHistory);
-    }
-  };
-
-  const handleDeleteReward = async (rewardId) => {
-    // 1. Optimistic UI delete immediately
-    const updatedList = rewardsList.filter(r => r.id !== rewardId);
-    setRewardsList(updatedList);
-
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rewardId);
-    if (isSupabaseReady && isUuid) {
-      try {
-        const { error } = await supabase
-          .from('rewards')
-          .delete()
-          .eq('id', rewardId);
-        if (error) console.log('Delete reward error:', error);
-      } catch (e) {
-        showError(e, '쿠폰 삭제에 실패했습니다.');
-      }
-    } else {
-      saveLocalState(points, messages, events, smallTalk, updatedList, userCoupons, shoppingItems, pointHistory);
-    }
-  };
-
   const handleResetData = () => {
     Alert.alert(
       '데이터 초기화',
@@ -2003,8 +1714,6 @@ export default function App() {
             setMessages(INITIAL_MOCK_DATA.messages);
             setEvents(INITIAL_MOCK_DATA.events);
             setSmallTalk(INITIAL_MOCK_DATA.smallTalk);
-            setRewardsList(INITIAL_MOCK_REWARDS);
-            setUserCoupons(INITIAL_MOCK_USER_COUPONS);
             setShoppingItems(INITIAL_MOCK_SHOPPING);
             setPointHistory(INITIAL_MOCK_POINT_HISTORY);
             await AsyncStorage.removeItem('FAMLINK_STATE');
@@ -2052,6 +1761,7 @@ export default function App() {
               shoppingItems={shoppingItems}
               petmongCharacters={petmongCharacters}
               petVitals={petVitals}
+              smallTalkState={smallTalk}
               onNavigateScreen={setCurrentScreen}
               onToggleQuest={handleToggleItem}
               onAwardPoints={handleAwardFamilyPoints}
@@ -2102,6 +1812,8 @@ export default function App() {
               familyMembers={familyMembersList}
               petVitals={petVitals}
               onUpdateVitals={handleUpdatePetVitals}
+              messages={messages}
+              smallTalkState={smallTalk}
             />
           </View>
         )}
@@ -2120,17 +1832,8 @@ export default function App() {
               points={points}
               pointHistory={pointHistory}
               onAddResponse={handleAddResponse}
-              onRedeemReward={handleRedeemReward}
               onDeductPoints={handleDeductPoints}
               familyMembers={familyMembersList}
-              rewardsList={rewardsList}
-              onAddReward={handleAddReward}
-              onUpdateReward={handleUpdateReward}
-              onDeleteReward={handleDeleteReward}
-              userCoupons={userCoupons}
-              onUseCoupon={handleUseCoupon}
-              coopGoal={coopGoal}
-              onUpdateCoopGoal={handleUpdateCoopGoal}
               messages={messages}
               onSendOrderNotice={handleSendOrderNotice}
               shoppingItems={shoppingItems}
@@ -2139,6 +1842,9 @@ export default function App() {
               onDeleteItem={handleDeleteItem}
               onClearCompleted={handleClearCompletedItems}
               onToggleRepeat={handleToggleRepeat}
+              petCharacter={petmongCharacters && petmongCharacters.length > 0 ? petmongCharacters[0] : null}
+              onAwardPetExp={handleAwardPetmongExp}
+              onAwardPoints={handleAwardFamilyPoints}
             />
           </View>
         )}
@@ -2427,7 +2133,7 @@ export default function App() {
               <Text style={styles.celebrationTitle}>가족 전원 답변 완료!</Text>
               <Text style={styles.celebrationText}>오늘의 스몰톡 미션이 완료되었습니다.</Text>
               <Text style={styles.celebrationPoints}>+100 포인트 적립!</Text>
-              <Text style={styles.celebrationSub}>포인트 상점에서 보상 쿠폰을 뽑아보세요.</Text>
+              <Text style={styles.celebrationSub}>차곡차곡 모아 가족 포토북을 발주해보세요 ✨</Text>
 
               <TouchableOpacity
                 style={styles.celebrationCloseButton}

@@ -445,14 +445,12 @@ export default function KeepyUppyGame({
   };
 
   const handleClaimAndClose = () => {
-    const finalExp = Math.max(12, Math.min(35, Math.round(score / 25) + maxRally));
-    const finalPoints = Math.max(4, Math.min(15, Math.round(score / 50)));
+    const finalPoints = Math.max(12, Math.min(120, Math.round(score / 6) + maxRally * 2));
 
     if (onGameComplete) {
       onGameComplete({
         score,
         maxRally,
-        exp: finalExp,
         points: finalPoints,
       });
     }
@@ -682,7 +680,7 @@ export default function KeepyUppyGame({
                 <View style={styles.instructionItem}>
                   <Gift size={18} color="#F59E0B" style={{ marginRight: 8 }} />
                   <Text style={styles.instructionText}>
-                    클리어 시 행복도 100% 완충 + 대량 EXP & 가족 포인트 보상!
+                    랠리 성공 시 등급별 풍성한 가족 포인트(P) 보상!
                   </Text>
                 </View>
               </View>
@@ -731,22 +729,12 @@ export default function KeepyUppyGame({
 
               {/* Rewards Box */}
               <View style={styles.rewardBox}>
-                <Text style={styles.rewardBoxTitle}>놀아주기 완료 보상</Text>
+                <Text style={styles.rewardBoxTitle}>🎉 미니게임 완료 보상</Text>
                 <View style={styles.rewardRow}>
                   <View style={styles.rewardPill}>
-                    <Heart size={14} color="#FF4D6D" fill="#FF4D6D" style={{ marginRight: 4 }} />
-                    <Text style={styles.rewardPillText}>행복도 100%</Text>
-                  </View>
-                  <View style={styles.rewardPill}>
-                    <Sparkles size={14} color="#52C41A" style={{ marginRight: 4 }} />
-                    <Text style={styles.rewardPillText}>
-                      +{Math.max(12, Math.min(35, Math.round(score / 25) + maxRally))} EXP
-                    </Text>
-                  </View>
-                  <View style={styles.rewardPill}>
-                    <Trophy size={14} color="#D48806" style={{ marginRight: 4 }} />
-                    <Text style={styles.rewardPillText}>
-                      +{Math.max(4, Math.min(15, Math.round(score / 50)))} P
+                    <Trophy size={16} color="#D48806" style={{ marginRight: 6 }} />
+                    <Text style={[styles.rewardPillText, { fontWeight: '800', color: '#B45309' }]}>
+                      가족 포인트 +{Math.max(12, Math.min(120, Math.round(score / 6) + maxRally * 2))} P 적립!
                     </Text>
                   </View>
                 </View>

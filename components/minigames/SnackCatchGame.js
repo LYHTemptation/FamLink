@@ -481,14 +481,12 @@ export default function SnackCatchGame({
   };
 
   const handleClaimAndClose = () => {
-    const finalExp = Math.max(10, Math.min(35, Math.round(score / 30)));
-    const finalPoints = Math.max(3, Math.min(15, Math.round(score / 60)));
+    const finalPoints = Math.max(10, Math.min(100, Math.round(score / 8)));
 
     if (onGameComplete) {
       onGameComplete({
         score,
         maxCombo,
-        exp: finalExp,
         points: finalPoints,
       });
     }
@@ -734,19 +732,9 @@ export default function SnackCatchGame({
               {/* Earned Rewards */}
               <View style={styles.rewardsBox}>
                 <View style={styles.rewardRow}>
-                  <Heart size={16} color="#FF4D6D" fill="#FF4D6D" />
-                  <Text style={styles.rewardText}>포만감 100% 가득 참!</Text>
-                </View>
-                <View style={styles.rewardRow}>
-                  <Sparkles size={16} color="#52C41A" />
-                  <Text style={styles.rewardText}>
-                    반려몽 성장 +{Math.max(10, Math.min(35, Math.round(score / 30)))} EXP
-                  </Text>
-                </View>
-                <View style={styles.rewardRow}>
-                  <Trophy size={16} color="#D48806" />
-                  <Text style={styles.rewardText}>
-                    가족 보너스 +{Math.max(3, Math.min(15, Math.round(score / 60)))} P 지급
+                  <Trophy size={18} color="#D48806" />
+                  <Text style={[styles.rewardText, { color: '#B45309', fontWeight: '800' }]}>
+                    가족 포인트 +{Math.max(10, Math.min(100, Math.round(score / 8)))} P 적립!
                   </Text>
                 </View>
               </View>

@@ -54,7 +54,7 @@ import {
   Mail,
   Send,
 } from 'lucide-react-native';
-import { MoodIcon, DropHeartIcon, DropCloverIcon, DropStarIcon } from './icons';
+import { MoodIcon } from './icons';
 import {
   getEvolutionStage,
   getEvolvedEmoji,
@@ -76,7 +76,6 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 const BASE_CANVAS_SIZE = SCREEN_WIDTH - 64; // Account for scrollContent padding 32 + canvasCard padding 32
 const MAX_DAILY_TOUCH = 10; // Daily touch EXP reward limit (10 times = +30 EXP)
-const MAX_DAILY_HARVEST = 15; // Daily harvest limit (15 drops per day)
 const MAX_DAILY_CARE = 2; // Daily care limit when visiting other family members (2 times = +2P)
 const MAX_ACTIVE_ROAMING = 3; // Maximum active wandering family pets simultaneously
 
@@ -105,29 +104,6 @@ const ROOM_THEMES = [
   { id: 'day', name: '햇살 가득 낮', emoji: '☀️', desc: '싱그럽고 밝은 오후 햇살 룸' },
   { id: 'night', name: '달빛 포근한 밤', emoji: '🌙', desc: '조용하고 감성적인 달밤 룸' },
 ];
-
-// Idle Resource Drop Bubbles Configuration & Generator
-const BUBBLE_CONFIG = {
-  heart: { type: 'heart', emoji: '💖', label: '행복 하트', color: '#FF4D6D', exp: 1 },
-  clover: { type: 'clover', emoji: '🍀', label: '행운 클로버', color: '#10B981', exp: 2 },
-  star: { type: 'star', emoji: '⭐', label: '별빛 방울', color: '#F59E0B', exp: 3 },
-};
-
-const createRandomDrop = (userId) => {
-  const rand = Math.random();
-  const type = rand < 0.62 ? 'heart' : (rand < 0.88 ? 'clover' : 'star');
-  // Safe bounds within visible full-screen floor/room area (x: 15%~82%, y: 22%~64%)
-  const x = Math.round(15 + Math.random() * 67);
-  const y = Math.round(22 + Math.random() * 42);
-  return {
-    id: `drop_${Date.now()}_${Math.random().toString(36).substr(2, 7)}`,
-    userId,
-    type,
-    x,
-    y,
-    createdAt: Date.now(),
-  };
-};
 
 const EMOJI_OPTIONS = ['🐶', '🐱', '🐰', '🐻', '🐥', '🦊', '🦌', '🐹', '🐲', '🦭'];
 const PERSONALITY_OPTIONS = ['다정한', '장난꾸러기', '잠꾸러기', '애교쟁이', '호기심많은'];
@@ -203,105 +179,6 @@ const getRandomDialogue = (personality) => {
   const list = PETMONG_DIALOGUES[personality] || PETMONG_DIALOGUES['default'];
   return list[Math.floor(Math.random() * list.length)];
 };
-
-// Idle Resource Harvest Bubble Component with float & pop animations
-const HarvestBubble = React.memo(({ drop, onHarvest }) => {
-  const floatAnim = useRef(new Animated.Value(0)).current;
-  const popScale = useRef(new Animated.Value(1)).current;
-  const popOpacity = useRef(new Animated.Value(1)).current;
-  const [popping, setPopping] = useState(false);
-
-  useEffect(() => {
-    const randomDuration = 1400 + Math.floor(Math.random() * 500);
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(floatAnim, {
-          toValue: -8,
-          duration: randomDuration,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: USE_NATIVE_DRIVER,
-        }),
-        Animated.timing(floatAnim, {
-          toValue: 0,
-          duration: randomDuration,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: USE_NATIVE_DRIVER,
-        }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [floatAnim]);
-
-  const handlePress = () => {
-    if (popping) return;
-    setPopping(true);
-    Animated.parallel([
-      Animated.timing(popScale, {
-        toValue: 1.45,
-        duration: 160,
-        easing: Easing.out(Easing.quad),
-        useNativeDriver: USE_NATIVE_DRIVER,
-      }),
-      Animated.timing(popOpacity, {
-        toValue: 0,
-        duration: 220,
-        useNativeDriver: USE_NATIVE_DRIVER,
-      }),
-    ]).start(() => {
-      onHarvest(drop);
-    });
-  };
-
-  const config = BUBBLE_CONFIG[drop.type] || BUBBLE_CONFIG.heart;
-
-  const renderDropIcon = () => {
-    const iconProps = { size: 26, color: config.color };
-    switch (drop.type) {
-      case 'clover':
-        return <DropCloverIcon {...iconProps} />;
-      case 'star':
-        return <DropStarIcon {...iconProps} />;
-      case 'heart':
-      default:
-        return <DropHeartIcon {...iconProps} />;
-    }
-  };
-
-  return (
-    <Animated.View
-      style={[
-        styles.bubbleContainer,
-        {
-          left: `${drop.x}%`,
-          top: `${drop.y}%`,
-          opacity: popOpacity,
-          transform: [
-            { translateY: floatAnim },
-            { scale: popScale },
-          ],
-        },
-      ]}
-    >
-      <TouchableOpacity
-        activeOpacity={0.65}
-        onPress={handlePress}
-        style={styles.bubbleTouchable}
-      >
-        <View style={styles.bubbleIconWrapper}>
-          {renderDropIcon()}
-        </View>
-        {popping && (
-          <View style={styles.bubbleFloatParticle}>
-            <Text style={[styles.bubbleFloatParticleText, { color: config.color }]}>
-              +{config.exp} EXP
-            </Text>
-          </View>
-        )}
-      </TouchableOpacity>
-    </Animated.View>
-  );
-});
 
 // Global In-Memory Cache for transparent images across tab switches
 const transparentImageCache = new Map();
@@ -615,13 +492,13 @@ export default function InteriorScreen({
   familyMembers = [],
   petVitals: propPetVitals,
   onUpdateVitals: propOnUpdateVitals,
+  messages = [],
+  smallTalkState = {},
 }) {
   const insets = useSafeAreaInsets();
   
   // Idle Game & Room Navigation States
   const [selectedRoomUserId, setSelectedRoomUserId] = useState(currentUserProfile?.id);
-  const [dropsByRoom, setDropsByRoom] = useState({});
-  const [dailyHarvestCount, setDailyHarvestCount] = useState(0);
   const [dailyCareCount, setDailyCareCount] = useState(0);
 
   // Petmong States (Linked with Supabase)
@@ -705,24 +582,6 @@ export default function InteriorScreen({
   const [familyRoomTheme, setFamilyRoomTheme] = useState('cottage');
   const activeRoomTheme = familyRoomTheme || 'cottage';
 
-  // Floating Mini Capsule HUD State (Default: collapsed capsule for maximum room visibility)
-  const [isHudExpanded, setIsHudExpanded] = useState(false);
-  const hudCollapseTimer = useRef(null);
-
-  const expandHudTemporarily = (durationMs = 4000) => {
-    setIsHudExpanded(true);
-    if (hudCollapseTimer.current) clearTimeout(hudCollapseTimer.current);
-    hudCollapseTimer.current = setTimeout(() => {
-      setIsHudExpanded(false);
-    }, durationMs);
-  };
-
-  useEffect(() => {
-    return () => {
-      if (hudCollapseTimer.current) clearTimeout(hudCollapseTimer.current);
-    };
-  }, []);
-
   // Main Character Float Animation
   const floatAnim = useRef(new Animated.Value(0)).current;
 
@@ -731,7 +590,6 @@ export default function InteriorScreen({
   const displayedCharacter = familyPetmong;
   const displayedOwner = currentUserProfile;
   const isVisitingOther = false;
-  const activeRoomDrops = dropsByRoom['family'] || dropsByRoom[currentUserProfile?.id] || [];
 
   // Background Pre-Generation of Missing Stages for Active User's Character
   useEffect(() => {
@@ -1214,72 +1072,12 @@ export default function InteriorScreen({
       }
     }).catch(err => console.log('Error loading daily touch count:', err));
 
-    // 2. Load daily harvest & care counts
-    AsyncStorage.getItem(`PETMONG_DAILY_HARVEST_${currentUserProfile.id}_${today}`).then(val => {
-      if (val !== null) {
-        const loaded = parseInt(val, 10) || 0;
-        setDailyHarvestCount(Math.min(MAX_DAILY_HARVEST, loaded));
-      }
-    }).catch(() => {});
-
+    // 2. Load daily care count
     AsyncStorage.getItem(`PETMONG_DAILY_CARE_${currentUserProfile.id}_${today}`).then(val => {
       if (val !== null) setDailyCareCount(parseInt(val, 10) || 0);
     }).catch(() => {});
 
-    // 3. Load idle drops
-    if (familyId) {
-      const dropsKey = `PETMONG_ROOM_DROPS_${familyId}`;
-      const lastTimeKey = `PETMONG_LAST_IDLE_TIME_${familyId}`;
-
-      Promise.all([
-        AsyncStorage.getItem(dropsKey),
-        AsyncStorage.getItem(lastTimeKey),
-      ]).then(([storedDropsStr, lastTimeStr]) => {
-        let currentDropsMap = {};
-        if (storedDropsStr) {
-          try {
-            currentDropsMap = JSON.parse(storedDropsStr) || {};
-          } catch (e) {}
-        }
-
-        const now = Date.now();
-        const lastTime = lastTimeStr ? parseInt(lastTimeStr, 10) : now;
-        const elapsedMinutes = Math.floor((now - lastTime) / (1000 * 60));
-        // Offline accumulation: 1 drop per 4 minutes, maximum 10 drops
-        const offlineSpawns = Math.min(10, Math.floor(elapsedMinutes / 4));
-
-        const targetUserIds = [
-          currentUserProfile.id,
-          ...familyMembers.map(m => m.id).filter(id => id && id !== currentUserProfile.id),
-        ];
-
-        let updated = false;
-        targetUserIds.forEach(uId => {
-          const userDrops = currentDropsMap[uId] ? [...currentDropsMap[uId]] : [];
-          // If it's current user's room and daily harvest reached limit, do not spawn more
-          if (uId === currentUserProfile.id && dailyHarvestCount >= MAX_DAILY_HARVEST) {
-            return;
-          }
-          const needed = offlineSpawns > 0 ? offlineSpawns : (userDrops.length === 0 ? 3 : 0);
-          const toAdd = Math.min(needed, 10 - userDrops.length);
-          if (toAdd > 0) {
-            for (let i = 0; i < toAdd; i++) {
-              userDrops.push(createRandomDrop(uId));
-            }
-            currentDropsMap[uId] = userDrops;
-            updated = true;
-          }
-        });
-
-        setDropsByRoom(currentDropsMap);
-        AsyncStorage.setItem(lastTimeKey, String(now)).catch(() => {});
-        if (updated) {
-          AsyncStorage.setItem(dropsKey, JSON.stringify(currentDropsMap)).catch(() => {});
-        }
-      }).catch(err => console.log('Error loading idle drops:', err));
-    }
-
-    // 4. Fetch ground-truth count from Supabase petmong_activities for cross-device sync
+    // 3. Fetch ground-truth count from Supabase petmong_activities for cross-device sync
     if (familyId) {
       // Query recent room theme updates for all members
       supabase
@@ -1320,7 +1118,7 @@ export default function InteriorScreen({
         })
         .catch(err => console.log('Error syncing touch count with DB:', err));
     }
-  }, [currentUserProfile?.id, myCharacter?.id, familyId, familyMembers.length, dailyHarvestCount]);
+  }, [currentUserProfile?.id, myCharacter?.id, familyId, familyMembers.length]);
 
   // Real-time Supabase listener for Family Room Theme Updates across all family devices
   useEffect(() => {
@@ -1356,373 +1154,6 @@ export default function InteriorScreen({
     };
   }, [familyId]);
 
-  // Real-time idle drop generation interval (adds 1 drop every 22 seconds up to 10)
-  useEffect(() => {
-    if (!familyId || !selectedRoomUserId) return;
-    // Do not spawn drops in my room if today's harvest limit is already reached
-    if (selectedRoomUserId === currentUserProfile?.id && dailyHarvestCount >= MAX_DAILY_HARVEST) {
-      return;
-    }
-    const interval = setInterval(() => {
-      setDropsByRoom(prev => {
-        // Double check daily limit
-        if (selectedRoomUserId === currentUserProfile?.id && dailyHarvestCount >= MAX_DAILY_HARVEST) {
-          return prev;
-        }
-        const currentList = prev[selectedRoomUserId] || [];
-        if (currentList.length >= 10) return prev;
-        const newDrop = createRandomDrop(selectedRoomUserId);
-        const updated = {
-          ...prev,
-          [selectedRoomUserId]: [...currentList, newDrop],
-        };
-        AsyncStorage.setItem(`PETMONG_ROOM_DROPS_${familyId}`, JSON.stringify(updated)).catch(() => {});
-        return updated;
-      });
-    }, 22000);
-
-    return () => clearInterval(interval);
-  }, [familyId, selectedRoomUserId, currentUserProfile?.id, dailyHarvestCount]);
-
-  // Helper to trigger character bounce & speech bubble without EXP
-  const handlePetBounceOnly = (text) => {
-    Animated.sequence([
-      Animated.timing(bounceAnim, { toValue: -18, duration: 150, useNativeDriver: USE_NATIVE_DRIVER }),
-      Animated.spring(bounceAnim, { toValue: 0, friction: 3, tension: 70, useNativeDriver: USE_NATIVE_DRIVER }),
-    ]).start();
-
-    setBubbleText(text);
-    setBubbleVisible(true);
-    bubbleAnim.setValue(0);
-    Animated.spring(bubbleAnim, {
-      toValue: 1,
-      friction: 5,
-      tension: 60,
-      useNativeDriver: USE_NATIVE_DRIVER,
-    }).start();
-
-    if (bubbleTimerRef.current) clearTimeout(bubbleTimerRef.current);
-    bubbleTimerRef.current = setTimeout(() => {
-      Animated.timing(bubbleAnim, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: USE_NATIVE_DRIVER,
-      }).start(() => setBubbleVisible(false));
-    }, 4500);
-  };
-
-  // Handle Tap Interaction on Active Petmong (Sumone Style)
-  const handlePetTap = () => {
-    const targetChar = displayedCharacter;
-    if (!targetChar) return;
-
-    // 1. Bounce animation
-    Animated.sequence([
-      Animated.timing(bounceAnim, { toValue: -18, duration: 150, useNativeDriver: USE_NATIVE_DRIVER }),
-      Animated.spring(bounceAnim, { toValue: 0, friction: 3, tension: 70, useNativeDriver: USE_NATIVE_DRIVER }),
-    ]).start();
-
-    // 2. Heart floating particle animation
-    setHeartVisible(true);
-    heartAnim.setValue(0);
-    Animated.timing(heartAnim, {
-      toValue: 1,
-      duration: 1100,
-      useNativeDriver: USE_NATIVE_DRIVER,
-    }).start(() => setHeartVisible(false));
-
-    // 3. Speech bubble with personality & time-based quote
-    const isLimitReached = dailyTouchCount >= MAX_DAILY_TOUCH;
-    const quote = isLimitReached
-      ? '오늘 사랑은 듬뿍 받았어요! 내일 또 쓰다듬어주세요 🥰'
-      : getRandomDialogue(targetChar.personality || '다정한');
-    setBubbleText(quote);
-    setBubbleVisible(true);
-    bubbleAnim.setValue(0);
-    Animated.spring(bubbleAnim, {
-      toValue: 1,
-      friction: 5,
-      tension: 60,
-      useNativeDriver: USE_NATIVE_DRIVER,
-    }).start();
-
-    if (bubbleTimerRef.current) clearTimeout(bubbleTimerRef.current);
-    bubbleTimerRef.current = setTimeout(() => {
-      Animated.timing(bubbleAnim, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: USE_NATIVE_DRIVER,
-      }).start(() => setBubbleVisible(false));
-    }, 4500);
-
-    // 4. Award EXP on touch (up to 10 times per day)
-    if (!isLimitReached) {
-      const nextCount = dailyTouchCount + 1;
-      setDailyTouchCount(nextCount);
-
-      if (currentUserProfile?.id) {
-        const today = new Date().toISOString().split('T')[0];
-        const key = `PETMONG_TOUCH_${currentUserProfile.id}_${today}`;
-        AsyncStorage.setItem(key, String(nextCount)).catch(e => console.log(e));
-      }
-
-      if (onAwardExp && targetChar.user_id) {
-        onAwardExp(targetChar.user_id, 3, `반려몽 쓰다듬기 (${nextCount}/${MAX_DAILY_TOUCH})`);
-      } else {
-        setMyCharacter(prev => {
-          if (!prev) return prev;
-          let newExp = (prev.exp || 0) + 3;
-          let newLevel = prev.level || 1;
-          if (newExp >= 100) {
-            newExp -= 100;
-            newLevel += 1;
-            setLevelUpInfo({ name: prev.name, level: newLevel });
-            setLevelUpModalVisible(true);
-          }
-          return { ...prev, exp: newExp, level: newLevel };
-        });
-      }
-    }
-  };
-
-  // Handle Harvesting a Single Idle Drop (Heart, Clover, Star)
-  const handleHarvestDrop = (drop) => {
-    const config = BUBBLE_CONFIG[drop.type] || BUBBLE_CONFIG.heart;
-
-    if (isVisitingOther) {
-      // Visiting other family member: 품앗이 돌봄!
-      const targetOwner = familyMembers.find(m => m.id === selectedRoomUserId);
-      const targetName = targetOwner?.name || '가족';
-
-      if (dailyCareCount >= MAX_DAILY_CARE) {
-        Alert.alert(
-          '오늘의 돌봄 완료! 💕',
-          `오늘 가족 반려몽 돌봄(일일 ${MAX_DAILY_CARE}회)을 이미 모두 완료했습니다!\n내일 다시 사랑과 관심을 전해주세요 🥰`
-        );
-        return;
-      }
-
-      const currentList = dropsByRoom[selectedRoomUserId] || [];
-      const updatedList = currentList.filter(d => d.id !== drop.id);
-      const updatedMap = {
-        ...dropsByRoom,
-        [selectedRoomUserId]: updatedList,
-      };
-      setDropsByRoom(updatedMap);
-      if (familyId) {
-        AsyncStorage.setItem(`PETMONG_ROOM_DROPS_${familyId}`, JSON.stringify(updatedMap)).catch(() => {});
-      }
-
-      const nextCare = dailyCareCount + 1;
-      setDailyCareCount(nextCare);
-      const today = new Date().toISOString().split('T')[0];
-      AsyncStorage.setItem(`PETMONG_DAILY_CARE_${currentUserProfile.id}_${today}`, String(nextCare)).catch(() => {});
-
-      // Award EXP to visited petmong strictly within daily care limit
-      if (onAwardExp) {
-        onAwardExp(selectedRoomUserId, config.exp + 1, `가족 돌봄 방울 수확 (+${config.exp + 1} EXP) (${nextCare}/${MAX_DAILY_CARE})`);
-      }
-
-      if (onAwardPoints) {
-        onAwardPoints(1, `${targetName} 반려몽 돌봄 보너스 (+1P)`);
-      }
-
-      if (familyId && displayedCharacter?.id) {
-        supabase.from('petmong_activities').insert({
-          family_id: familyId,
-          actor_id: myCharacter?.id || displayedCharacter.id,
-          target_id: displayedCharacter.id,
-          action_type: `가족 반려몽 방울 돌봄 품앗이 (+1P) (${nextCare}/${MAX_DAILY_CARE})`,
-        }).then(() => {}, (e) => console.warn('Activity log error:', e));
-      }
-
-      Alert.alert(
-        '돌봄 품앗이 완료! 💕',
-        `${targetName} 님의 반려몽 방울을 대신 수확해주었습니다!\n경험치 +${config.exp + 1} EXP 선물 & 돌봄 보너스 1P 획득! 🪙 (오늘 ${nextCare}/${MAX_DAILY_CARE}회)`
-      );
-
-      handlePetBounceOnly(`${currentUserProfile?.name || '가족'} 님이 방울을 따줬어요! 헤헤 고마워요 💕`);
-    } else {
-      // My room harvest!
-      if (dailyHarvestCount >= MAX_DAILY_HARVEST) {
-        Alert.alert(
-          '오늘의 수확 완료! 🌟',
-          `오늘 수확 가능한 방울(${MAX_DAILY_HARVEST}개)을 모두 수확했습니다!\n내일 자정에 새로운 방울이 생성됩니다. 푹 쉬고 내일 만나요!`
-        );
-        return;
-      }
-
-      const currentList = dropsByRoom[selectedRoomUserId] || [];
-      const updatedList = currentList.filter(d => d.id !== drop.id);
-      const updatedMap = {
-        ...dropsByRoom,
-        [selectedRoomUserId]: updatedList,
-      };
-      setDropsByRoom(updatedMap);
-      if (familyId) {
-        AsyncStorage.setItem(`PETMONG_ROOM_DROPS_${familyId}`, JSON.stringify(updatedMap)).catch(() => {});
-      }
-
-      const prevCount = dailyHarvestCount;
-      const nextCount = Math.min(MAX_DAILY_HARVEST, prevCount + 1);
-      setDailyHarvestCount(nextCount);
-      const today = new Date().toISOString().split('T')[0];
-      AsyncStorage.setItem(`PETMONG_DAILY_HARVEST_${currentUserProfile.id}_${today}`, String(nextCount)).catch(() => {});
-
-      expandHudTemporarily(3500);
-
-      if (onAwardExp && currentUserProfile?.id) {
-        onAwardExp(currentUserProfile.id, config.exp, `방치 자원 수확 (+${config.exp} EXP)`);
-      }
-
-      // Check economic milestones: 5 items = +1P, 15 items = +2P
-      if (nextCount % 5 === 0 && nextCount <= MAX_DAILY_HARVEST) {
-        if (onAwardPoints) {
-          onAwardPoints(1, `반려몽 방치 수확 (${nextCount}개 달성)`);
-        }
-        Alert.alert(
-          '수확 포인트 획득! 🎉',
-          `행복 방울 ${nextCount}개 수확 달성! 1P를 획득했습니다! 🪙`
-        );
-      }
-
-      if (nextCount === MAX_DAILY_HARVEST) {
-        if (onAwardPoints) {
-          onAwardPoints(2, '반려몽 방치 수확 일일 완판 (+2P)');
-        }
-        Alert.alert(
-          '일일 완판 보너스! 🌟',
-          `오늘의 방울 ${MAX_DAILY_HARVEST}개 완판을 달성했습니다! 일일 완판 보너스 2P를 획득했습니다! 🏆`
-        );
-      }
-
-      const quotes = {
-        heart: '방울 따줘서 고마워요! 사랑이 가득 채워졌어요~ 💖',
-        clover: '행운의 클로버 방울이다! 오늘 우리 가족에게 좋은 일이 생길 거예요 🍀',
-        star: '반짝반짝 별빛 방울! 오늘 밤엔 좋은 꿈 꿀게요 ⭐',
-      };
-      handlePetBounceOnly(quotes[drop.type] || '방울 따줘서 고마워요! 몸이 가벼워졌어요 🥰');
-    }
-  };
-
-  // Handle Harvesting All Drops in Current Room
-  const handleHarvestAll = () => {
-    const currentList = dropsByRoom[selectedRoomUserId] || [];
-    if (currentList.length === 0) return;
-
-    if (isVisitingOther) {
-      if (dailyCareCount >= MAX_DAILY_CARE) {
-        Alert.alert(
-          '오늘의 돌봄 완료! 💕',
-          `오늘 가족 반려몽 돌봄(일일 ${MAX_DAILY_CARE}회)을 이미 모두 완료했습니다!\n내일 다시 사랑과 관심을 전해주세요 🥰`
-        );
-        return;
-      }
-
-      const availableCare = MAX_DAILY_CARE - dailyCareCount;
-      const careCountToHarvest = Math.min(currentList.length, availableCare);
-      const dropsToHarvest = currentList.slice(0, careCountToHarvest);
-      const remainingDrops = currentList.slice(careCountToHarvest);
-
-      const updatedMap = {
-        ...dropsByRoom,
-        [selectedRoomUserId]: remainingDrops,
-      };
-      setDropsByRoom(updatedMap);
-      if (familyId) {
-        AsyncStorage.setItem(`PETMONG_ROOM_DROPS_${familyId}`, JSON.stringify(updatedMap)).catch(() => {});
-      }
-
-      const nextCare = dailyCareCount + careCountToHarvest;
-      setDailyCareCount(nextCare);
-      const today = new Date().toISOString().split('T')[0];
-      AsyncStorage.setItem(`PETMONG_DAILY_CARE_${currentUserProfile.id}_${today}`, String(nextCare)).catch(() => {});
-
-      const targetOwner = familyMembers.find(m => m.id === selectedRoomUserId);
-      const targetName = targetOwner?.name || '가족';
-      const totalExp = dropsToHarvest.reduce((sum, d) => sum + ((BUBBLE_CONFIG[d.type]?.exp || 1) + 1), 0);
-
-      if (onAwardExp) {
-        onAwardExp(selectedRoomUserId, totalExp, `가족 돌봄 방울 일괄 수확 (+${totalExp} EXP) (${nextCare}/${MAX_DAILY_CARE})`);
-      }
-
-      if (onAwardPoints) {
-        onAwardPoints(careCountToHarvest, `${targetName} 반려몽 돌봄 보너스 (+${careCountToHarvest}P)`);
-      }
-
-      if (familyId && displayedCharacter?.id) {
-        supabase.from('petmong_activities').insert({
-          family_id: familyId,
-          actor_id: myCharacter?.id || displayedCharacter.id,
-          target_id: displayedCharacter.id,
-          action_type: `가족 반려몽 방울 일괄 돌봄 (+${careCountToHarvest}P) (${nextCare}/${MAX_DAILY_CARE})`,
-        }).then(() => {}, (e) => console.warn('Activity log error:', e));
-      }
-
-      Alert.alert(
-        '모두 돌봄 완료! 💕',
-        `${targetName} 님의 방울 ${careCountToHarvest}개를 돌봐주었습니다!\n${totalExp} EXP 선물 & 돌봄 보너스 ${careCountToHarvest}P를 획득했습니다! 🪙 (오늘 ${nextCare}/${MAX_DAILY_CARE}회 완료)`
-      );
-
-      handlePetBounceOnly(`${currentUserProfile?.name || '가족'} 님이 방울을 따줬어요! 최고야! 💕`);
-    } else {
-      if (dailyHarvestCount >= MAX_DAILY_HARVEST) {
-        Alert.alert(
-          '오늘의 수확 완료! 🌟',
-          `오늘 수확 가능한 방울(${MAX_DAILY_HARVEST}개)을 모두 수확했습니다!\n내일 자정에 새로운 방울이 생성됩니다. 푹 쉬고 내일 만나요!`
-        );
-        return;
-      }
-
-      const availableHarvest = MAX_DAILY_HARVEST - dailyHarvestCount;
-      const countToHarvest = Math.min(currentList.length, availableHarvest);
-      const dropsToHarvest = currentList.slice(0, countToHarvest);
-      const remainingDrops = currentList.slice(countToHarvest);
-
-      const updatedMap = {
-        ...dropsByRoom,
-        [selectedRoomUserId]: remainingDrops,
-      };
-      setDropsByRoom(updatedMap);
-      if (familyId) {
-        AsyncStorage.setItem(`PETMONG_ROOM_DROPS_${familyId}`, JSON.stringify(updatedMap)).catch(() => {});
-      }
-
-      const totalExp = dropsToHarvest.reduce((acc, d) => acc + (BUBBLE_CONFIG[d.type]?.exp || 1), 0);
-      if (onAwardExp && currentUserProfile?.id) {
-        onAwardExp(currentUserProfile.id, totalExp, `방치 자원 모두 수확 (+${totalExp} EXP)`);
-      }
-
-      const prevCount = dailyHarvestCount;
-      const nextCount = prevCount + countToHarvest;
-      setDailyHarvestCount(nextCount);
-      const today = new Date().toISOString().split('T')[0];
-      AsyncStorage.setItem(`PETMONG_DAILY_HARVEST_${currentUserProfile.id}_${today}`, String(nextCount)).catch(() => {});
-
-      expandHudTemporarily(4500);
-
-      const milestonesPassed = Math.floor(nextCount / 5) - Math.floor(prevCount / 5);
-      let bonusPoints = milestonesPassed;
-      if (prevCount < MAX_DAILY_HARVEST && nextCount >= MAX_DAILY_HARVEST) {
-        bonusPoints += 2;
-      }
-
-      if (bonusPoints > 0 && onAwardPoints) {
-        onAwardPoints(bonusPoints, `반려몽 방치 수확 (${countToHarvest}개 일괄 수확 보너스)`);
-        Alert.alert(
-          '모두 수확 완료! 🎉',
-          `방울 ${countToHarvest}개를 한 번에 수확하여 +${totalExp} EXP와 +${bonusPoints}P를 획득했습니다! 🪙 (오늘: ${nextCount}/${MAX_DAILY_HARVEST}개)`
-        );
-      } else {
-        Alert.alert(
-          '모두 수확 완료! ✨',
-          `방울 ${countToHarvest}개를 한 번에 수확하여 +${totalExp} EXP를 획득했습니다! (오늘 수확: ${nextCount}/${MAX_DAILY_HARVEST}개)`
-        );
-      }
-
-      handlePetBounceOnly('와아! 방울들을 전부 따줘서 몸이 깃털처럼 가벼워졌어요~ 💖');
-    }
-  };
 
   const handleSelectTheme = (themeId) => {
     setFamilyRoomTheme(themeId);
@@ -2355,6 +1786,8 @@ Crucial requirements:
           onOpenWriteWhisper={() => {
             setWhisperWriteModalVisible(true);
           }}
+          messages={messages}
+          smallTalkState={smallTalkState}
         />
       ) : (
         /* Empty Room Banner */

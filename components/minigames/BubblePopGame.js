@@ -495,15 +495,13 @@ export default function BubblePopGame({
   };
 
   const handleClaimAndClose = () => {
-    const finalExp = Math.max(12, Math.min(35, Math.round(score / 25) + Math.round(cleanliness / 10)));
-    const finalPoints = Math.max(4, Math.min(15, Math.round(score / 55)));
+    const finalPoints = Math.max(10, Math.min(100, Math.round(score / 6) + Math.round(cleanliness / 5)));
 
     if (onGameComplete) {
       onGameComplete({
         score,
         poppedCount,
         cleanliness,
-        exp: finalExp,
         points: finalPoints,
       });
     }
@@ -767,7 +765,7 @@ export default function BubblePopGame({
                 <View style={styles.instructionItem}>
                   <Gift size={18} color="#0D9488" style={{ marginRight: 8 }} />
                   <Text style={styles.instructionText}>
-                    청결도 100% 완충 + 대량 EXP 및 가족 포인트 보상 지급!
+                    버블 팝 성공 시 등급별 풍성한 가족 포인트(P) 보상 지급!
                   </Text>
                 </View>
               </View>
@@ -820,22 +818,12 @@ export default function BubblePopGame({
 
               {/* Rewards Box */}
               <View style={styles.rewardBox}>
-                <Text style={styles.rewardBoxTitle}>목욕 완료 보상</Text>
+                <Text style={styles.rewardBoxTitle}>🎉 미니게임 완료 보상</Text>
                 <View style={styles.rewardRow}>
                   <View style={styles.rewardPill}>
-                    <SoapBarIcon size={14} />
-                    <Text style={[styles.rewardPillText, { marginLeft: 4 }]}>청결도 100%</Text>
-                  </View>
-                  <View style={styles.rewardPill}>
-                    <Sparkles size={14} color="#52C41A" style={{ marginRight: 4 }} />
-                    <Text style={styles.rewardPillText}>
-                      +{Math.max(12, Math.min(35, Math.round(score / 25) + Math.round(cleanliness / 10)))} EXP
-                    </Text>
-                  </View>
-                  <View style={styles.rewardPill}>
-                    <Trophy size={14} color="#D48806" style={{ marginRight: 4 }} />
-                    <Text style={styles.rewardPillText}>
-                      +{Math.max(4, Math.min(15, Math.round(score / 55)))} P
+                    <Trophy size={16} color="#D48806" style={{ marginRight: 6 }} />
+                    <Text style={[styles.rewardPillText, { fontWeight: '800', color: '#B45309' }]}>
+                      가족 포인트 +{Math.max(10, Math.min(100, Math.round(score / 6) + Math.round(cleanliness / 5)))} P 적립!
                     </Text>
                   </View>
                 </View>

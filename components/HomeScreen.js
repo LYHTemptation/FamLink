@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Plus } from 'lucide-react-native';
 import UserAvatar from './UserAvatar';
+import { getEvolutionStage, getStageNameWithPet } from '../lib/petmongEvolution';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -75,6 +76,7 @@ export default function HomeScreen({
   shoppingItems = [],
   petmongCharacters = [],
   petVitals,
+  smallTalkState = {},
   onNavigateScreen,
   onToggleQuest,
   onAwardPoints,
@@ -123,6 +125,59 @@ export default function HomeScreen({
     }
     return null;
   }, [petmongCharacters]);
+
+  // 가족 대화 온기 & 자율 성장 지표 산출 (썸원 방식)
+  const todayStart = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }, []);
+
+  const todayMessages = useMemo(() => {
+    return (messages || []).filter(m => {
+      const t = new Date(m.created_at || m.timestamp || Date.now()).getTime();
+      return t >= todayStart;
+    });
+  }, [messages, todayStart]);
+
+  const todayResponsesCount = useMemo(() => {
+    if (!smallTalkState || !smallTalkState.responses) return 0;
+    return Object.keys(smallTalkState.responses).length;
+  }, [smallTalkState]);
+
+  const familyWarmth = useMemo(() => {
+    const chatScore = Math.min(60, todayMessages.length * 10);
+    const smallTalkScore = Math.min(40, todayResponsesCount * 20);
+    return Math.min(100, Math.max(20, chatScore + smallTalkScore));
+  }, [todayMessages.length, todayResponsesCount]);
+
+  const canHarvestFruit = (todayMessages.length > 0 || todayResponsesCount > 0);
+
+  const petLevel = activePetmong?.level || 1;
+  const stageInfo = useMemo(() => getEvolutionStage(petLevel), [petLevel]);
+  const stageTitle = useMemo(() => getStageNameWithPet(stageInfo?.stage || 1, activePetmong?.name || '우리 몽이'), [stageInfo, activePetmong?.name]);
+  const petExp = activePetmong?.exp || 0;
+  const petMaxExp = activePetmong?.max_exp || (petLevel * 100);
+  const expRatio = Math.min(100, Math.max(0, Math.round((petExp / petMaxExp) * 100)));
+
+  const routineDialogue = useMemo(() => {
+    if (familyWarmth >= 80) {
+      return '가족 대화 소리가 가득해서 마음이 훈훈해요 몽! ✨';
+    }
+    if (canHarvestFruit) {
+      return '온기 열매가 영글었어요! 거실에서 수확해 주세요 🍇';
+    }
+    const hour = new Date().getHours();
+    if (hour >= 22 || hour < 6) {
+      return '코오... 조용한 밤 단꿈을 꾸고 있어요 zZ 🌙';
+    } else if (hour >= 6 && hour < 11) {
+      return '좋은 아침! 오늘 하루도 온 가족 화이팅이에요 ☀️';
+    } else if (hour >= 11 && hour < 17) {
+      return '따스한 햇살 받으며 가족 앨범을 넘겨보고 있어요 📖';
+    } else {
+      return '가족들이 모이는 저녁 시간이 기다려져요 몽 🐾';
+    }
+  }, [familyWarmth, canHarvestFruit]);
 
   // 퀘스트 완료 카운트 계산
   const totalQuests = quests.length;
@@ -387,7 +442,7 @@ export default function HomeScreen({
 
         {/* ========================================================= */}
         {/* ========================================================= */}
-        {/* 4. 내 반려몽 (개인별 펫 대시보드 카드)                      */}
+        {/* 4. 내 반려몽 (가족 대화 자율 성장 대시보드 카드)             */}
         {/* ========================================================= */}
         <View style={styles.cardSection}>
           <TouchableOpacity
@@ -395,13 +450,20 @@ export default function HomeScreen({
             onPress={() => onNavigateScreen && onNavigateScreen('interior')}
             activeOpacity={0.9}
           >
-            {/* 카드 상단 헤더: 서브라벨 + 펫 이름/상태 + 알약형 버튼 */}
+            {/* 카드 상단 헤더: 서브라벨 + 펫 이름/단계 + 거실 가기 버튼 */}
             <View style={styles.cardHeaderRow}>
               <View style={styles.cardHeaderLeftCol}>
-                <Text style={[styles.cardSubLabel, styles.petSubLabel]}>우리 가족 반려몽</Text>
+                <View style={styles.petSubLabelRow}>
+                  <Text style={[styles.cardSubLabel, styles.petSubLabel]}>우리 가족 반려몽</Text>
+                  {canHarvestFruit && (
+                    <View style={styles.harvestFruitChip}>
+                      <Text style={styles.harvestFruitChipText}>🍇 열매 결실</Text>
+                    </View>
+                  )}
+                </View>
                 <View style={styles.petTitleRow}>
                   <Text style={styles.cardMainTitle}>{activePetmong?.name || '우리 몽이'}</Text>
-                  <Text style={styles.petTitleSub}> · {activePetmong?.personality || '기분 좋아요!'}</Text>
+                  <Text style={styles.petTitleSub}> · Lv.{petLevel} {stageTitle}</Text>
                 </View>
               </View>
 
@@ -410,14 +472,14 @@ export default function HomeScreen({
                 onPress={() => onNavigateScreen && onNavigateScreen('interior')}
                 activeOpacity={0.7}
               >
-                <Text style={styles.petPillText}>돌봐주기 →</Text>
+                <Text style={styles.petPillText}>거실 가기 →</Text>
               </TouchableOpacity>
             </View>
 
             {/* 카드 구분선 */}
             <View style={[styles.cardDivider, styles.petDivider]} />
 
-            {/* 펫 콘텐츠: 좌측 아바타 박스 + 우측 3대 생체 게이지 */}
+            {/* 펫 콘텐츠: 좌측 아바타 박스 + 우측 2대 성장 지표 & 자율 루틴 말풍선 */}
             <View style={styles.petCardInnerRow}>
               <View style={styles.petEmojiBox}>
                 {activePetmong?.image_url ? (
@@ -429,34 +491,37 @@ export default function HomeScreen({
                 ) : (
                   <Text style={styles.petAvatarEmoji}>{activePetmong?.emoji || '😸'}</Text>
                 )}
+                {canHarvestFruit && (
+                  <View style={styles.petFruitBadge}>
+                    <Text style={styles.petFruitBadgeEmoji}>✨</Text>
+                  </View>
+                )}
               </View>
 
               <View style={styles.petInfoCol}>
-                {/* 게이지 1: 건강 */}
+                {/* 지표 1: 오늘 대화 온기 */}
                 <View style={styles.petStatRow}>
-                  <Text style={styles.petStatLabel}>❤️ 건강</Text>
+                  <Text style={styles.petStatLabel}>🔥 대화 온기</Text>
                   <View style={styles.petStatBarBg}>
-                    <View style={[styles.petStatBarFill, { width: `${Math.round(petVitals?.cleanliness ?? 90)}%`, backgroundColor: '#34D399' }]} />
+                    <View style={[styles.petStatBarFill, { width: `${familyWarmth}%`, backgroundColor: '#FF6B47' }]} />
                   </View>
-                  <Text style={styles.petStatValText}>{Math.round(petVitals?.cleanliness ?? 90)}%</Text>
+                  <Text style={[styles.petStatValText, { color: '#E11D48' }]}>{familyWarmth}%</Text>
                 </View>
 
-                {/* 게이지 2: 행복 */}
+                {/* 지표 2: 성장 진화 EXP */}
                 <View style={styles.petStatRow}>
-                  <Text style={styles.petStatLabel}>😊 행복</Text>
+                  <Text style={styles.petStatLabel}>🌱 다음 진화</Text>
                   <View style={styles.petStatBarBg}>
-                    <View style={[styles.petStatBarFill, { width: `${Math.round(petVitals?.happiness ?? 85)}%`, backgroundColor: '#60A5FA' }]} />
+                    <View style={[styles.petStatBarFill, { width: `${expRatio}%`, backgroundColor: '#6366F1' }]} />
                   </View>
-                  <Text style={styles.petStatValText}>{Math.round(petVitals?.happiness ?? 85)}%</Text>
+                  <Text style={[styles.petStatValText, { color: '#4338CA' }]}>{expRatio}%</Text>
                 </View>
 
-                {/* 게이지 3: 식사 */}
-                <View style={styles.petStatRow}>
-                  <Text style={styles.petStatLabel}>🍖 식사</Text>
-                  <View style={styles.petStatBarBg}>
-                    <View style={[styles.petStatBarFill, { width: `${Math.round(petVitals?.hunger ?? 80)}%`, backgroundColor: '#F59E0B' }]} />
-                  </View>
-                  <Text style={styles.petStatValText}>{Math.round(petVitals?.hunger ?? 80)}%</Text>
+                {/* 지표 3: 현재 자율 루틴 말풍선 */}
+                <View style={styles.petRoutineBubble}>
+                  <Text style={styles.petRoutineText} numberOfLines={1}>
+                    💬 {routineDialogue}
+                  </Text>
                 </View>
               </View>
             </View>
@@ -876,6 +941,24 @@ const styles = StyleSheet.create({
   },
 
   // 4. 내 반려몽 전용 스타일
+  petSubLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  harvestFruitChip: {
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 0.5,
+    borderColor: '#F59E0B',
+  },
+  harvestFruitChipText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#B45309',
+  },
   petTitleRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
@@ -910,8 +993,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   petEmojiBox: {
-    width: 56,
-    height: 56,
+    width: 60,
+    height: 60,
     borderRadius: 16,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
@@ -922,17 +1005,34 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 3,
     elevation: 1,
+    position: 'relative',
   },
   petAvatarImage: {
-    width: 48,
-    height: 48,
+    width: 52,
+    height: 52,
   },
   petAvatarEmoji: {
     fontSize: 34,
   },
+  petFruitBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: '#FEF3C7',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+  },
+  petFruitBadgeEmoji: {
+    fontSize: 10,
+  },
   petInfoCol: {
     flex: 1,
-    gap: 6,
+    gap: 5,
   },
   petStatRow: {
     flexDirection: 'row',
@@ -940,7 +1040,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   petStatLabel: {
-    width: 52,
+    width: 60,
     fontSize: 11,
     fontWeight: '700',
     color: '#4338CA',
@@ -960,8 +1060,22 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     color: '#1C1917',
-    width: 28,
+    width: 32,
     textAlign: 'right',
+  },
+  petRoutineBubble: {
+    backgroundColor: '#F5F3FF',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginTop: 2,
+    borderWidth: 0.5,
+    borderColor: '#DDD6FE',
+  },
+  petRoutineText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#4F46E5',
   },
 
   // 5. 우리 가족 앨범 전용 스타일

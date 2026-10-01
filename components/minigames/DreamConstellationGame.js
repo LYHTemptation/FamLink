@@ -405,14 +405,12 @@ export default function DreamConstellationGame({
   };
 
   const handleClaimAndClose = () => {
-    const finalExp = Math.max(12, Math.min(35, Math.round(score / 25) + completedConstCount * 4));
-    const finalPoints = Math.max(4, Math.min(15, Math.round(score / 60)));
+    const finalPoints = Math.max(15, Math.min(150, Math.round(score / 5) + completedConstCount * 15));
 
     if (onGameComplete) {
       onGameComplete({
         score,
         completedCount: completedConstCount,
-        exp: finalExp,
         points: finalPoints,
       });
     }
@@ -803,7 +801,7 @@ export default function DreamConstellationGame({
                 <View style={styles.instructionItem}>
                   <Gift size={16} color="#A5B4FC" style={{ marginRight: 8 }} />
                   <Text style={styles.instructionText}>
-                    완성 시 에너지 100% 완충 + 대량 EXP 및 포인트 보상 지급!
+                    별자리 완성 시 등급별 풍성한 가족 포인트(P) 보상 지급!
                   </Text>
                 </View>
               </View>
@@ -854,22 +852,12 @@ export default function DreamConstellationGame({
 
               {/* Rewards Box */}
               <View style={styles.rewardBox}>
-                <Text style={styles.rewardBoxTitle}>🎉 꿀잠 수면 완료 보상</Text>
+                <Text style={styles.rewardBoxTitle}>🎉 미니게임 완료 보상</Text>
                 <View style={styles.rewardRow}>
                   <View style={styles.rewardPill}>
-                    <Text style={styles.rewardPillEmoji}>⚡</Text>
-                    <Text style={styles.rewardPillText}>에너지 100%</Text>
-                  </View>
-                  <View style={styles.rewardPill}>
-                    <Text style={styles.rewardPillEmoji}>✨</Text>
-                    <Text style={styles.rewardPillText}>
-                      +{Math.max(12, Math.min(35, Math.round(score / 25) + completedConstCount * 4))} EXP
-                    </Text>
-                  </View>
-                  <View style={styles.rewardPill}>
                     <Text style={styles.rewardPillEmoji}>🏆</Text>
-                    <Text style={styles.rewardPillText}>
-                      +{Math.max(4, Math.min(15, Math.round(score / 60)))} P
+                    <Text style={[styles.rewardPillText, { fontWeight: '800', color: '#B45309' }]}>
+                      가족 포인트 +{Math.max(15, Math.min(150, Math.round(score / 5) + completedConstCount * 15))} P 적립!
                     </Text>
                   </View>
                 </View>
