@@ -16,17 +16,25 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MessageSquare, Sparkles, Users, Lightbulb, Trophy, Flame, Ticket } from 'lucide-react-native';
 import {
-  IconSend,
-  IconImage,
-  IconChevronLeft,
-  IconChevronRight,
-  IconPlus,
-  IconCheck,
-  IconClose,
-} from './icons';
-import { colors, typography, commonStyles } from '../theme';
+  MessageSquare,
+  Sparkles,
+  Users,
+  Lightbulb,
+  Trophy,
+  Flame,
+  Ticket,
+  Send,
+  Image as ImageIcon,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Check,
+  X,
+  Smile,
+  Clock,
+  MessageCircle,
+} from 'lucide-react-native';
 import UserAvatar from './UserAvatar';
 
 export default function ChatScreen({
@@ -49,6 +57,9 @@ export default function ChatScreen({
   const flatListRef = useRef();
   const isSendingRef = useRef(false);
 
+  const [isScrolledToBottom, setIsScrolledToBottom] = useState(false);
+  const prevMsgCountRef = useRef(messages?.length || 0);
+
   // Trigger read receipt update when entering a chat room or receiving new messages in active room
   useEffect(() => {
     if (selectedRoomId !== null && onMarkAsRead) {
@@ -56,21 +67,37 @@ export default function ChatScreen({
     }
   }, [selectedRoomId, messages?.length]);
 
+  // 대화방 전환 시 즉시 하단 정렬을 위한 상태 리셋
+  useEffect(() => {
+    setIsScrolledToBottom(false);
+  }, [selectedRoomId]);
+
+  // 대화방 진입 후 새로운 메시지가 추가되었을 때만 부드럽게 스크롤
+  useEffect(() => {
+    if (selectedRoomId !== null && isScrolledToBottom) {
+      const currentCount = messages?.length || 0;
+      if (currentCount > prevMsgCountRef.current) {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }
+    }
+    prevMsgCountRef.current = messages?.length || 0;
+  }, [messages?.length, selectedRoomId, isScrolledToBottom]);
+
   // Create Custom Room Modal States
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [newRoomTitle, setNewRoomTitle] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState('💬');
-  const [selectedColor, setSelectedColor] = useState('#FF7E82');
+  const [selectedColor, setSelectedColor] = useState('#FF6B47');
   const [selectedMembers, setSelectedMembers] = useState([]);
 
   const EMOJI_OPTIONS = ['💬', '⛺', '⚽', '🍕', '🎁', '🏖️', '☕', '🎵', '🚗', '🐱', '🎮', '❤️'];
-  const COLOR_OPTIONS = ['#FF7E82', '#4A90E2', '#2ECC71', '#F39C12', '#9B59B6', '#1ABC9C'];
+  const COLOR_OPTIONS = ['#FF6B47', '#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'];
 
   const DEFAULT_MEMBERS = {
-    mom: { name: '엄마', avatar: '👩‍🦰', color: '#FF7E82' },
-    dad: { name: '아빠', avatar: '👨‍💼', color: '#4A90E2' },
-    son: { name: '아들', avatar: '👦', color: '#2ECC71' },
-    daughter: { name: '딸', avatar: '👧', color: '#F39C12' },
+    mom: { name: '엄마', avatar: '👩‍🦰', color: '#FF6B47' },
+    dad: { name: '아빠', avatar: '👨‍💼', color: '#3B82F6' },
+    son: { name: '아들', avatar: '👦', color: '#10B981' },
+    daughter: { name: '딸', avatar: '👧', color: '#F59E0B' },
   };
 
   const getSenderInfo = (profileIdOrRole, senderRole, senderObj) => {
@@ -93,28 +120,28 @@ export default function ChatScreen({
       return {
         name: sObj.name,
         avatar: sObj.avatar || '👦',
-        color: sObj.color || '#4A90E2',
+        color: sObj.color || '#3B82F6',
       };
     }
 
-    // 2. Exact match by profile_id in familyMembers (Crucial when multiple members share the same role, e.g. multiple sons)
+    // 2. Exact match by profile_id in familyMembers
     if (familyMembers && Array.isArray(familyMembers)) {
       if (pId) {
         const matchById = familyMembers.find(m => m && typeof m === 'object' && m.id === pId);
         if (matchById) {
-          return { name: matchById.name, avatar: matchById.avatar || '👦', color: matchById.color || '#4A90E2' };
+          return { name: matchById.name, avatar: matchById.avatar || '👦', color: matchById.color || '#3B82F6' };
         }
       }
       if (sRole) {
         const matchByRole = familyMembers.find(m => m && typeof m === 'object' && (m.role === sRole || m.id === sRole));
         if (matchByRole) {
-          return { name: matchByRole.name, avatar: matchByRole.avatar || '👦', color: matchByRole.color || '#4A90E2' };
+          return { name: matchByRole.name, avatar: matchByRole.avatar || '👦', color: matchByRole.color || '#3B82F6' };
         }
       }
     }
 
     const roleKey = sRole || pId;
-    return DEFAULT_MEMBERS[roleKey] || { name: (sObj && sObj.name) || roleKey || '가족', avatar: '👦', color: '#8E8E93' };
+    return DEFAULT_MEMBERS[roleKey] || { name: (sObj && sObj.name) || roleKey || '가족', avatar: '👦', color: '#78716C' };
   };
 
   const getMemberName = (keyOrId) => {
@@ -136,17 +163,16 @@ export default function ChatScreen({
     setTimeout(() => {
       isSendingRef.current = false;
     }, 250);
-    
+
     onSendMessage({
       text: textToSend,
       image: selectedPhoto,
       roomId: selectedRoomId || 'family-group',
     });
-    
+
     setInputText('');
     setSelectedPhoto(null);
-    
-    // Scroll to end
+
     setTimeout(() => {
       flatListRef.current?.scrollToEnd({ animated: true });
     }, 50);
@@ -212,7 +238,7 @@ export default function ChatScreen({
     return `direct-${sorted[0]}-${sorted[1]}`;
   };
 
-  // Check if a message belongs to a specific room (with backward compatibility)
+  // Check if a message belongs to a specific room
   const isMessageInRoom = (msg, targetRoomId, otherMemberId = null) => {
     const mRoom = msg.room_id || 'family-group';
     if (targetRoomId === 'family-group') {
@@ -283,28 +309,30 @@ export default function ChatScreen({
         onPress={() => {
           if (onNavigateScreen) onNavigateScreen('smalltalk');
         }}
-        activeOpacity={0.85}
+        activeOpacity={0.88}
       >
         <View style={styles.smalltalkBannerHeader}>
           <View style={styles.smalltalkTag}>
-            <Lightbulb size={12} color="#FF7E82" style={{ marginRight: 4 }} />
+            <Lightbulb size={13} color="#FF6B47" style={{ marginRight: 5 }} />
             <Text style={styles.smalltalkTagText}>오늘의 스몰톡 질문</Text>
           </View>
 
           <View style={[styles.smalltalkActionChip, isMyAnswered && styles.smalltalkActionChipDone]}>
             {smallTalk?.pointsAwarded ? (
-              <Trophy size={11} color="#27AE60" style={{ marginRight: 4 }} />
+              <Trophy size={12} color="#059669" style={{ marginRight: 4 }} />
             ) : !isMyAnswered ? (
-              <Flame size={12} color="#FF7E82" style={{ marginRight: 4 }} />
-            ) : null}
+              <Flame size={12} color="#FF6B47" style={{ marginRight: 4 }} />
+            ) : (
+              <Check size={12} color="#059669" style={{ marginRight: 4 }} />
+            )}
             <Text style={[styles.smalltalkActionText, isMyAnswered && styles.smalltalkActionTextDone]}>
               {smallTalk?.pointsAwarded
                 ? '100P 적립 완료'
                 : isMyAnswered
-                  ? `✓ ${answeredCount}/${totalFamilyCount}명 완료`
+                  ? `${answeredCount}/${totalFamilyCount}명 답변 완료`
                   : '답변하고 100P 받기'}
             </Text>
-            <IconChevronRight size={13} color={isMyAnswered ? '#27AE60' : '#FF7E82'} />
+            <ChevronRight size={13} color={isMyAnswered ? '#059669' : '#FF6B47'} />
           </View>
         </View>
 
@@ -313,13 +341,15 @@ export default function ChatScreen({
         </Text>
 
         <View style={styles.smalltalkFooter}>
-          {responseCount > 0 && (
-            <MessageSquare size={12} color="#8E8E93" style={{ marginRight: 5 }} />
+          {responseCount > 0 ? (
+            <MessageSquare size={13} color="#FF6B47" style={{ marginRight: 6 }} />
+          ) : (
+            <Sparkles size={13} color="#A8A29E" style={{ marginRight: 6 }} />
           )}
           <Text style={styles.smalltalkFooterText} numberOfLines={1}>
             {responseCount > 0
               ? `${lastUserName}: "${lastUserAns}"`
-              : '가족 중 첫 번째로 오늘의 질문에 답변해 보세요!'}
+              : '가족 중 첫 번째로 오늘의 질문에 답변해보세요! 🌱'}
           </Text>
         </View>
       </TouchableOpacity>
@@ -359,11 +389,11 @@ export default function ChatScreen({
     {
       id: 'family-group',
       title: '우리 가족 수다방',
-      subtitle: `멤버 ${memberCount || 4}명 참여 중`,
-      lastMessage: familyLast ? familyLast.fullText : '가족들과 대화를 시작해보세요!',
+      subtitle: `가족 ${memberCount || 4}명`,
+      lastMessage: familyLast ? familyLast.fullText : '가족들과 따뜻한 이야기를 나눠보세요! 💬',
       time: familyLast ? familyLast.time : '방금',
       avatar: '👨‍👩‍👧‍👦',
-      color: '#FF7E82',
+      color: '#FF6B47',
       badge: familyGroupUnread > 0 ? `${familyGroupUnread}` : null,
       isGroup: true,
     },
@@ -402,10 +432,10 @@ export default function ChatScreen({
           otherMemberId: otherId,
           title: `${member.name}님과의 대화`,
           subtitle: `1:1 대화방`,
-          lastMessage: last ? last.fullText : `${member.name}님에게 메시지를 작성해보세요.`,
+          lastMessage: last ? last.fullText : `${member.name}님에게 메시지를 보내보세요.`,
           time: last ? last.time : '대화 가능',
           avatar: member.avatar || '👦',
-          color: member.color || '#4A90E2',
+          color: member.color || '#3B82F6',
           badge: count > 0 ? `${count}` : null,
           isGroup: false,
         });
@@ -423,7 +453,7 @@ export default function ChatScreen({
 
   const handleCreateRoomSubmit = () => {
     if (!newRoomTitle.trim()) {
-      Alert.alert('입력 안내', '대화방 이름을 입력해 주세요.');
+      Alert.alert('입력 안내', '대화방 이름을 입력해주세요.');
       return;
     }
 
@@ -461,25 +491,57 @@ export default function ChatScreen({
     
     // Calculate read receipts (exclude sender)
     const readByList = item.readBy || [];
-    const whoRead = readByList
-      .filter(id => {
-        if (item.profile_id && id === item.profile_id) return false;
-        if (!item.profile_id && id === item.sender) return false;
-        if (familyMembers && Array.isArray(familyMembers)) {
-          const match = familyMembers.find(m => m && typeof m === 'object' && (m.id === id || m.role === id));
-          if (match) {
-            if (item.profile_id && match.id === item.profile_id) return false;
-            if (!item.profile_id && match.role === item.sender) return false;
-          }
-        }
-        return true;
-      })
-      .map(id => getMemberName(id));
+    const isDirectRoom = Boolean(selectedRoomId && selectedRoomId.startsWith('direct-'));
+    const activeRoom = CHAT_ROOMS.find(r => r.id === selectedRoomId);
 
-    const uniqueWhoRead = Array.from(new Set(whoRead));
-    const totalOthers = Math.max(1, (memberCount || familyMembers?.length || 4) - 1);
-    const unreadCountForMsg = Math.max(0, totalOthers - uniqueWhoRead.length);
-    const isReadByAll = unreadCountForMsg === 0;
+    let unreadCountForMsg = 0;
+    let isReadByAll = false;
+    let uniqueWhoRead = [];
+
+    if (isDirectRoom) {
+      // 1:1 대화방: 상대방 1명의 읽음 여부만 검사 (미독: 1, 완독: 0)
+      const otherId = activeRoom?.otherMemberId;
+      const isReadByOther = (readByList || []).some(id => {
+        if (!id || !otherId) return false;
+        if (id === otherId) return true;
+        if (familyMembers && Array.isArray(familyMembers)) {
+          const match = familyMembers.find(m => m && (m.id === otherId || m.role === otherId));
+          if (match && (match.id === id || match.role === id)) return true;
+        }
+        return false;
+      });
+
+      unreadCountForMsg = isReadByOther ? 0 : 1;
+      isReadByAll = isReadByOther;
+    } else {
+      // 단체 대화방 또는 커스텀 대화방
+      const whoRead = readByList
+        .filter(id => {
+          if (item.profile_id && id === item.profile_id) return false;
+          if (!item.profile_id && id === item.sender) return false;
+          if (familyMembers && Array.isArray(familyMembers)) {
+            const match = familyMembers.find(m => m && typeof m === 'object' && (m.id === id || m.role === id));
+            if (match) {
+              if (item.profile_id && match.id === item.profile_id) return false;
+              if (!item.profile_id && match.role === item.sender) return false;
+            }
+          }
+          return true;
+        })
+        .map(id => getMemberName(id));
+
+      uniqueWhoRead = Array.from(new Set(whoRead));
+
+      let totalOthers;
+      if (activeRoom?.members && Array.isArray(activeRoom.members)) {
+        totalOthers = Math.max(1, activeRoom.members.filter(m => m !== (currentUserProfile?.id || currentUser)).length);
+      } else {
+        totalOthers = Math.max(1, (memberCount || familyMembers?.length || 4) - 1);
+      }
+
+      unreadCountForMsg = Math.max(0, totalOthers - uniqueWhoRead.length);
+      isReadByAll = unreadCountForMsg === 0;
+    }
 
     // Special Announcement Card for Coupon Usage
     if (item.text && item.text.includes('[쿠폰 사용 알림]')) {
@@ -488,9 +550,9 @@ export default function ChatScreen({
           <View style={styles.couponAnnouncementCard}>
             <View style={styles.couponAnnouncementHeader}>
               <View style={styles.couponIconCircle}>
-                <Ticket size={15} color="#FF6B6B" />
+                <Ticket size={16} color="#FF6B47" />
               </View>
-              <Text style={styles.couponAnnouncementBadge}>쿠폰 사용 알림</Text>
+              <Text style={styles.couponAnnouncementBadge}>가족 쿠폰 사용 알림</Text>
               <Text style={styles.couponAnnouncementTime}>{item.timestamp}</Text>
             </View>
             <Text style={styles.couponAnnouncementText}>
@@ -506,21 +568,23 @@ export default function ChatScreen({
         {!isMe && (
           <UserAvatar
             avatar={senderInfo.avatar}
-            size={36}
+            size={38}
             borderColor={senderInfo.color}
-            style={{ marginRight: 8, marginTop: 2 }}
+            style={{ marginRight: 10, marginTop: 2 }}
           />
         )}
         <View style={styles.messageContent}>
           {!isMe && (
             <View style={styles.senderNameRow}>
-              <Text style={[styles.senderName, { color: senderInfo.color }]}>{senderInfo.name}</Text>
+              <Text style={[styles.senderName, { color: senderInfo.color }]}>
+                {senderInfo.name}
+              </Text>
             </View>
           )}
           
           <View style={[
             styles.bubble, 
-            isMe ? styles.myBubble : [styles.otherBubble, { borderLeftWidth: 3, borderLeftColor: senderInfo.color }],
+            isMe ? styles.myBubble : styles.otherBubble,
             item.image ? styles.imageBubble : null,
             item.isSending ? styles.sendingBubble : null,
           ]}>
@@ -542,10 +606,10 @@ export default function ChatScreen({
               ) : unreadCountForMsg > 0 ? (
                 <Text style={styles.unreadCountNumber}>{unreadCountForMsg}</Text>
               ) : (
-                <Text style={styles.readAllText}>모두 읽음</Text>
+                <Text style={styles.readAllText}>읽음</Text>
               )
             )}
-            {!isMe && uniqueWhoRead.length > 0 && (
+            {!isMe && !isDirectRoom && uniqueWhoRead.length > 0 && (
               <Text style={styles.readText}>
                 {isReadByAll ? '모두 읽음' : `${uniqueWhoRead.join(', ')} 읽음`}
               </Text>
@@ -561,20 +625,20 @@ export default function ChatScreen({
   if (selectedRoomId === null) {
     return (
       <View style={styles.container}>
-        {/* Chat Room List Header with Create Button */}
+        {/* Chat Room List Header matching Figma Home/Together style */}
         <View style={styles.roomListHeader}>
-          <View style={styles.roomListHeaderTitleRow}>
-            <View>
+          <View style={styles.roomListHeaderTopRow}>
+            <View style={styles.roomListHeaderLeft}>
+              <Text style={styles.roomListHeaderCategory}>가족 대화 · REALTIME</Text>
               <Text style={styles.roomListHeaderTitle}>채팅</Text>
-              <Text style={styles.roomListHeaderSub}>가족 대화방 {CHAT_ROOMS.length}개</Text>
             </View>
 
             <TouchableOpacity
               style={styles.createRoomBtn}
               onPress={() => setCreateModalVisible(true)}
-              activeOpacity={0.8}
+              activeOpacity={0.85}
             >
-              <IconPlus size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
+              <Plus size={16} color="#FFFFFF" strokeWidth={2.5} style={{ marginRight: 5 }} />
               <Text style={styles.createRoomBtnText}>새 대화방</Text>
             </TouchableOpacity>
           </View>
@@ -596,24 +660,31 @@ export default function ChatScreen({
                   setSelectedRoomId(item.id);
                 }
               }}
-              activeOpacity={0.7}
+              activeOpacity={0.75}
             >
               {item.id === 'family-group' ? (
-                <View style={[styles.roomAvatarBox, { backgroundColor: item.color + '20' }]}>
-                  <Users size={20} color={item.color} />
+                <View style={styles.groupAvatarBox}>
+                  <Users size={24} color="#FF6B47" strokeWidth={2.2} />
                 </View>
               ) : (
                 <UserAvatar
                   avatar={item.avatar}
-                  size={48}
-                  borderColor={item.color + '40'}
-                  style={{ marginRight: 12 }}
+                  size={50}
+                  borderColor={item.color || '#3B82F6'}
+                  style={{ marginRight: 14 }}
                 />
               )}
 
               <View style={styles.roomInfoContent}>
                 <View style={styles.roomTitleRow}>
-                  <Text style={styles.roomTitleText} numberOfLines={1}>{item.title}</Text>
+                  <View style={styles.roomTitleGroup}>
+                    <Text style={styles.roomTitleText} numberOfLines={1}>{item.title}</Text>
+                    {item.subtitle && (
+                      <View style={styles.roomSubBadge}>
+                        <Text style={styles.roomSubBadgeText}>{item.subtitle}</Text>
+                      </View>
+                    )}
+                  </View>
                   <Text style={styles.roomTimeText}>{item.time}</Text>
                 </View>
 
@@ -634,7 +705,7 @@ export default function ChatScreen({
 
         {/* Create Custom Room Modal */}
         <Modal
-          animationType="slide"
+          animationType="fade"
           transparent={true}
           visible={createModalVisible}
           onRequestClose={() => setCreateModalVisible(false)}
@@ -643,34 +714,43 @@ export default function ChatScreen({
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             style={styles.modalOverlay}
           >
-            <View style={styles.modalView}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalHandleBar} />
+              
               <View style={styles.modalHeaderRow}>
                 <View style={styles.modalHeaderTitleRow}>
-                  <IconPlus size={20} color="#FF7E82" style={{ marginRight: 6 }} />
+                  <View style={styles.modalHeaderIconBox}>
+                    <Plus size={18} color="#FF6B47" strokeWidth={2.5} />
+                  </View>
                   <Text style={styles.modalHeader}>새 대화방 만들기</Text>
                 </View>
-                <TouchableOpacity onPress={() => setCreateModalVisible(false)}>
-                  <IconClose size={20} color="#8E8E93" />
+                <TouchableOpacity
+                  onPress={() => setCreateModalVisible(false)}
+                  style={styles.modalCloseBtn}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <X size={20} color="#78716C" />
                 </TouchableOpacity>
               </View>
 
-              <ScrollView style={styles.modalScrollContent} keyboardShouldPersistTaps="handled">
+              <ScrollView style={styles.modalScrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                 <Text style={styles.modalLabel}>대화방 이름</Text>
                 <TextInput
                   style={styles.modalInput}
                   placeholder="예: 주말 모임방, 엄마 & 딸 비밀방"
-                  placeholderTextColor="#AEAEB2"
+                  placeholderTextColor="#A8A29E"
                   value={newRoomTitle}
                   onChangeText={setNewRoomTitle}
                 />
 
-                <Text style={styles.modalLabel}>대표 이모티콘</Text>
+                <Text style={styles.modalLabel}>대표 아이콘</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
                   {EMOJI_OPTIONS.map((emoji) => (
                     <TouchableOpacity
                       key={emoji}
                       style={[styles.emojiChip, selectedAvatar === emoji && styles.emojiChipSelected]}
                       onPress={() => setSelectedAvatar(emoji)}
+                      activeOpacity={0.7}
                     >
                       <Text style={styles.emojiChipText}>{emoji}</Text>
                     </TouchableOpacity>
@@ -688,6 +768,7 @@ export default function ChatScreen({
                         selectedColor === colorItem && styles.colorDotSelected,
                       ]}
                       onPress={() => setSelectedColor(colorItem)}
+                      activeOpacity={0.7}
                     />
                   ))}
                 </View>
@@ -715,19 +796,20 @@ export default function ChatScreen({
                         key={memberKey}
                         style={[styles.memberCheckChip, isSelected && styles.memberCheckChipSelected]}
                         onPress={() => handleToggleMemberSelect(memberKey)}
+                        activeOpacity={0.7}
                       >
                         <UserAvatar avatar={avatar} size={22} style={{ marginRight: 6 }} />
                         <Text style={[styles.memberCheckName, isSelected && styles.memberCheckNameSelected]}>
                           {name}
                         </Text>
-                        {isSelected && <IconCheck size={14} color="#FF7E82" style={{ marginLeft: 4 }} />}
+                        {isSelected && <Check size={14} color="#FF6B47" strokeWidth={2.5} style={{ marginLeft: 4 }} />}
                       </TouchableOpacity>
                     );
                   })}
                 </View>
 
-                <TouchableOpacity style={styles.modalConfirmBtn} onPress={handleCreateRoomSubmit}>
-                  <Text style={styles.modalConfirmBtnText}>대화방 만들기</Text>
+                <TouchableOpacity style={styles.modalConfirmBtn} onPress={handleCreateRoomSubmit} activeOpacity={0.85}>
+                  <Text style={styles.modalConfirmBtnText}>대화방 시작하기</Text>
                 </TouchableOpacity>
               </ScrollView>
             </View>
@@ -737,8 +819,9 @@ export default function ChatScreen({
     );
   }
 
-  // 2. RENDER CHAT CONVERSATION VIEW (When a chat room is clicked)
+  // 2. RENDER CHAT CONVERSATION VIEW (When a chat room is opened)
   const currentRoom = CHAT_ROOMS.find(r => r.id === selectedRoomId) || CHAT_ROOMS[0];
+  const roomMessages = (messages || []).filter(m => isMessageInRoom(m, selectedRoomId || 'family-group', currentRoom?.otherMemberId));
 
   return (
     <KeyboardAvoidingView
@@ -753,56 +836,101 @@ export default function ChatScreen({
           onPress={() => setSelectedRoomId(null)}
           activeOpacity={0.7}
         >
-          <IconChevronLeft size={24} color="#1C1C1E" />
+          <ChevronLeft size={22} color="#1C1917" strokeWidth={2.5} />
         </TouchableOpacity>
 
+        <View style={styles.headerAvatarCol}>
+          {currentRoom.isGroup ? (
+            <View style={styles.headerGroupIconBox}>
+              <Users size={18} color="#FF6B47" strokeWidth={2.2} />
+            </View>
+          ) : (
+            <UserAvatar
+              avatar={currentRoom.avatar}
+              size={36}
+              borderColor={currentRoom.color || '#3B82F6'}
+              style={{ marginRight: 8 }}
+            />
+          )}
+        </View>
+
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>{currentRoom.title}</Text>
-          <Text style={styles.headerSub}>{currentRoom.subtitle}</Text>
+          <Text style={styles.headerTitle} numberOfLines={1}>{currentRoom.title}</Text>
+          <View style={styles.headerStatusRow}>
+            <View style={styles.headerLiveDot} />
+            <Text style={styles.headerSub}>{currentRoom.subtitle || '대화 가능'}</Text>
+          </View>
         </View>
       </View>
 
-      {/* Messages List */}
-      <FlatList
-        ref={flatListRef}
-        data={(messages || []).filter(m => isMessageInRoom(m, selectedRoomId || 'family-group', currentRoom?.otherMemberId))}
-        keyExtractor={(item) => item.id}
-        renderItem={renderMessageItem}
-        contentContainerStyle={styles.listContent}
-        initialNumToRender={15}
-        maxToRenderPerBatch={10}
-        windowSize={10}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-        onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
-      />
+      {/* Messages List or Empty State */}
+      {roomMessages.length === 0 ? (
+        <View style={styles.emptyMessagesContainer}>
+          <View style={styles.emptyMessagesIconBox}>
+            <MessageCircle size={36} color="#FF6B47" strokeWidth={1.8} />
+          </View>
+          <Text style={styles.emptyMessagesTitle}>아직 주고받은 메시지가 없어요</Text>
+          <Text style={styles.emptyMessagesSub}>
+            가족에게 따뜻한 안부나 오늘의 이야기를 먼저 건네보세요! 💬
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          ref={flatListRef}
+          data={roomMessages}
+          keyExtractor={(item) => item.id}
+          renderItem={renderMessageItem}
+          style={[styles.flatListStyle, !isScrolledToBottom && { opacity: 0 }]}
+          contentContainerStyle={styles.listContent}
+          initialNumToRender={20}
+          maxToRenderPerBatch={15}
+          windowSize={10}
+          onContentSizeChange={() => {
+            if (!isScrolledToBottom) {
+              flatListRef.current?.scrollToEnd({ animated: false });
+              setTimeout(() => {
+                flatListRef.current?.scrollToEnd({ animated: false });
+                setIsScrolledToBottom(true);
+              }, 30);
+            }
+          }}
+          onLayout={() => {
+            if (!isScrolledToBottom) {
+              flatListRef.current?.scrollToEnd({ animated: false });
+            }
+          }}
+        />
+      )}
 
       {/* Image Preview Container */}
       {selectedPhoto && (
         <View style={styles.previewContainer}>
           <Image source={{ uri: selectedPhoto }} style={styles.previewImage} />
+          <View style={styles.previewInfoCol}>
+            <Text style={styles.previewLabel}>사진이 첨부되었습니다</Text>
+            <Text style={styles.previewSubLabel}>전송 버튼을 누르면 공유됩니다</Text>
+          </View>
           <TouchableOpacity style={styles.removePreview} onPress={() => setSelectedPhoto(null)}>
-            <Text style={styles.removePreviewText}>✕</Text>
+            <X size={16} color="#FFFFFF" strokeWidth={2.5} />
           </TouchableOpacity>
-          <Text style={styles.previewLabel}>사진이 첨부되었습니다</Text>
         </View>
       )}
 
       {/* Message Input Box */}
-      <View style={[styles.inputArea, { paddingBottom: Math.max(8, insets.bottom) }]}>
-        <TouchableOpacity style={styles.iconButton} onPress={pickImage}>
-          <IconImage size={22} color="#8E8E93" />
+      <View style={[styles.inputArea, { paddingBottom: Math.max(10, insets.bottom) }]}>
+        <TouchableOpacity style={styles.attachButton} onPress={pickImage} activeOpacity={0.7}>
+          <ImageIcon size={21} color="#78716C" strokeWidth={2} />
         </TouchableOpacity>
 
         <TextInput
           style={styles.input}
-          placeholder="가족에게 메시지 보내기..."
-          placeholderTextColor="#8E8E93"
+          placeholder="가족에게 따뜻한 메시지 보내기..."
+          placeholderTextColor="#A8A29E"
           value={inputText}
           onChangeText={setInputText}
           multiline
           onKeyPress={(e) => {
             if (Platform.OS === 'web') {
-              // Ignore IME composition events (한글 조합 중 엔터 키 중복 전송 완벽 방지)
               if (
                 e.nativeEvent.isComposing ||
                 e.isComposing ||
@@ -822,8 +950,13 @@ export default function ChatScreen({
           style={[styles.sendButton, (inputText.trim() || selectedPhoto) ? styles.sendActive : null]} 
           onPress={handleSend}
           disabled={!inputText.trim() && !selectedPhoto}
+          activeOpacity={0.8}
         >
-          <IconSend size={18} color={(inputText.trim() || selectedPhoto) ? '#FFFFFF' : '#8E8E93'} />
+          <Send
+            size={18}
+            color={(inputText.trim() || selectedPhoto) ? '#FFFFFF' : '#A8A29E'}
+            strokeWidth={2.2}
+          />
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -831,359 +964,338 @@ export default function ChatScreen({
 }
 
 const styles = StyleSheet.create({
-  container: commonStyles.screenContainer,
-  chatHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    height: 64,
-    backgroundColor: colors.card,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.divider,
-  },
-  backBtn: {
-    paddingRight: 8,
-    paddingVertical: 4,
-  },
-  headerTitleContainer: {
+  container: {
     flex: 1,
+    backgroundColor: '#FAF8F3', // Warm cream Figma node 1:700 background
   },
-  headerDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#2ECC71',
-    marginRight: 8,
-  },
-  headerTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1C1C1E',
-  },
-  headerSub: {
-    fontSize: 11,
-    color: '#8E8E93',
-    marginTop: 1,
-  },
+
+  // 1. CHAT ROOM LIST HEADER (Figma style)
   roomListHeader: {
     paddingHorizontal: 20,
-    height: 64,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
-    justifyContent: 'center',
+    paddingTop: 16,
+    paddingBottom: 14,
+    backgroundColor: '#FAF8F3',
   },
-  roomListHeaderTitleRow: {
+  roomListHeaderTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  roomListHeaderTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#1C1C1E',
+  roomListHeaderLeft: {
+    justifyContent: 'center',
   },
-  roomListHeaderSub: {
+  roomListHeaderCategory: {
     fontSize: 12,
-    color: '#8E8E93',
-    marginTop: 2,
+    fontWeight: '700',
+    color: '#A8A29E',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  roomListHeaderTitle: {
+    fontSize: 30,
+    fontWeight: '900',
+    color: '#1C1917',
+    letterSpacing: -0.5,
   },
   createRoomBtn: {
-    backgroundColor: '#FF7E82',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 10,
+    backgroundColor: '#FF6B47',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 22,
     flexDirection: 'row',
     alignItems: 'center',
+    shadowColor: '#FF6B47',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    elevation: 3,
   },
   createRoomBtnText: {
     color: '#FFFFFF',
     fontSize: 13,
-    fontWeight: '700',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalView: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 22,
-    maxHeight: '85%',
-  },
-  modalHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  modalHeaderTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  modalHeader: {
-    fontSize: 18,
     fontWeight: '800',
-    color: '#1C1C1E',
   },
-  modalScrollContent: {
-    paddingVertical: 4,
-  },
-  modalLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#8E8E93',
-    marginTop: 14,
-    marginBottom: 6,
-  },
-  modalInput: {
-    backgroundColor: '#F1F2F4',
-    borderRadius: 12,
-    padding: 12,
-    fontSize: 14,
-    color: '#1C1C1E',
-  },
-  chipScroll: {
-    flexDirection: 'row',
-    paddingVertical: 4,
-  },
-  emojiChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: '#F1F2F4',
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: '#F1F2F4',
-  },
-  emojiChipSelected: {
-    backgroundColor: '#FFEBEB',
-    borderColor: '#FF7E82',
-  },
-  emojiChipText: {
-    fontSize: 20,
-  },
-  colorPaletteRow: {
-    flexDirection: 'row',
-    paddingVertical: 4,
-  },
-  colorDot: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    marginRight: 10,
-  },
-  colorDotSelected: {
-    borderWidth: 3,
-    borderColor: '#1C1C1E',
-  },
-  memberChecklistRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 4,
-  },
-  memberCheckChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F1F2F4',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 8,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#F1F2F4',
-  },
-  memberCheckChipSelected: {
-    backgroundColor: '#FFEBEB',
-    borderColor: '#FF7E82',
-  },
-  memberCheckAvatar: {
-    fontSize: 14,
-    marginRight: 4,
-  },
-  memberCheckName: {
-    fontSize: 12,
-    color: '#8E8E93',
-    fontWeight: '600',
-  },
-  memberCheckNameSelected: {
-    color: '#FF7E82',
-    fontWeight: '700',
-  },
-  modalConfirmBtn: {
-    backgroundColor: '#FF7E82',
-    padding: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 22,
-    marginBottom: 12,
-  },
-  modalConfirmBtnText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
+
+  // SMALLTALK BANNER WIDGET
   smalltalkBanner: {
-    backgroundColor: '#FFF9F5',
-    borderRadius: 18,
-    padding: 15,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
     marginBottom: 14,
     borderWidth: 1.2,
-    borderColor: '#FFE3D1',
-    shadowColor: '#FF7E82',
+    borderColor: '#E8E0D0',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.04,
     shadowRadius: 6,
-    elevation: 2,
+    elevation: 1,
   },
   smalltalkBannerHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   smalltalkTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFEBDC',
-    paddingHorizontal: 8,
+    backgroundColor: '#FFF5F2',
+    paddingHorizontal: 9,
     paddingVertical: 4,
-    borderRadius: 8,
-  },
-  smalltalkTagEmoji: {
-    fontSize: 12,
-    marginRight: 4,
+    borderRadius: 10,
   },
   smalltalkTagText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#D35400',
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#FF6B47',
   },
   smalltalkActionChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF0F0',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: '#FFF5F2',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#FFD1D3',
+    borderColor: '#FFE0D6',
   },
   smalltalkActionChipDone: {
-    backgroundColor: '#EDFAF1',
-    borderColor: '#C6F0D4',
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
   },
   smalltalkActionText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#FF7E82',
-    marginRight: 2,
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#FF6B47',
+    marginRight: 3,
   },
   smalltalkActionTextDone: {
-    color: '#27AE60',
+    color: '#059669',
   },
   smalltalkTopicText: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#2C3E50',
-    lineHeight: 21,
-    marginBottom: 8,
+    fontSize: 15.5,
+    fontWeight: '900',
+    color: '#1C1917',
+    lineHeight: 22,
+    marginBottom: 10,
   },
   smalltalkFooter: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.75)',
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 10,
+    backgroundColor: '#FAF8F3',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E8E0D0',
   },
   smalltalkFooterText: {
-    fontSize: 12,
-    color: '#7F8C8D',
+    fontSize: 12.5,
+    color: '#78716C',
+    fontWeight: '500',
     flex: 1,
   },
+
+  // CHAT ROOMS LIST
   roomListContainer: {
-    padding: 14,
+    paddingHorizontal: 20,
+    paddingBottom: 30,
   },
   roomItemCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    padding: 14,
-    borderRadius: 16,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
+    padding: 15,
+    borderRadius: 20,
+    marginBottom: 12,
+    borderWidth: 1.2,
+    borderColor: '#E8E0D0',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
-    shadowRadius: 3,
+    shadowRadius: 6,
     elevation: 1,
   },
-  roomAvatarBox: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  groupAvatarBox: {
+    width: 50,
+    height: 50,
+    borderRadius: 18,
+    backgroundColor: '#FFF5F2',
+    borderWidth: 1.5,
+    borderColor: '#FFE0D6',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  roomAvatarText: {
-    fontSize: 24,
+    marginRight: 14,
   },
   roomInfoContent: {
     flex: 1,
-    marginLeft: 12,
   },
   roomTitleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 5,
+  },
+  roomTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
   },
   roomTitleText: {
-    fontSize: 15,
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#1C1917',
+  },
+  roomSubBadge: {
+    backgroundColor: '#F5F0E8',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginLeft: 6,
+  },
+  roomSubBadgeText: {
+    fontSize: 10.5,
     fontWeight: '700',
-    color: '#1C1C1E',
-    flex: 1,
-    marginRight: 6,
+    color: '#78716C',
   },
   roomTimeText: {
-    fontSize: 11,
-    color: '#8E8E93',
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#A8A29E',
   },
   roomSnippetRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 4,
   },
   roomSnippetText: {
-    fontSize: 13,
-    color: '#8E8E93',
+    fontSize: 13.5,
+    color: '#78716C',
     flex: 1,
-    marginRight: 6,
+    marginRight: 8,
+    lineHeight: 18,
   },
   roomBadge: {
-    backgroundColor: '#FF7E82',
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 10,
+    backgroundColor: '#FF6B47',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    minWidth: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   roomBadgeText: {
     fontSize: 11,
     color: '#FFFFFF',
-    fontWeight: '800',
+    fontWeight: '900',
+  },
+
+  // 2. DETAIL CHAT HEADER
+  chatHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1.2,
+    borderBottomColor: '#E8E0D0',
+  },
+  backBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#FAF8F3',
+    borderWidth: 1,
+    borderColor: '#E8E0D0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  headerAvatarCol: {
+    marginRight: 8,
+  },
+  headerGroupIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 14,
+    backgroundColor: '#FFF5F2',
+    borderWidth: 1,
+    borderColor: '#FFE0D6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitleContainer: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 16.5,
+    fontWeight: '900',
+    color: '#1C1917',
+  },
+  headerStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  headerLiveDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#10B981',
+    marginRight: 5,
+  },
+  headerSub: {
+    fontSize: 11.5,
+    color: '#78716C',
+    fontWeight: '600',
+  },
+
+  // EMPTY CHAT STATE
+  emptyMessagesContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  emptyMessagesIconBox: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: '#FFF5F2',
+    borderWidth: 1.5,
+    borderColor: '#FFE0D6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  emptyMessagesTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#1C1917',
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  emptyMessagesSub: {
+    fontSize: 13.5,
+    color: '#78716C',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+
+  // MESSAGE LIST
+  flatListStyle: {
+    flex: 1,
   },
   listContent: {
     padding: 16,
-    paddingBottom: 24,
+    paddingBottom: 20,
   },
   messageRow: {
     flexDirection: 'row',
-    marginBottom: 20,
-    maxWidth: '85%',
+    marginBottom: 18,
+    maxWidth: '82%',
   },
   myRow: {
     alignSelf: 'flex-end',
@@ -1191,69 +1303,60 @@ const styles = StyleSheet.create({
   otherRow: {
     alignSelf: 'flex-start',
   },
-  avatarContainer: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
-  },
-  avatarText: {
-    fontSize: 18,
-  },
   messageContent: {
     flex: 1,
   },
-  senderName: {
-    fontSize: 12,
-    fontWeight: '600',
+  senderNameRow: {
     marginBottom: 4,
     marginLeft: 4,
   },
+  senderName: {
+    fontSize: 12.5,
+    fontWeight: '800',
+  },
   bubble: {
-    borderRadius: 16,
-    paddingHorizontal: 14,
+    borderRadius: 18,
+    paddingHorizontal: 15,
     paddingVertical: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
-    shadowRadius: 2,
+    shadowRadius: 3,
     elevation: 1,
   },
   myBubble: {
-    backgroundColor: '#FF7E82',
-    borderTopRightRadius: 2,
+    backgroundColor: '#FF6B47',
+    borderBottomRightRadius: 4,
     alignSelf: 'flex-end',
   },
   otherBubble: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 2,
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
+    borderBottomLeftRadius: 4,
+    borderWidth: 1.2,
+    borderColor: '#E8E0D0',
     alignSelf: 'flex-start',
   },
   imageBubble: {
-    padding: 4,
-    borderRadius: 12,
+    padding: 6,
+    borderRadius: 16,
   },
   bubbleImage: {
-    width: 200,
-    height: 150,
-    borderRadius: 10,
+    width: 220,
+    height: 160,
+    borderRadius: 12,
     marginBottom: 4,
   },
   myMessageText: {
     fontSize: 15,
+    fontWeight: '500',
     color: '#FFFFFF',
-    lineHeight: 20,
+    lineHeight: 21,
   },
   otherMessageText: {
     fontSize: 15,
-    color: '#1C1C1E',
-    lineHeight: 20,
+    fontWeight: '500',
+    color: '#1C1917',
+    lineHeight: 21,
   },
   metaInfo: {
     flexDirection: 'row',
@@ -1267,20 +1370,20 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
   },
   readText: {
-    fontSize: 10,
-    color: '#FF7E82',
-    fontWeight: '600',
+    fontSize: 10.5,
+    color: '#FF6B47',
+    fontWeight: '700',
     marginRight: 6,
   },
   unreadCountNumber: {
-    fontSize: 10,
-    color: '#FF9500',
-    fontWeight: '800',
+    fontSize: 11,
+    color: '#FF6B47',
+    fontWeight: '900',
     marginRight: 4,
   },
   sendingIndicatorText: {
-    fontSize: 10,
-    color: '#FF9500',
+    fontSize: 10.5,
+    color: '#F59E0B',
     fontWeight: '700',
     marginRight: 4,
   },
@@ -1288,133 +1391,321 @@ const styles = StyleSheet.create({
     opacity: 0.75,
   },
   readAllText: {
-    fontSize: 9,
-    color: '#8E8E93',
+    fontSize: 10,
+    color: '#A8A29E',
     fontWeight: '600',
     marginRight: 4,
   },
   timeText: {
-    fontSize: 10,
-    color: '#8E8E93',
+    fontSize: 10.5,
+    color: '#A8A29E',
+    fontWeight: '500',
   },
+
+  // PREVIEW CONTAINER
   previewContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 8,
-    backgroundColor: '#FFF2F3',
-    borderTopWidth: 1,
-    borderTopColor: '#FFE5E7',
+    padding: 10,
+    backgroundColor: '#FFF5F2',
+    borderTopWidth: 1.2,
+    borderTopColor: '#FFE0D6',
   },
   previewImage: {
-    width: 40,
-    height: 40,
-    borderRadius: 6,
+    width: 44,
+    height: 44,
+    borderRadius: 10,
     marginRight: 10,
   },
+  previewInfoCol: {
+    flex: 1,
+  },
   previewLabel: {
-    fontSize: 12,
-    color: '#FF7E82',
-    fontWeight: '600',
+    fontSize: 12.5,
+    color: '#FF6B47',
+    fontWeight: '800',
+  },
+  previewSubLabel: {
+    fontSize: 11,
+    color: '#78716C',
+    marginTop: 1,
   },
   removePreview: {
-    position: 'absolute',
-    left: 40,
-    top: 4,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    backgroundColor: 'rgba(28, 25, 23, 0.65)',
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  removePreviewText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
+
+  // INPUT BAR
   inputArea: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingTop: 8,
     backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#EBEBEB',
+    borderTopWidth: 1.2,
+    borderTopColor: '#E8E0D0',
   },
-  iconButton: {
-    padding: 8,
+  attachButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FAF8F3',
+    borderWidth: 1.2,
+    borderColor: '#E8E0D0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
   },
   input: {
     flex: 1,
-    backgroundColor: '#F1F2F4',
-    borderRadius: 20,
+    backgroundColor: '#FAF8F3',
+    borderRadius: 22,
+    borderWidth: 1.2,
+    borderColor: '#E8E0D0',
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    fontSize: 15,
+    paddingVertical: 9,
+    fontSize: 14.5,
     maxHeight: 100,
-    color: '#1C1C1E',
-    marginHorizontal: 4,
+    color: '#1C1917',
+    marginRight: 8,
   },
   sendButton: {
-    backgroundColor: '#F1F2F4',
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    backgroundColor: '#FAF8F3',
+    borderWidth: 1.2,
+    borderColor: '#E8E0D0',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 4,
   },
   sendActive: {
-    backgroundColor: '#FF7E82',
+    backgroundColor: '#FF6B47',
+    borderColor: '#FF6B47',
+    shadowColor: '#FF6B47',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
+
+  // COUPON ANNOUNCEMENT CARD
   couponAnnouncementRow: {
     alignItems: 'center',
-    marginVertical: 10,
-    paddingHorizontal: 16,
+    marginVertical: 12,
+    paddingHorizontal: 10,
     width: '100%',
   },
   couponAnnouncementCard: {
-    backgroundColor: '#FFF9F5',
+    backgroundColor: '#FFF5F2',
     borderWidth: 1.5,
     borderColor: '#FFD8C4',
-    borderRadius: 16,
-    padding: 14,
+    borderRadius: 18,
+    padding: 16,
     width: '100%',
-    maxWidth: 380,
-    shadowColor: '#FF7E82',
+    maxWidth: 400,
+    shadowColor: '#FF6B47',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
-    shadowRadius: 4,
+    shadowRadius: 6,
     elevation: 2,
   },
   couponAnnouncementHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   couponIconCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#FFEBE6',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#FFE3D6',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 6,
+    marginRight: 8,
   },
   couponAnnouncementBadge: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#FF6B6B',
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#FF6B47',
     flex: 1,
   },
   couponAnnouncementTime: {
     fontSize: 11,
-    color: '#AEAEB2',
+    color: '#A8A29E',
+    fontWeight: '600',
   },
   couponAnnouncementText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#2C3E50',
-    lineHeight: 18,
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#1C1917',
+    lineHeight: 19,
+  },
+
+  // CREATE ROOM MODAL
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(28, 25, 23, 0.45)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: 24,
+    maxHeight: '85%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  modalHandleBar: {
+    width: 44,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E8E0D0',
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  modalHeaderTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  modalHeaderIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 12,
+    backgroundColor: '#FFF5F2',
+    borderWidth: 1,
+    borderColor: '#FFE0D6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  modalHeader: {
+    fontSize: 19,
+    fontWeight: '900',
+    color: '#1C1917',
+  },
+  modalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FAF8F3',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalScrollContent: {
+    paddingVertical: 4,
+  },
+  modalLabel: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    color: '#78716C',
+    marginTop: 14,
+    marginBottom: 8,
+  },
+  modalInput: {
+    backgroundColor: '#FAF8F3',
+    borderWidth: 1.2,
+    borderColor: '#E8E0D0',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 14.5,
+    color: '#1C1917',
+  },
+  chipScroll: {
+    flexDirection: 'row',
+    paddingVertical: 4,
+  },
+  emojiChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 14,
+    backgroundColor: '#FAF8F3',
+    marginRight: 8,
+    borderWidth: 1.2,
+    borderColor: '#E8E0D0',
+  },
+  emojiChipSelected: {
+    backgroundColor: '#FFF5F2',
+    borderColor: '#FF6B47',
+  },
+  emojiChipText: {
+    fontSize: 22,
+  },
+  colorPaletteRow: {
+    flexDirection: 'row',
+    paddingVertical: 4,
+  },
+  colorDot: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    marginRight: 10,
+  },
+  colorDotSelected: {
+    borderWidth: 3,
+    borderColor: '#1C1917',
+  },
+  memberChecklistRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 4,
+  },
+  memberCheckChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FAF8F3',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 8,
+    marginBottom: 8,
+    borderWidth: 1.2,
+    borderColor: '#E8E0D0',
+  },
+  memberCheckChipSelected: {
+    backgroundColor: '#FFF5F2',
+    borderColor: '#FF6B47',
+  },
+  memberCheckName: {
+    fontSize: 12.5,
+    color: '#78716C',
+    fontWeight: '700',
+  },
+  memberCheckNameSelected: {
+    color: '#FF6B47',
+    fontWeight: '800',
+  },
+  modalConfirmBtn: {
+    backgroundColor: '#FF6B47',
+    paddingVertical: 15,
+    borderRadius: 16,
+    alignItems: 'center',
+    marginTop: 24,
+    marginBottom: 16,
+    shadowColor: '#FF6B47',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  modalConfirmBtnText: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#FFFFFF',
   },
 });

@@ -11,9 +11,56 @@ import {
   Alert,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
-import { Trophy, Sparkles, Heart, X, Flame, RotateCcw, Check, Zap } from 'lucide-react-native';
+import Svg, { Circle, Path, Polygon } from 'react-native-svg';
+import {
+  Trophy,
+  Sparkles,
+  Heart,
+  X,
+  Flame,
+  RotateCcw,
+  Check,
+  Zap,
+  Play,
+  Hand,
+  Gift,
+  Activity,
+  Star,
+  PawPrint,
+} from 'lucide-react-native';
 
 const { width: INITIAL_WIDTH, height: INITIAL_HEIGHT } = Dimensions.get('window');
+
+// Crisp Vector Soccer Ball Component
+function SoccerBallIcon({ size = 38 }) {
+  const r = size / 2;
+  const strokeW = Math.max(1.5, size * 0.05);
+  return (
+    <Svg width={size} height={size} viewBox="0 0 38 38">
+      <Circle cx="19" cy="19" r="17.5" fill="#FFFFFF" stroke="#1E293B" strokeWidth={strokeW} />
+      {/* Center Pentagon */}
+      <Polygon points="19,13 24,17 22,23 16,23 14,17" fill="#1E293B" />
+      {/* Connecting Seam Lines */}
+      <Path d="M19 13 L19 2" stroke="#1E293B" strokeWidth={strokeW} strokeLinecap="round" />
+      <Path d="M24 17 L33.5 14" stroke="#1E293B" strokeWidth={strokeW} strokeLinecap="round" />
+      <Path d="M22 23 L31 29" stroke="#1E293B" strokeWidth={strokeW} strokeLinecap="round" />
+      <Path d="M16 23 L7 29" stroke="#1E293B" strokeWidth={strokeW} strokeLinecap="round" />
+      <Path d="M14 17 L4.5 14" stroke="#1E293B" strokeWidth={strokeW} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+// Golden Star Ball Component
+function GoldenBallIcon({ size = 38 }) {
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <Svg width={size} height={size} viewBox="0 0 38 38" style={StyleSheet.absoluteFillObject}>
+        <Circle cx="19" cy="19" r="17.5" fill="#F59E0B" stroke="#FDE68A" strokeWidth="2.5" />
+      </Svg>
+      <Star size={size * 0.58} color="#FFFFFF" fill="#FFFFFF" />
+    </View>
+  );
+}
 
 // Game Dimensions & Constants
 const PADDLE_WIDTH = 105;
@@ -295,7 +342,7 @@ export default function KeepyUppyGame({
           if (currentRally % 8 === 0 && !isGoldenBallRef.current) {
             isGoldenBallRef.current = true;
             setIsGoldenBall(true);
-            triggerToast('✨ 황금 볼 타임! 2배 점수! ✨', '#F59E0B', 220);
+            triggerToast('황금 볼 타임! 2배 점수!', '#F59E0B', 220);
           }
 
           const multiplier = isGoldenBallRef.current ? 2 : 1;
@@ -303,7 +350,7 @@ export default function KeepyUppyGame({
           setScore(s => s + addedScore);
 
           triggerToast(
-            currentRally % 5 === 0 ? `🔥 콤보 ${currentRally}회!` : '반려몽 헤딩! 🐾',
+            currentRally % 5 === 0 ? `콤보 ${currentRally}회!` : '반려몽 헤딩!',
             '#3B82F6',
             160
           );
@@ -349,7 +396,7 @@ export default function KeepyUppyGame({
           setScore(s => s + addedScore);
 
           triggerToast(
-            Math.abs(hitFactor) < 0.25 ? 'PERFECT 리프팅! 🌟' : '나이스 킥! ⚽',
+            Math.abs(hitFactor) < 0.25 ? 'PERFECT 리프팅!' : '나이스 킥!',
             '#10B981',
             paddleY - 50
           );
@@ -360,7 +407,7 @@ export default function KeepyUppyGame({
       if (ball.y >= stageHeight - 40) {
         livesRef.current -= 1;
         setLives(livesRef.current);
-        triggerToast('공을 놓쳤어요! 💔', '#EF4444', stageHeight - 170);
+        triggerToast('공을 놓쳤어요!', '#EF4444', stageHeight - 170);
 
         if (livesRef.current <= 0) {
           finishGame();
@@ -386,15 +433,15 @@ export default function KeepyUppyGame({
   // Compute Grade & Rewards
   const getGameGrade = (finalScore, finalRally) => {
     if (finalRally >= 25 || finalScore >= 600) {
-      return { grade: 'S', color: '#FAAD14', title: '랠리 마스터 👑' };
+      return { grade: 'S', color: '#FAAD14', title: '랠리 마스터' };
     }
     if (finalRally >= 18 || finalScore >= 400) {
-      return { grade: 'A', color: '#52C41A', title: '환상의 콤비 ⚽' };
+      return { grade: 'A', color: '#52C41A', title: '환상의 콤비' };
     }
     if (finalRally >= 10 || finalScore >= 220) {
-      return { grade: 'B', color: '#1890FF', title: '찰떡 호흡 🐾' };
+      return { grade: 'B', color: '#1890FF', title: '찰떡 호흡' };
     }
-    return { grade: 'C', color: '#8C8C8C', title: '새싹 드리블러 🌱' };
+    return { grade: 'C', color: '#8C8C8C', title: '새싹 드리블러' };
   };
 
   const handleClaimAndClose = () => {
@@ -494,8 +541,9 @@ export default function KeepyUppyGame({
           ]}
           pointerEvents="none"
         >
-          <View style={styles.petPartnerBadge}>
-            <Text style={styles.petPartnerBadgeText}>{character?.name || '반려몽'} 🐾</Text>
+          <View style={[styles.petPartnerBadge, { flexDirection: 'row', alignItems: 'center' }]}>
+            <PawPrint size={11} color="#FFF" style={{ marginRight: 4 }} />
+            <Text style={styles.petPartnerBadgeText}>{character?.name || '반려몽'}</Text>
           </View>
 
           {character?.image_url ? (
@@ -525,11 +573,11 @@ export default function KeepyUppyGame({
           >
             {isGoldenBall ? (
               <View style={styles.goldenBallWrapper}>
-                <Text style={styles.ballEmoji}>⭐</Text>
+                <GoldenBallIcon size={BALL_SIZE} />
                 <Sparkles size={16} color="#F59E0B" style={styles.goldenBallSparkle} />
               </View>
             ) : (
-              <Text style={styles.ballEmoji}>⚽</Text>
+              <SoccerBallIcon size={BALL_SIZE} />
             )}
           </View>
         )}
@@ -581,7 +629,8 @@ export default function KeepyUppyGame({
                   <Text style={styles.gameNoBadgeText}>제2탄 미니게임</Text>
                 </View>
                 <View style={styles.categoryBadge}>
-                  <Text style={styles.categoryBadgeText}>⚽ 놀아주기</Text>
+                  <SoccerBallIcon size={14} />
+                  <Text style={styles.categoryBadgeText}>놀아주기</Text>
                 </View>
               </View>
 
@@ -606,7 +655,7 @@ export default function KeepyUppyGame({
                 </View>
 
                 <View style={styles.readyVsIcon}>
-                  <Text style={{ fontSize: 24 }}>↕️</Text>
+                  <Activity size={24} color="#0284C7" />
                   <Text style={styles.readyVsText}>랠리 콤보</Text>
                 </View>
 
@@ -619,19 +668,19 @@ export default function KeepyUppyGame({
               {/* Instructions List */}
               <View style={styles.instructionsList}>
                 <View style={styles.instructionItem}>
-                  <Text style={styles.instructionEmoji}>👆</Text>
+                  <Hand size={18} color="#0284C7" style={{ marginRight: 8 }} />
                   <Text style={styles.instructionText}>
                     화면 하단을 손가락으로 좌우 드래그하여 패들을 조작합니다.
                   </Text>
                 </View>
                 <View style={styles.instructionItem}>
-                  <Text style={styles.instructionEmoji}>💖</Text>
+                  <Heart size={18} color="#FF4D6D" fill="#FF4D6D" style={{ marginRight: 8 }} />
                   <Text style={styles.instructionText}>
                     하트 3개 모두 소진 전까지 최고 랠리 기록을 세워보세요!
                   </Text>
                 </View>
                 <View style={styles.instructionItem}>
-                  <Text style={styles.instructionEmoji}>🎁</Text>
+                  <Gift size={18} color="#F59E0B" style={{ marginRight: 8 }} />
                   <Text style={styles.instructionText}>
                     클리어 시 행복도 100% 완충 + 대량 EXP & 가족 포인트 보상!
                   </Text>
@@ -644,7 +693,7 @@ export default function KeepyUppyGame({
                 onPress={startGame}
                 activeOpacity={0.85}
               >
-                <Sparkles size={20} color="#FFF" style={{ marginRight: 6 }} />
+                <Play size={18} color="#FFF" fill="#FFF" style={{ marginRight: 6 }} />
                 <Text style={styles.startButtonText}>게임 시작하기 (START)</Text>
               </TouchableOpacity>
             </View>
@@ -682,20 +731,20 @@ export default function KeepyUppyGame({
 
               {/* Rewards Box */}
               <View style={styles.rewardBox}>
-                <Text style={styles.rewardBoxTitle}>🎉 놀아주기 완료 보상</Text>
+                <Text style={styles.rewardBoxTitle}>놀아주기 완료 보상</Text>
                 <View style={styles.rewardRow}>
                   <View style={styles.rewardPill}>
-                    <Text style={styles.rewardPillEmoji}>💖</Text>
+                    <Heart size={14} color="#FF4D6D" fill="#FF4D6D" style={{ marginRight: 4 }} />
                     <Text style={styles.rewardPillText}>행복도 100%</Text>
                   </View>
                   <View style={styles.rewardPill}>
-                    <Text style={styles.rewardPillEmoji}>✨</Text>
+                    <Sparkles size={14} color="#52C41A" style={{ marginRight: 4 }} />
                     <Text style={styles.rewardPillText}>
                       +{Math.max(12, Math.min(35, Math.round(score / 25) + maxRally))} EXP
                     </Text>
                   </View>
                   <View style={styles.rewardPill}>
-                    <Text style={styles.rewardPillEmoji}>🏆</Text>
+                    <Trophy size={14} color="#D48806" style={{ marginRight: 4 }} />
                     <Text style={styles.rewardPillText}>
                       +{Math.max(4, Math.min(15, Math.round(score / 50)))} P
                     </Text>

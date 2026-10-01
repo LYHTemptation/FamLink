@@ -8,9 +8,31 @@ export default function UserAvatar({
   textStyle,
   borderColor,
 }) {
-  const isImage = typeof avatar === 'string' && (avatar.startsWith('http') || avatar.startsWith('data:image'));
+  const isImageString = typeof avatar === 'string' && (
+    avatar.startsWith('http') ||
+    avatar.startsWith('data:') ||
+    avatar.startsWith('blob:') ||
+    avatar.startsWith('file:') ||
+    avatar.startsWith('/') ||
+    avatar.length > 50
+  );
 
-  if (isImage) {
+  let imageUri = null;
+  if (isImageString) {
+    if (
+      avatar.startsWith('http') ||
+      avatar.startsWith('data:') ||
+      avatar.startsWith('blob:') ||
+      avatar.startsWith('file:') ||
+      avatar.startsWith('/')
+    ) {
+      imageUri = avatar;
+    } else {
+      imageUri = `data:image/jpeg;base64,${avatar}`;
+    }
+  }
+
+  if (imageUri) {
     return (
       <View
         style={[
@@ -26,13 +48,16 @@ export default function UserAvatar({
         ]}
       >
         <Image
-          source={{ uri: avatar }}
+          source={{ uri: imageUri }}
           style={{ width: size, height: size, borderRadius: size / 2 }}
           resizeMode="cover"
         />
       </View>
     );
   }
+
+  // Ensure raw base64 or long strings are never displayed inside Text
+  const displayEmoji = typeof avatar === 'string' && avatar.length <= 10 ? avatar : '👦';
 
   return (
     <View
@@ -49,7 +74,7 @@ export default function UserAvatar({
       ]}
     >
       <Text style={[{ fontSize: Math.max(14, size * 0.6) }, textStyle]}>
-        {avatar || '👦'}
+        {displayEmoji}
       </Text>
     </View>
   );

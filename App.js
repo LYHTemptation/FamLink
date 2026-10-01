@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -15,12 +15,15 @@ import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MessageSquare, Calendar, Award, Users, Trophy, LogOut, ShoppingCart, Image as ImageIcon, Heart, RotateCcw } from 'lucide-react-native';
 import {
+  TabHomeIcon,
+  TabQuestIcon,
+  TabPetIcon,
   TabChatIcon,
+  TabBookIcon,
+  TabAlbumIcon,
   TabCalendarIcon,
   TabSmallTalkIcon,
   TabShoppingIcon,
-  TabAlbumIcon,
-  TabPetIcon,
   TabFamilyIcon,
 } from './components/icons';
 import UserAvatar from './components/UserAvatar';
@@ -60,6 +63,7 @@ if (Platform.OS === 'web') {
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 // Import Screens & Libs
+import HomeScreen from './components/HomeScreen';
 import ChatScreen from './components/ChatScreen';
 import CalendarScreen from './components/CalendarScreen';
 import SmallTalkScreen from './components/SmallTalkScreen';
@@ -85,10 +89,7 @@ const INITIAL_MOCK_REWARDS = [];
 
 const INITIAL_MOCK_USER_COUPONS = [];
 
-const INITIAL_MOCK_SHOPPING = [
-  { id: 's1', title: '우유 2팩 사오기 🥛', assignee: '아들', is_completed: false, completed_by: null, points_earned: false, repeat_type: 'none' },
-  { id: 's2', title: '음식물 쓰레기 버리기 🧹', assignee: '가족 전체', is_completed: false, completed_by: null, points_earned: false, repeat_type: 'daily' },
-];
+const INITIAL_MOCK_SHOPPING = [];
 
 const INITIAL_MOCK_POINT_HISTORY = [
   {
@@ -149,24 +150,7 @@ const INITIAL_MOCK_DATA = {
       readBy: ['son', 'mom', 'dad'],
     },
   ],
-  events: [
-    {
-      id: 'e1',
-      title: '가족 저녁 외식 🍕',
-      date: '2026-07-25',
-      time: '19:30',
-      category: 'dinner',
-      creator: 'dad',
-    },
-    {
-      id: 'e2',
-      title: '엄마 생신 🎉',
-      date: '2026-07-28',
-      time: '10:00',
-      category: 'anniversary',
-      creator: 'mom',
-    },
-  ],
+  events: [],
   smallTalk: {
     topic: getTopicForToday(),
     responses: {},
@@ -213,12 +197,17 @@ export default function App() {
   const [events, setEvents] = useState([]);
   const [rewardsList, setRewardsList] = useState([]);
   const [userCoupons, setUserCoupons] = useState([]);
-  const [shoppingItems, setShoppingItems] = useState([]);
+  const [shoppingItems, setShoppingItems] = useState(INITIAL_MOCK_SHOPPING);
   const [pointHistory, setPointHistory] = useState(INITIAL_MOCK_POINT_HISTORY);
   const [customRooms, setCustomRooms] = useState([]);
-  const [placedFurniture, setPlacedFurniture] = useState([]);
-  const [floorPlanUrl, setFloorPlanUrl] = useState(null);
   const [petmongCharacters, setPetmongCharacters] = useState([]);
+  const [petVitals, setPetVitals] = useState({
+    hunger: 80,
+    happiness: 85,
+    cleanliness: 90,
+    energy: 95,
+  });
+  const vitalsSyncTimerRef = useRef(null);
   const [coopGoal, setCoopGoal] = useState(INITIAL_COOP_GOAL);
 
   const [smallTalk, setSmallTalk] = useState({
@@ -227,8 +216,8 @@ export default function App() {
     pointsAwarded: false,
   });
 
-  const [currentScreen, setCurrentScreen] = useState('chat'); // chat, calendar, smalltalk, shopping, album, family
-  const [visitedScreens, setVisitedScreens] = useState(new Set(['chat', 'interior']));
+  const [currentScreen, setCurrentScreen] = useState('home'); // home, chat, interior, smalltalk, calendar, album, family
+  const [visitedScreens, setVisitedScreens] = useState(new Set(['home', 'chat', 'interior']));
 
   useEffect(() => {
     if (currentScreen) {
@@ -394,6 +383,21 @@ export default function App() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'petmong_characters', filter: `family_id=eq.${familyId}` }, () => {
         fetchRealPetmongCharacters(familyId);
       })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'petmong_activities', filter: `family_id=eq.${familyId}` }, (payload) => {
+        const actionType = payload.new?.action_type || '';
+        if (actionType.startsWith('VITALS_UPDATE:')) {
+          try {
+            const rawJson = actionType.substring('VITALS_UPDATE:'.length).split('__by__')[0];
+            const incomingVitals = JSON.parse(rawJson);
+            if (incomingVitals && typeof incomingVitals === 'object') {
+              setPetVitals(prev => ({ ...prev, ...incomingVitals }));
+              AsyncStorage.setItem(`@famlink_game_vitals_${familyId}`, JSON.stringify(incomingVitals)).catch(() => {});
+            }
+          } catch (e) {
+            console.log('Error parsing realtime vitals:', e);
+          }
+        }
+      })
       .subscribe();
 
     // Supabase Realtime Presence Channel (Online Status)
@@ -488,7 +492,7 @@ export default function App() {
     try {
       const { data: userProfile, error } = await supabase
         .from('profiles')
-        .select('*, families(family_code)')
+        .select('*, families(family_code, created_at)')
         .eq('id', currentSession.user.id)
         .single();
 
@@ -497,6 +501,7 @@ export default function App() {
       const formatted = {
         ...userProfile,
         family_code: userProfile.families?.family_code || 'FAM-NONE',
+        family_created_at: userProfile.families?.created_at || userProfile.created_at || new Date().toISOString(),
       };
       setProfile(formatted);
       setCurrentUser(formatted.role || 'mom');
@@ -517,52 +522,116 @@ export default function App() {
       fetchRealRewards(familyId),
       fetchRealUserCoupons(familyId),
       fetchRealShoppingItems(familyId),
-      fetchRealPlacedFurniture(familyId),
-      fetchRealFloorPlan(familyId),
       fetchRealPetmongCharacters(familyId),
+      fetchRealPetVitals(familyId),
     ]);
     setAppLoading(false);
-  };
-
-  const fetchRealPlacedFurniture = async (familyId) => {
-    const { data } = await supabase
-      .from('placed_furniture')
-      .select('*')
-      .eq('family_id', familyId);
-    if (data) {
-      const formatted = data.map(f => ({
-        id: f.id,
-        catalogId: f.catalog_id,
-        name: f.name,
-        emoji: f.emoji,
-        x: f.x,
-        y: f.y,
-        rotation: f.rotation,
-      }));
-      setPlacedFurniture(formatted);
-    }
-  };
-
-  const fetchRealFloorPlan = async (familyId) => {
-    const { data } = await supabase
-      .from('house_layouts')
-      .select('image_url')
-      .eq('family_id', familyId)
-      .order('created_at', { ascending: false })
-      .limit(1);
-    if (data && data.length > 0) {
-      setFloorPlanUrl(data[0].image_url);
-    }
   };
 
   const fetchRealPetmongCharacters = async (familyId) => {
     const { data } = await supabase
       .from('petmong_characters')
       .select('*')
-      .eq('family_id', familyId);
+      .eq('family_id', familyId)
+      .order('created_at', { ascending: true });
     if (data) {
       setPetmongCharacters(data);
     }
+  };
+
+  const fetchRealPetVitals = async (familyId) => {
+    try {
+      // 1. 빠른 렌더링을 위해 로컬 캐시 우선 적용
+      const cached = await AsyncStorage.getItem(`@famlink_game_vitals_${familyId}`);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (parsed && typeof parsed === 'object') setPetVitals(parsed);
+        } catch (e) {}
+      }
+
+      // 2. Supabase DB에서 가장 최근에 저장된 가족 반려몽 생체 게이지 조회
+      const { data, error } = await supabase
+        .from('petmong_activities')
+        .select('action_type, created_at')
+        .eq('family_id', familyId)
+        .ilike('action_type', 'VITALS_UPDATE:%')
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (data && data.length > 0 && !error) {
+        const rawJson = data[0].action_type.substring('VITALS_UPDATE:'.length).split('__by__')[0];
+        const serverVitals = JSON.parse(rawJson);
+        if (serverVitals && typeof serverVitals === 'object') {
+          // --- 다마고치 시간 경과에 따른 자연 소모 (Time-based Vital Decay) ---
+          const lastUpdated = new Date(data[0].created_at).getTime();
+          const now = Date.now();
+          const elapsedHours = Math.max(0, (now - lastUpdated) / (1000 * 60 * 60));
+
+          let calculatedVitals = { ...serverVitals };
+          if (elapsedHours > 0.25) { // 15분 이상 경과 시 현실적인 다마고치 자연 소모 적용
+            calculatedVitals.hunger = Math.max(15, Math.min(100, Math.round(serverVitals.hunger - elapsedHours * 5)));
+            calculatedVitals.happiness = Math.max(15, Math.min(100, Math.round(serverVitals.happiness - elapsedHours * 4)));
+            calculatedVitals.cleanliness = Math.max(15, Math.min(100, Math.round(serverVitals.cleanliness - elapsedHours * 2.5)));
+            calculatedVitals.energy = Math.max(15, Math.min(100, Math.round(serverVitals.energy - elapsedHours * 3)));
+          }
+
+          setPetVitals(calculatedVitals);
+          AsyncStorage.setItem(`@famlink_game_vitals_${familyId}`, JSON.stringify(calculatedVitals)).catch(() => {});
+        }
+      }
+    } catch (err) {
+      console.log('Error fetching pet vitals:', err);
+    }
+  };
+
+  // 다마고치 앱 실행 중 실시간 자연 소모 타이머 (5분 주기)
+  useEffect(() => {
+    if (!profile?.family_id) return;
+    const decayInterval = setInterval(() => {
+      setPetVitals(prev => {
+        if (!prev) return prev;
+        const next = {
+          ...prev,
+          hunger: Math.max(15, (prev.hunger || 80) - 1),
+          happiness: Math.max(15, (prev.happiness || 85) - 1),
+          cleanliness: Math.max(15, Math.round(((prev.cleanliness || 90) - 0.5) * 10) / 10),
+          energy: Math.max(15, Math.round(((prev.energy || 95) - 0.5) * 10) / 10),
+        };
+        AsyncStorage.setItem(`@famlink_game_vitals_${profile.family_id}`, JSON.stringify(next)).catch(() => {});
+        return next;
+      });
+    }, 5 * 60 * 1000);
+
+    return () => clearInterval(decayInterval);
+  }, [profile?.family_id]);
+
+  const handleUpdatePetVitals = (updater) => {
+    setPetVitals(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : { ...prev, ...updater };
+      const familyId = profile?.family_id;
+      if (familyId) {
+        AsyncStorage.setItem(`@famlink_game_vitals_${familyId}`, JSON.stringify(next)).catch(() => {});
+
+        // 디바운스(1.2초) 적용하여 과도한 DB Insert 방지 및 최신 상태 확정 저장
+        if (vitalsSyncTimerRef.current) clearTimeout(vitalsSyncTimerRef.current);
+        vitalsSyncTimerRef.current = setTimeout(async () => {
+          try {
+            const charId = petmongCharacters.length > 0 ? petmongCharacters[0].id : null;
+            if (charId && isSupabaseReady) {
+              await supabase.from('petmong_activities').insert({
+                family_id: familyId,
+                actor_id: charId,
+                action_type: `VITALS_UPDATE:${JSON.stringify(next)}__by__${profile?.name || currentUser}`,
+              });
+            }
+          } catch (e) {
+            console.log('Error syncing vitals to DB:', e);
+          }
+        }, 1200);
+      }
+      return next;
+    });
   };
 
   const fetchRealProfiles = async (familyId) => {
@@ -756,7 +825,8 @@ export default function App() {
         const parsed = JSON.parse(savedData);
         setPoints(parsed.points ?? INITIAL_MOCK_DATA.points);
         setMessages(parsed.messages ?? INITIAL_MOCK_DATA.messages);
-        setEvents(parsed.events ?? INITIAL_MOCK_DATA.events);
+        const filteredEvents = (parsed.events ?? []).filter(e => e && e.id !== 'e1' && e.id !== 'e2' && !e.title?.includes('가족 저녁 외식') && !e.title?.includes('엄마 생신'));
+        setEvents(filteredEvents);
         const filteredRewards = (parsed.rewardsList ?? []).filter(r => r && r.id !== 'r1' && r.id !== 'r2' && r.id !== 'r3' && !r.title?.includes('설거지') && !r.title?.includes('안마') && !r.title?.includes('치킨'));
         const filteredUserCoupons = (parsed.userCoupons ?? []).filter(c => c && c.id !== 'uc1' && !c.title?.includes('설거지'));
         setRewardsList(filteredRewards);
@@ -949,10 +1019,13 @@ export default function App() {
   const handleAddItem = async (itemData) => {
     const nowIso = new Date().toISOString();
     const repType = itemData.repeat_type || 'none';
+    const tempId = `chore-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
     const newItem = {
-      id: String(Date.now()),
+      id: tempId,
       title: itemData.title,
-      assignee: itemData.assignee,
+      assignee: itemData.assignee || '가족 전체',
+      category: itemData.category || '기타',
+      points: itemData.points || 20,
       repeat_type: repType,
       is_completed: false,
       completed_by: null,
@@ -960,46 +1033,71 @@ export default function App() {
       created_at: nowIso,
     };
 
+    // 🚀 Optimistic Instant UI Update (0ms delay)
     const updated = [newItem, ...shoppingItems];
     setShoppingItems(updated);
 
-    if (isSupabaseReady) {
+    if (isSupabaseReady && profile?.family_id && session?.user?.id) {
       try {
-        let insertPayload = {
+        const corePayload = {
           family_id: profile.family_id,
           profile_id: session.user.id,
           title: itemData.title,
-          assignee: itemData.assignee,
-          repeat_type: repType,
+          assignee: itemData.assignee || '가족 전체',
         };
+
+        // 1. Try full insert with extra columns
         let { data, error } = await supabase
           .from('shopping_items')
-          .insert(insertPayload)
+          .insert({
+            ...corePayload,
+            category: itemData.category || '기타',
+            points: itemData.points || 20,
+            repeat_type: repType,
+          })
           .select();
 
-        if (error && error.message && error.message.includes('repeat_type')) {
-          delete insertPayload.repeat_type;
-          const retry = await supabase.from('shopping_items').insert(insertPayload).select();
+        // 2. Fallback to guaranteed core schema columns if custom columns don't exist
+        if (error) {
+          console.warn('Initial insert with extra columns failed, falling back to core columns:', error.message);
+          const retry = await supabase
+            .from('shopping_items')
+            .insert(corePayload)
+            .select();
           data = retry.data;
           error = retry.error;
         }
 
         if (error) throw error;
+
         if (data && data.length > 0) {
-          setShoppingItems(prev => prev.map(i => i.id === newItem.id ? { ...data[0], repeat_type: repType } : i));
+          const dbRow = data[0];
+          setShoppingItems(prev =>
+            prev.map(i =>
+              i.id === tempId
+                ? {
+                    ...dbRow,
+                    category: itemData.category || dbRow.category || '기타',
+                    points: itemData.points || dbRow.points || 20,
+                    repeat_type: repType,
+                  }
+                : i
+            )
+          );
         }
       } catch (e) {
-        showError(e, '장보기 항목 추가에 실패했습니다.');
-        fetchRealShoppingItems(profile.family_id);
+        console.warn('Supabase chore insert notice:', e.message);
+        // Persist locally if network/db issue occurs so user's chore is never lost
+        saveLocalState(points, messages, events, smallTalk, rewardsList, userCoupons, updated, pointHistory);
       }
     } else {
-      saveLocalState(points, messages, events, smallTalk, rewardsList, userCoupons, updated);
+      saveLocalState(points, messages, events, smallTalk, rewardsList, userCoupons, updated, pointHistory);
     }
   };
 
   const handleAwardPetmongExp = async (targetUserId, expGain, reason = '') => {
-    const targetChar = petmongCharacters.find(c => c.user_id === targetUserId) ||
-      (petmongCharacters.length > 0 ? petmongCharacters[0] : null);
+    // 1가족 1반려몽: 온 가족이 함께 키우는 대표 반려몽에 경험치 합산
+    const targetChar = petmongCharacters.length > 0 ? petmongCharacters[0] : null;
 
     if (!targetChar) return;
 
@@ -1040,47 +1138,65 @@ export default function App() {
 
     if (leveledUp) {
       Alert.alert(
-        '🎊 반려몽 레벨업! 🎊',
-        `우리 가족 ${targetChar.name}의 레벨이 Lv.${newLevel}로 올랐습니다! 무럭무럭 자라고 있어요! 🌱`
+        '🎊 우리 가족 반려몽 레벨업! 🎊',
+        `우리 가족의 수호 반려몽 ${targetChar.name}의 레벨이 Lv.${newLevel}로 올랐습니다! 온 가족이 함께 키워내고 있어요! 🌱`
       );
     }
   };
 
   const handleToggleItem = async (item, isCompleted) => {
-    const completedByStr = isCompleted ? (profile ? profile.name : currentUser) : null;
+    if (!item) return;
+    const targetCompleted = typeof isCompleted === 'boolean' ? isCompleted : !item.is_completed;
+    const completedByStr = targetCompleted ? (profile ? profile.name : currentUser) : null;
     const todayStr = getTodayString();
 
     let newPoints = points;
     let willEarnPoints = false;
+    const itemPoints = item.points || 20;
 
-    // Proposal 1 & 2: Check if points should be awarded
-    if (isCompleted) {
-      // Award EXP to petmong
-      handleAwardPetmongExp(session?.user?.id || profile?.id, 10, '집안일/장보기 완료 (+10 EXP)');
+    if (targetCompleted) {
+      if (item.points_earned) {
+        // 🔒 어뷰징 방지 1: 이미 보상이 지급된 집안일을 체크 해제 후 재체크한 경우
+        Alert.alert('완료 처리 됨 ✅', '이미 포인트가 지급된 집안일입니다. (상태만 완료로 변경)');
+      } else {
+        // 🔒 어뷰징 방지 2: 일일 집안일 포인트 한도 계산 (1일 최대 3건 or 60P)
+        const DAILY_MAX_CHORES = 3;
+        const DAILY_MAX_POINTS = 60;
 
-      if (!item.points_earned) {
-        const todayEarnedCount = shoppingItems.filter(
-          i => (i.points_earned || i.is_completed) && 
+        const todayEarnedList = shoppingItems.filter(
+          i => i.points_earned &&
                (i.completed_date === todayStr || (i.completed_at && i.completed_at.startsWith(todayStr)))
-        ).length;
+        );
+        const todayEarnedCount = todayEarnedList.length;
+        const todayEarnedPoints = todayEarnedList.reduce((sum, i) => sum + (i.points || 20), 0);
 
-        if (todayEarnedCount < 3) {
-          newPoints += 10;
+        if (todayEarnedCount < DAILY_MAX_CHORES && todayEarnedPoints < DAILY_MAX_POINTS) {
+          const expGain = Math.min(20, Math.max(10, Math.floor(itemPoints / 2)));
+          handleAwardPetmongExp(session?.user?.id || profile?.id, expGain, `집안일 완료: ${item.title} (+${expGain} EXP)`);
+          newPoints += itemPoints;
           willEarnPoints = true;
-          Alert.alert('미션 완료 🎉', `+10 포인트와 함께 반려몽이 +10 EXP를 획득했어요! (오늘 보상: ${(todayEarnedCount + 1) * 10}/30P)`);
+          Alert.alert(
+            '집안일 완료 🎉',
+            `+${itemPoints}P와 함께 반려몽이 +${expGain} EXP를 획득했어요!\n(오늘 달성: ${todayEarnedCount + 1}/${DAILY_MAX_CHORES}건, 총 ${todayEarnedPoints + itemPoints}/${DAILY_MAX_POINTS}P)`
+          );
         } else {
-          Alert.alert('완료 처리 됨 ✅', '오늘의 장보기 포인트 한도(하루 30P / 3건)를 모두 채웠습니다. 반려몽이 +10 EXP를 획득했어요!');
+          // 일일 상한선 도달 시: 포인트는 0P 지급, 반려몽 애정도 EXP만 소량(+5) 지급
+          handleAwardPetmongExp(session?.user?.id || profile?.id, 5, `집안일 완료: ${item.title} (+5 EXP)`);
+          Alert.alert(
+            '집안일 완료 ✅',
+            `오늘의 집안일 포인트 한도(하루 ${DAILY_MAX_CHORES}건 / 최대 ${DAILY_MAX_POINTS}P)를 모두 채웠습니다!\n포인트 대신 반려몽이 감사하며 +5 EXP를 획득했어요 🌱`
+          );
         }
       }
     }
 
     const nowIso = new Date().toISOString();
-    const finalPointsEarned = isCompleted ? (item.points_earned || willEarnPoints) : item.points_earned;
-    const finalCompletedDate = isCompleted ? (item.completed_date || todayStr) : null;
-    const finalCompletedAt = isCompleted ? (item.completed_at || nowIso) : null;
+    const finalPointsEarned = targetCompleted ? true : item.points_earned;
+    const finalCompletedDate = targetCompleted ? (item.completed_date || todayStr) : null;
+    const finalCompletedAt = targetCompleted ? (item.completed_at || nowIso) : null;
 
     const localItemUpdate = {
-      is_completed: isCompleted,
+      is_completed: targetCompleted,
       completed_by: completedByStr,
       points_earned: finalPointsEarned,
       completed_date: finalCompletedDate,
@@ -1099,7 +1215,7 @@ export default function App() {
     if (isSupabaseReady && isUuid) {
       try {
         const dbPayload = {
-          is_completed: isCompleted,
+          is_completed: targetCompleted,
           completed_by: completedByStr,
           completed_at: finalCompletedAt,
           points_earned: finalPointsEarned,
@@ -1118,17 +1234,16 @@ export default function App() {
             .from('family_points')
             .update({ points: newPoints })
             .eq('family_id', profile.family_id);
-          logPointTransaction('earn', 10, `장보기 완료 (${item.title})`, newPoints, 'shopping');
+          logPointTransaction('earn', itemPoints, `함께/집안일 완료 (${item.title})`, newPoints, 'quest');
         }
       } catch (e) {
         console.error('Toggle shopping item error:', e);
       }
     } else {
       if (willEarnPoints) {
-        logPointTransaction('earn', 10, `장보기 완료 (${item.title})`, newPoints, 'shopping');
-      } else {
-        saveLocalState(newPoints, messages, events, smallTalk, rewardsList, userCoupons, updated);
+        logPointTransaction('earn', itemPoints, `함께/집안일 완료 (${item.title})`, newPoints, 'quest');
       }
+      saveLocalState(newPoints, messages, events, smallTalk, rewardsList, userCoupons, updated, pointHistory);
     }
   };
 
@@ -1719,10 +1834,8 @@ export default function App() {
             if (willAwardAllBonus) {
               setCelebrationVisible(true);
               logPointTransaction('earn', 30, '스몰톡 가족 전원 완료 보너스 (+30P)', newPoints, 'smalltalk');
-              // Award +50 EXP bonus to all petmong characters for complete family participation!
-              petmongCharacters.forEach(char => {
-                handleAwardPetmongExp(char.user_id, 50, '스몰톡 가족 전원 완료 보너스 (+50 EXP)');
-              });
+              // Award +50 EXP bonus to our family petmong for complete family participation!
+              handleAwardPetmongExp(null, 50, '스몰톡 가족 전원 완료 보너스 (+50 EXP)');
             }
           }
         }
@@ -1760,9 +1873,7 @@ export default function App() {
         pointsEarned += 30;
         pointsAwardedStatus = true;
         setCelebrationVisible(true);
-        petmongCharacters.forEach(char => {
-          handleAwardPetmongExp(char.user_id, 50, '스몰톡 가족 전원 완료 보너스 (+50 EXP)');
-        });
+        handleAwardPetmongExp(null, 50, '스몰톡 가족 전원 완료 보너스 (+50 EXP)');
       }
 
       const updatedSmallTalk = {
@@ -1878,43 +1989,6 @@ export default function App() {
     }
   };
 
-  const handleUpdatePlacedFurniture = async (updatedList) => {
-    setPlacedFurniture(updatedList);
-    if (isSupabaseReady && profile?.family_id) {
-      try {
-        await supabase.from('placed_furniture').delete().eq('family_id', profile.family_id);
-        if (updatedList.length > 0) {
-          const insertData = updatedList.map(item => ({
-            family_id: profile.family_id,
-            catalog_id: item.catalogId || item.id,
-            name: item.name,
-            emoji: item.emoji,
-            x: item.x,
-            y: item.y,
-            rotation: item.rotation,
-          }));
-          await supabase.from('placed_furniture').insert(insertData);
-        }
-      } catch (e) {
-        console.log('Error updating placed furniture:', e);
-      }
-    }
-  };
-
-  const handleUpdateFloorPlan = async (newUrl) => {
-    setFloorPlanUrl(newUrl);
-    if (isSupabaseReady && profile?.family_id) {
-      try {
-        await supabase.from('house_layouts').insert({
-          family_id: profile.family_id,
-          image_url: newUrl,
-        });
-      } catch (e) {
-        console.log('Error updating floor plan URL:', e);
-      }
-    }
-  };
-
   const handleResetData = () => {
     Alert.alert(
       '데이터 초기화',
@@ -1960,6 +2034,30 @@ export default function App() {
   const renderActiveScreen = () => {
     return (
       <View style={styles.flexOne}>
+        {visitedScreens.has('home') && (
+          <View
+            style={[
+              styles.screenLayer,
+              currentScreen === 'home' ? styles.screenLayerVisible : styles.screenLayerHidden,
+            ]}
+            pointerEvents={currentScreen === 'home' ? 'auto' : 'none'}
+          >
+            <HomeScreen
+              points={points}
+              events={events}
+              messages={messages}
+              currentUser={currentUser}
+              currentUserProfile={profile}
+              familyMembers={familyMembersList}
+              shoppingItems={shoppingItems}
+              petmongCharacters={petmongCharacters}
+              petVitals={petVitals}
+              onNavigateScreen={setCurrentScreen}
+              onToggleQuest={handleToggleItem}
+              onAwardPoints={handleAwardFamilyPoints}
+            />
+          </View>
+        )}
         {visitedScreens.has('chat') && (
           <View
             style={[
@@ -1993,12 +2091,8 @@ export default function App() {
           >
             <InteriorScreen
               points={points}
-              onDeductPoints={(cost) => handleDeductPoints(cost, '가구 구매')}
+              onDeductPoints={(cost) => handleDeductPoints(cost, '반려몽 외형 변경')}
               onAwardPoints={handleAwardFamilyPoints}
-              placedFurniture={placedFurniture}
-              onUpdatePlacedFurniture={handleUpdatePlacedFurniture}
-              floorPlanUrl={floorPlanUrl}
-              onUpdateFloorPlan={handleUpdateFloorPlan}
               currentUser={currentUser}
               currentUserProfile={profile}
               familyId={profile?.family_id}
@@ -2006,6 +2100,8 @@ export default function App() {
               setPetmongCharacters={setPetmongCharacters}
               onAwardExp={handleAwardPetmongExp}
               familyMembers={familyMembersList}
+              petVitals={petVitals}
+              onUpdateVitals={handleUpdatePetVitals}
             />
           </View>
         )}
@@ -2209,61 +2305,59 @@ export default function App() {
             {renderActiveScreen()}
           </View>
 
-          {/* Custom Tabbar (6 Tabs) */}
-          <View style={styles.tabbar}>
-            {/* 1. 메신저 (일상 소통) */}
-            <TouchableOpacity
-              style={[styles.tabItem, currentScreen === 'chat' && styles.tabItemActive]}
-              onPress={() => setCurrentScreen('chat')}
-            >
-              <TabChatIcon size={19} color={currentScreen === 'chat' ? '#FF7E82' : '#8E8E93'} focused={currentScreen === 'chat'} />
-              <Text style={[styles.tabLabel, currentScreen === 'chat' && styles.tabLabelActive]}>메신저</Text>
-            </TouchableOpacity>
+          {/* Custom Tabbar (5 Tabs: [홈, 퀘스트, 반려몽, 채팅, 앨범] - Figma node-id 5:361 Spec) */}
+          <View style={styles.tabbarContainer}>
+            <View style={styles.tabbar}>
+              {/* 1. 홈 (Home) */}
+              <TouchableOpacity
+                style={[styles.tabItem, currentScreen === 'home' && styles.tabItemActive]}
+                onPress={() => setCurrentScreen('home')}
+                activeOpacity={0.8}
+              >
+                <TabHomeIcon size={20} color={currentScreen === 'home' ? '#FF6B47' : '#A8A29E'} focused={currentScreen === 'home'} />
+                <Text style={[styles.tabLabel, currentScreen === 'home' && styles.tabLabelActive]}>홈</Text>
+              </TouchableOpacity>
 
-            {/* 2. 반려몽 (가족 중심 공간 & 육성) */}
-            <TouchableOpacity
-              style={[styles.tabItem, currentScreen === 'interior' && styles.tabItemActive]}
-              onPress={() => setCurrentScreen('interior')}
-            >
-              <TabPetIcon size={19} color={currentScreen === 'interior' ? '#FF7E82' : '#8E8E93'} focused={currentScreen === 'interior'} />
-              <Text style={[styles.tabLabel, currentScreen === 'interior' && styles.tabLabelActive]}>반려몽</Text>
-            </TouchableOpacity>
+              {/* 2. 오늘 함께 (Together / SmallTalk & Chores) */}
+              <TouchableOpacity
+                style={[styles.tabItem, currentScreen === 'smalltalk' && styles.tabItemActive]}
+                onPress={() => setCurrentScreen('smalltalk')}
+                activeOpacity={0.8}
+              >
+                <TabQuestIcon size={20} color={currentScreen === 'smalltalk' ? '#FF6B47' : '#A8A29E'} focused={currentScreen === 'smalltalk'} />
+                <Text style={[styles.tabLabel, currentScreen === 'smalltalk' && styles.tabLabelActive]}>함께</Text>
+              </TouchableOpacity>
 
-            {/* 3. 미션·혜택 (스몰톡/장보기/포인트 센터) */}
-            <TouchableOpacity
-              style={[styles.tabItem, currentScreen === 'smalltalk' && styles.tabItemActive]}
-              onPress={() => setCurrentScreen('smalltalk')}
-            >
-              <TabSmallTalkIcon size={19} color={currentScreen === 'smalltalk' ? '#FF7E82' : '#8E8E93'} focused={currentScreen === 'smalltalk'} />
-              <Text style={[styles.tabLabel, currentScreen === 'smalltalk' && styles.tabLabelActive]}>미션·혜택</Text>
-            </TouchableOpacity>
+              {/* 3. 반려몽 (Pet) */}
+              <TouchableOpacity
+                style={[styles.tabItem, currentScreen === 'interior' && styles.tabItemActive]}
+                onPress={() => setCurrentScreen('interior')}
+                activeOpacity={0.8}
+              >
+                <TabPetIcon size={20} color={currentScreen === 'interior' ? '#FF6B47' : '#A8A29E'} focused={currentScreen === 'interior'} />
+                <Text style={[styles.tabLabel, currentScreen === 'interior' && styles.tabLabelActive]}>반려몽</Text>
+              </TouchableOpacity>
 
-            {/* 4. 캘린더 (가족 일정 & 기념일) */}
-            <TouchableOpacity
-              style={[styles.tabItem, currentScreen === 'calendar' && styles.tabItemActive]}
-              onPress={() => setCurrentScreen('calendar')}
-            >
-              <TabCalendarIcon size={19} color={currentScreen === 'calendar' ? '#FF7E82' : '#8E8E93'} focused={currentScreen === 'calendar'} />
-              <Text style={[styles.tabLabel, currentScreen === 'calendar' && styles.tabLabelActive]}>캘린더</Text>
-            </TouchableOpacity>
+              {/* 4. 채팅 (Chat) */}
+              <TouchableOpacity
+                style={[styles.tabItem, currentScreen === 'chat' && styles.tabItemActive]}
+                onPress={() => setCurrentScreen('chat')}
+                activeOpacity={0.8}
+              >
+                <TabChatIcon size={20} color={currentScreen === 'chat' ? '#FF6B47' : '#A8A29E'} focused={currentScreen === 'chat'} />
+                <Text style={[styles.tabLabel, currentScreen === 'chat' && styles.tabLabelActive]}>채팅</Text>
+              </TouchableOpacity>
 
-            {/* 5. 앨범 (사진 추억 & 이야기책) */}
-            <TouchableOpacity
-              style={[styles.tabItem, currentScreen === 'album' && styles.tabItemActive]}
-              onPress={() => setCurrentScreen('album')}
-            >
-              <TabAlbumIcon size={19} color={currentScreen === 'album' ? '#FF7E82' : '#8E8E93'} focused={currentScreen === 'album'} />
-              <Text style={[styles.tabLabel, currentScreen === 'album' && styles.tabLabelActive]}>앨범</Text>
-            </TouchableOpacity>
-
-            {/* 6. 가족 (가족 연결 & 멤버 관리) */}
-            <TouchableOpacity
-              style={[styles.tabItem, currentScreen === 'family' && styles.tabItemActive]}
-              onPress={() => setCurrentScreen('family')}
-            >
-              <TabFamilyIcon size={19} color={currentScreen === 'family' ? '#FF7E82' : '#8E8E93'} focused={currentScreen === 'family'} />
-              <Text style={[styles.tabLabel, currentScreen === 'family' && styles.tabLabelActive]}>가족</Text>
-            </TouchableOpacity>
+              {/* 5. 앨범 (Album / Book) */}
+              <TouchableOpacity
+                style={[styles.tabItem, currentScreen === 'album' && styles.tabItemActive]}
+                onPress={() => setCurrentScreen('album')}
+                activeOpacity={0.8}
+              >
+                <TabBookIcon size={20} color={currentScreen === 'album' ? '#FF6B47' : '#A8A29E'} focused={currentScreen === 'album'} />
+                <Text style={[styles.tabLabel, currentScreen === 'album' && styles.tabLabelActive]}>앨범</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </KeyboardAvoidingView>
 
@@ -2454,7 +2548,7 @@ const styles = StyleSheet.create({
   },
   screenArea: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#FAF8F3',
     position: 'relative',
   },
   screenLayer: {
@@ -2472,30 +2566,44 @@ const styles = StyleSheet.create({
     opacity: 0,
     zIndex: -1,
   },
+  tabbarContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: Platform.OS === 'ios' ? 14 : 8,
+  },
   tabbar: {
-    height: 56,
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#F2F2F7',
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E8E0D0',
+    paddingVertical: 5,
+    paddingHorizontal: 4,
     justifyContent: 'space-around',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
   },
   tabItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 6,
+    borderRadius: 14,
+    marginHorizontal: 2,
   },
   tabItemActive: {},
   tabLabel: {
-    fontSize: 9,
-    color: '#8E8E93',
-    marginTop: 3,
-    fontWeight: '600',
+    fontSize: 11,
+    color: '#A8A29E',
+    marginTop: 2,
+    fontWeight: '700',
   },
   tabLabelActive: {
-    color: '#FF7E82',
+    color: '#FF6B47',
     fontWeight: '800',
   },
   modalOverlay: {

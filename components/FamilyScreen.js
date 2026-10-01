@@ -340,14 +340,21 @@ export default function FamilyScreen({
                   activeOpacity={0.85}
                 >
                   <View style={styles.avatarLargeCircle}>
-                    {selectedAvatar && (selectedAvatar.startsWith('http') || selectedAvatar.startsWith('data:')) ? (
+                    {selectedAvatar && (selectedAvatar.startsWith('http') || selectedAvatar.startsWith('data:') || selectedAvatar.length > 50) ? (
                       <Image
-                        source={{ uri: selectedAvatar }}
+                        source={{
+                          uri:
+                            selectedAvatar.startsWith('http') || selectedAvatar.startsWith('data:')
+                              ? selectedAvatar
+                              : `data:image/jpeg;base64,${selectedAvatar}`,
+                        }}
                         style={styles.avatarLargeImage}
                         resizeMode="cover"
                       />
                     ) : (
-                      <Text style={styles.avatarLargeText}>{selectedAvatar || '👦'}</Text>
+                      <Text style={styles.avatarLargeText}>
+                        {typeof selectedAvatar === 'string' && selectedAvatar.length <= 10 ? selectedAvatar : '👦'}
+                      </Text>
                     )}
                   </View>
                   <View style={styles.avatarCameraBadge}>

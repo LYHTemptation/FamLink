@@ -1,5 +1,5 @@
 import styles from './InteriorStyles';
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import UserAvatar from './UserAvatar';
 import PetmongGameEngine from './PetmongGameEngine';
 import {
@@ -51,6 +51,8 @@ import {
   Layers,
   Palette,
   BookOpen,
+  Mail,
+  Send,
 } from 'lucide-react-native';
 import { MoodIcon, DropHeartIcon, DropCloverIcon, DropStarIcon } from './icons';
 import {
@@ -59,7 +61,16 @@ import {
   isMilestoneLevel,
   EVOLUTION_STAGES,
   getStageEvolutionPrompt,
+  getStageNameWithPet,
 } from '../lib/petmongEvolution';
+import PetmongGrowthBookModal from './PetmongGrowthBookModal';
+import {
+  getPetmongStageImages,
+  savePetmongStageImage,
+  generateStageAiImage,
+  startBackgroundStagePreGeneration,
+  createPetmongSvg,
+} from '../lib/petmongEvolutionService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
@@ -118,7 +129,7 @@ const createRandomDrop = (userId) => {
   };
 };
 
-const EMOJI_OPTIONS = ['🐶', '🐱', '🐰', '🐼', '🦊', '🐻', '🐹', '🐥'];
+const EMOJI_OPTIONS = ['🐶', '🐱', '🐰', '🐻', '🐥', '🦊', '🦌', '🐹', '🐲', '🦭'];
 const PERSONALITY_OPTIONS = ['다정한', '장난꾸러기', '잠꾸러기', '애교쟁이', '호기심많은'];
 
 const PETMONG_DIALOGUES = {
@@ -390,13 +401,10 @@ const SPAWN_ZONES = [
   { x: 58, y: 35 }, // Zone 8: Right-Upper
 ];
 
-const RESTING_FURNITURE_EMOJIS = ['🛋️', '☁️', '🧸', '📻', '🧺'];
-
 const RoamingFamilyPetmong = React.memo(({
   char,
   owner,
   index,
-  placedFurniture = [],
   onPress,
   subBubbleCharId,
   subBubbleText,
@@ -499,7 +507,7 @@ const RoamingFamilyPetmong = React.memo(({
       if (walkTimerRef.current) clearTimeout(walkTimerRef.current);
       bobLoop.stop();
     };
-  }, [index, owner?.mood, placedFurniture]);
+  }, [index, owner?.mood]);
 
   const handlePress = () => {
     // Tap reaction: happy jump
@@ -598,10 +606,6 @@ export default function InteriorScreen({
   points,
   onDeductPoints,
   onAwardPoints,
-  placedFurniture,
-  onUpdatePlacedFurniture,
-  floorPlanUrl,
-  onUpdateFloorPlan,
   currentUser,
   currentUserProfile,
   familyId,
@@ -609,6 +613,8 @@ export default function InteriorScreen({
   setPetmongCharacters,
   onAwardExp,
   familyMembers = [],
+  petVitals: propPetVitals,
+  onUpdateVitals: propOnUpdateVitals,
 }) {
   const insets = useSafeAreaInsets();
   
@@ -624,11 +630,36 @@ export default function InteriorScreen({
   const [isGenerating, setIsGenerating] = useState(false);
   const [familyCharacters, setFamilyCharacters] = useState([]);
   
-  // Creation Modal State
-  const [createModalVisible, setCreateModalVisible] = useState(false);
+  // Unified Decorate Modal State (거실 테마 & 반려몽 외형 변경)
+  const [decorModalVisible, setDecorModalVisible] = useState(false);
+  const [decorModalTab, setDecorModalTab] = useState('theme'); // 'theme' | 'appearance'
   const [newName, setNewName] = useState('');
   const [newEmoji, setNewEmoji] = useState('🐶');
   const [newPersonality, setNewPersonality] = useState('다정한');
+
+  // Compatibility helpers
+  const setCreateModalVisible = (val) => {
+    if (val) setDecorModalTab('appearance');
+    setDecorModalVisible(val);
+  };
+  const setThemeModalVisible = (val) => {
+    if (val) setDecorModalTab('theme');
+    setDecorModalVisible(val);
+  };
+
+  // Secret Whisper States (반려몽 비밀 귓속말 & 편지 배달부)
+  const [whispers, setWhispers] = useState([]);
+  const [whisperWriteModalVisible, setWhisperWriteModalVisible] = useState(false);
+  const [whisperReadModalVisible, setWhisperReadModalVisible] = useState(false);
+  const [activeWhisperToRead, setActiveWhisperToRead] = useState(null);
+  const [whisperTargetUser, setWhisperTargetUser] = useState(null);
+  const [whisperMessage, setWhisperMessage] = useState('');
+  const [isSendingWhisper, setIsSendingWhisper] = useState(false);
+
+  // Unread whispers addressed to the current user
+  const unreadWhispers = (whispers || []).filter(
+    w => w.to_user_id === currentUserProfile?.id && !w.is_read
+  );
 
   // Touch & Dialogue States (Sumone Style)
   const bounceAnim = useRef(new Animated.Value(0)).current;
@@ -665,15 +696,14 @@ export default function InteriorScreen({
   const [interactionModalVisible, setInteractionModalVisible] = useState(false);
   const [selectedTargetChar, setSelectedTargetChar] = useState(null);
 
-  // Family Petmong Book / Roster Modal State
+  // Family Petmong Book / Roster Modal State & Growth Tab State
   const [familyBookModalVisible, setFamilyBookModalVisible] = useState(false);
+  const [growthBookTargetChar, setGrowthBookTargetChar] = useState(null);
+  const [growthBookInitialTab, setGrowthBookInitialTab] = useState('growth');
 
-  // Sumone-Style Room Theme States (Per-room themes so each member's room has its own theme)
-  const [roomThemesByRoom, setRoomThemesByRoom] = useState({});
-  const [themeModalVisible, setThemeModalVisible] = useState(false);
-
-  // Active room's theme (defaults to 'cottage')
-  const activeRoomTheme = (selectedRoomUserId && roomThemesByRoom[selectedRoomUserId]) || 'cottage';
+  // Sumone-Style Family Room Theme States (온 가족이 공유하는 거실 테마)
+  const [familyRoomTheme, setFamilyRoomTheme] = useState('cottage');
+  const activeRoomTheme = familyRoomTheme || 'cottage';
 
   // Floating Mini Capsule HUD State (Default: collapsed capsule for maximum room visibility)
   const [isHudExpanded, setIsHudExpanded] = useState(false);
@@ -696,49 +726,63 @@ export default function InteriorScreen({
   // Main Character Float Animation
   const floatAnim = useRef(new Animated.Value(0)).current;
 
-  // Auto initialize selectedRoomUserId
+  // 1가족 1공동 반려몽: 온 가족이 함께 돌보는 단 하나의 대표 수호 반려몽
+  const familyPetmong = (petmongCharacters && petmongCharacters.length > 0) ? petmongCharacters[0] : myCharacter;
+  const displayedCharacter = familyPetmong;
+  const displayedOwner = currentUserProfile;
+  const isVisitingOther = false;
+  const activeRoomDrops = dropsByRoom['family'] || dropsByRoom[currentUserProfile?.id] || [];
+
+  // Background Pre-Generation of Missing Stages for Active User's Character
   useEffect(() => {
-    if (currentUserProfile?.id && !selectedRoomUserId) {
-      setSelectedRoomUserId(currentUserProfile.id);
+    if (myCharacter?.id && myCharacter?.image_url) {
+      getPetmongStageImages(myCharacter.id).then(stages => {
+        if (!stages[1]) {
+          savePetmongStageImage(myCharacter.id, 1, myCharacter.image_url);
+        }
+        if (!stages[2] || !stages[3] || !stages[4]) {
+          startBackgroundStagePreGeneration(myCharacter);
+        }
+      }).catch(() => {});
     }
-  }, [currentUserProfile?.id]);
+  }, [myCharacter?.id, myCharacter?.image_url]);
 
-  const displayedCharacter = petmongCharacters.find(c => c.user_id === selectedRoomUserId) || (selectedRoomUserId === currentUserProfile?.id ? myCharacter : null);
-  const displayedOwner = familyMembers.find(m => m.id === selectedRoomUserId) || (selectedRoomUserId === currentUserProfile?.id ? currentUserProfile : null);
-  const isVisitingOther = selectedRoomUserId !== currentUserProfile?.id;
-  const activeRoomDrops = dropsByRoom[selectedRoomUserId] || [];
-
-  // 🎮 Real-time Petmong Game Vitals (Tamagotchi Engine)
-  const [petVitals, setPetVitals] = useState({
+  // 🎮 Real-time Petmong Game Vitals (Centralized via App.js & Supabase)
+  const [localPetVitals, setLocalPetVitals] = useState({
     hunger: 80,
     happiness: 85,
     cleanliness: 90,
     energy: 95,
   });
 
+  const activeVitals = propPetVitals || localPetVitals;
   const activeCharId = displayedCharacter?.id || currentUserProfile?.id || currentUser;
 
   useEffect(() => {
-    if (!activeCharId) return;
+    if (!activeCharId || propPetVitals) return;
     AsyncStorage.getItem(`@famlink_game_vitals_${activeCharId}`)
       .then(res => {
         if (res) {
           try {
-            setPetVitals(JSON.parse(res));
+            setLocalPetVitals(JSON.parse(res));
           } catch (e) {}
         }
       })
       .catch(() => {});
-  }, [activeCharId]);
+  }, [activeCharId, propPetVitals]);
 
   const handleUpdateVitals = (updater) => {
-    setPetVitals(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : { ...prev, ...updater };
-      if (activeCharId) {
-        AsyncStorage.setItem(`@famlink_game_vitals_${activeCharId}`, JSON.stringify(next)).catch(() => {});
-      }
-      return next;
-    });
+    if (propOnUpdateVitals) {
+      propOnUpdateVitals(updater);
+    } else {
+      setLocalPetVitals(prev => {
+        const next = typeof updater === 'function' ? updater(prev) : { ...prev, ...updater };
+        if (activeCharId) {
+          AsyncStorage.setItem(`@famlink_game_vitals_${activeCharId}`, JSON.stringify(next)).catch(() => {});
+        }
+        return next;
+      });
+    }
   };
 
   const handleGameGainExp = (amount = 5) => {
@@ -761,46 +805,263 @@ export default function InteriorScreen({
     }
   };
 
-  const handleGameCareAction = () => {
-    if (!isVisitingOther) return;
-    if (dailyCareCount >= MAX_DAILY_CARE) {
-      Alert.alert('오늘의 돌봄 완료! 💕', `오늘 가족 반려몽 돌봄(일일 ${MAX_DAILY_CARE}회)을 이미 모두 완료했습니다!`);
-      return;
-    }
-    const nextCare = dailyCareCount + 1;
-    setDailyCareCount(nextCare);
-    if (currentUserProfile?.id) {
-      const today = new Date().toISOString().split('T')[0];
-      const careKey = `PETMONG_CARE_${currentUserProfile.id}_${today}`;
-      AsyncStorage.setItem(careKey, String(nextCare)).catch(() => {});
-    }
-    if (onAwardPoints) {
-      onAwardPoints(1, `가족 반려몽 돌봄 보너스 (${nextCare}/${MAX_DAILY_CARE})`);
-    }
-    Alert.alert('가족 반려몽 돌봄 완료! 💖', `가족의 반려몽에게 맛있는 간식을 챙겨주었습니다!\n돌봄 보너스 +1P가 지급되었습니다. (${nextCare}/${MAX_DAILY_CARE}회)`);
-  };
+  const handleGameCareAction = (actionType = 'CARE', detail = null) => {
+    if (familyId && familyPetmong?.id && currentUserProfile?.id) {
+      const actionLabels = {
+        FEED: `${currentUserProfile.name || '가족'}님이 몽이에게 맛있는 ${detail?.name || '밥'}을 챙겨주었습니다 🥫`,
+        PLAY: `${currentUserProfile.name || '가족'}님이 몽이와 신나는 공놀이를 즐겼습니다 ⚽`,
+        BATH: `${currentUserProfile.name || '가족'}님이 몽이에게 보글보글 거품 목욕을 시켜주었습니다 🧼`,
+        SLEEP: `${currentUserProfile.name || '가족'}님이 몽이의 방 조명을 끄고 잠을 재워주었습니다 🌙`,
+        WAKE: `${currentUserProfile.name || '가족'}님이 몽이를 깨워 활기찬 아침을 열었습니다 ☀️`,
+      };
 
-  // Dynamic roaming characters: all characters in family EXCEPT the owner of the active room
-  const roamingList = petmongCharacters
-    .filter(c => c.user_id !== selectedRoomUserId)
-    .map((c, idx) => ({
-      ...c,
-      x: 10 + (idx * 28) % 70,
-      y: 54 + (idx * 14) % 24,
-    }))
-    .slice(0, MAX_ACTIVE_ROAMING);
+      const note = actionLabels[actionType] || `${currentUserProfile.name || '가족'}님이 반려몽을 따뜻하게 돌봐주었습니다 💕`;
 
-  useEffect(() => {
-    if (familyId && currentUserProfile?.id) {
-      const mine = petmongCharacters.find(c => c.user_id === currentUserProfile.id);
-      if (mine) {
-        setMyCharacter(mine);
-        setCreateModalVisible(false);
-      } else {
-        setCreateModalVisible(true);
+      try {
+        supabase.from('petmong_activities').insert({
+          family_id: familyId,
+          character_id: familyPetmong.id,
+          user_id: currentUserProfile.id,
+          activity_type: actionType,
+          notes: note,
+          exp_earned: 5,
+        }).then(() => {}, (e) => console.warn('Activity log error:', e));
+      } catch (e) {
+        console.warn('Activity log error:', e);
       }
     }
-  }, [familyId, currentUserProfile, petmongCharacters]);
+  };
+
+  // 1가족 1반려몽 구조: 단일 대표 펫이 거실 중심에서 자유롭게 활동
+  const roamingList = [];
+
+  useEffect(() => {
+    if (familyId) {
+      if (petmongCharacters && petmongCharacters.length > 0) {
+        setMyCharacter(petmongCharacters[0]);
+        setCreateModalVisible(false);
+      } else {
+        setMyCharacter(null);
+      }
+    }
+  }, [familyId, petmongCharacters]);
+
+  // -------------------------------------------------------------
+  // 반려친구 비밀 귓속말 & 감성 편지 배달부 (petmong_whispers)
+  // -------------------------------------------------------------
+  const fetchWhispers = useCallback(async () => {
+    if (!familyId) return;
+    const cacheKey = `@famlink_petmong_whispers_${familyId}`;
+    try {
+      // 1. Optimistic Local Load
+      const cached = await AsyncStorage.getItem(cacheKey);
+      if (cached) {
+        try {
+          setWhispers(JSON.parse(cached));
+        } catch (_) {}
+      }
+
+      // 2. Fetch from Supabase (if table exists)
+      const { data, error } = await supabase
+        .from('petmong_whispers')
+        .select('*')
+        .eq('family_id', familyId)
+        .order('created_at', { ascending: false });
+
+      if (!error && data) {
+        setWhispers(data);
+        AsyncStorage.setItem(cacheKey, JSON.stringify(data)).catch(() => {});
+      }
+    } catch (e) {
+      console.warn('fetchWhispers note (using local cache):', e?.message || e);
+    }
+  }, [familyId]);
+
+  useEffect(() => {
+    fetchWhispers();
+    if (!familyId) return;
+    let channel = null;
+    try {
+      channel = supabase
+        .channel(`whispers_${familyId}`)
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'petmong_whispers',
+          filter: `family_id=eq.${familyId}`,
+        }, () => {
+          fetchWhispers();
+        })
+        .subscribe();
+    } catch (subErr) {
+      console.warn('Whisper realtime subscribe note:', subErr);
+    }
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [familyId, fetchWhispers]);
+
+  const handleSendWhisper = async () => {
+    if (!whisperTargetUser) {
+      Alert.alert('알림', '귓속말을 전할 가족을 선택해주세요!');
+      return;
+    }
+    if (!whisperMessage.trim()) {
+      Alert.alert('알림', '전하고 싶은 따뜻한 한마디를 적어주세요!');
+      return;
+    }
+
+    try {
+      setIsSendingWhisper(true);
+      const cacheKey = `@famlink_petmong_whispers_${familyId}`;
+      const tempId = 'whisper_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+      const newWhisper = {
+        id: tempId,
+        family_id: familyId,
+        from_user_id: currentUserProfile?.id,
+        to_user_id: whisperTargetUser.id,
+        message: whisperMessage.trim(),
+        is_read: false,
+        created_at: new Date().toISOString(),
+      };
+
+      // 1. Optimistic Local Update (항상 즉시 저장 & 전송 성공)
+      setWhispers(prev => {
+        const next = [newWhisper, ...(prev || [])];
+        AsyncStorage.setItem(cacheKey, JSON.stringify(next)).catch(() => {});
+        return next;
+      });
+
+      // 2. Try Supabase Insert (DB 테이블 동기화)
+      try {
+        const { data, error } = await supabase
+          .from('petmong_whispers')
+          .insert({
+            family_id: familyId,
+            from_user_id: currentUserProfile?.id,
+            to_user_id: whisperTargetUser.id,
+            message: whisperMessage.trim(),
+            is_read: false,
+          })
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Supabase petmong_whispers insert error:', error);
+          if (error.code === '42501') {
+            Alert.alert(
+              'Supabase 권한 알림',
+              'petmong_whispers 테이블의 RLS 보안 정책으로 인해 저장이 차단되었습니다.\nSupabase SQL Editor에서 RLS 비활성화 쿼리를 실행해 주세요.'
+            );
+          }
+        } else if (data) {
+          setWhispers(prev => {
+            const next = prev.map(w => w.id === tempId ? data : w);
+            AsyncStorage.setItem(cacheKey, JSON.stringify(next)).catch(() => {});
+            return next;
+          });
+        }
+      } catch (dbErr) {
+        console.warn('Supabase petmong_whispers sync note (using local cache):', dbErr?.message || dbErr);
+      }
+
+      // 3. Log activity in petmong_activities (이미 활성화된 테이블)
+      try {
+        await supabase.from('petmong_activities').insert({
+          character_id: familyPetmong?.id,
+          user_id: currentUserProfile?.id,
+          activity_type: 'WHISPER',
+          notes: `${currentUserProfile?.name || '가족'}님이 ${whisperTargetUser.name}님에게 비밀 귓속말 편지를 맡겼습니다 💌`,
+          exp_earned: 5,
+        });
+      } catch (actErr) {
+        console.warn('Activity log error:', actErr);
+      }
+
+      if (onAwardExp && currentUserProfile?.id) {
+        onAwardExp(currentUserProfile.id, 5, '반려친구에게 귓속말 맡기기 (+5 EXP)');
+      }
+
+      setIsSendingWhisper(false);
+      setWhisperWriteModalVisible(false);
+      const targetName = whisperTargetUser.name;
+      const petName = familyPetmong?.name || '반려친구';
+      setWhisperMessage('');
+      setWhisperTargetUser(null);
+
+      Alert.alert(
+        `${petName}에게 전달 완료! 💌`,
+        `쉿! ${targetName}님이 거실에 들어오시면 ${petName}가 비밀 편지를 살짝 전해드릴게요! 🤫`
+      );
+    } catch (err) {
+      setIsSendingWhisper(false);
+      console.error('Send whisper error:', err);
+      Alert.alert('전송 안내', '귓속말을 저장하는 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.');
+    }
+  };
+
+  const handleConfirmReadWhisper = async (whisper) => {
+    if (!whisper?.id) return;
+    try {
+      const cacheKey = `@famlink_petmong_whispers_${familyId}`;
+      setWhispers(prev => {
+        const next = prev.map(w => w.id === whisper.id ? { ...w, is_read: true } : w);
+        AsyncStorage.setItem(cacheKey, JSON.stringify(next)).catch(() => {});
+        return next;
+      });
+
+      // Try update in Supabase
+      try {
+        await supabase
+          .from('petmong_whispers')
+          .update({ is_read: true })
+          .eq('id', whisper.id);
+      } catch (dbErr) {
+        console.warn('petmong_whispers update sync note:', dbErr);
+      }
+
+      if (onAwardExp && currentUserProfile?.id) {
+        onAwardExp(currentUserProfile.id, 10, '비밀 귓속말 확인 & 하트 보내기 (+10 EXP)');
+      }
+
+      const sender = familyMembers.find(m => m.id === whisper.from_user_id);
+
+      try {
+        await supabase.from('petmong_activities').insert({
+          character_id: familyPetmong?.id,
+          user_id: currentUserProfile?.id,
+          activity_type: 'WHISPER_READ',
+          notes: `${currentUserProfile?.name || '가족'}님이 ${sender?.name || '가족'}님의 비밀 귓속말을 읽고 하트를 보냈습니다! 💖`,
+          exp_earned: 10,
+        });
+      } catch (actErr) {
+        console.warn('Activity log error:', actErr);
+      }
+
+      setWhisperReadModalVisible(false);
+      setActiveWhisperToRead(null);
+
+      const petName = familyPetmong?.name || '반려친구';
+      Alert.alert(
+        '하트 전송 완료! 💖',
+        `${sender?.name || '가족'}님에게 감사의 마음이 전해졌습니다!\n우리 ${petName}도 사랑을 먹고 +10 EXP 성장했어요! 🌱`
+      );
+    } catch (e) {
+      console.warn('handleConfirmReadWhisper error:', e);
+      setWhisperReadModalVisible(false);
+      setActiveWhisperToRead(null);
+    }
+  };
+
+  const handleReplyWhisper = (whisper) => {
+    const sender = familyMembers.find(m => m.id === whisper.from_user_id);
+    setWhisperReadModalVisible(false);
+    setActiveWhisperToRead(null);
+    if (sender) {
+      setWhisperTargetUser(sender);
+    }
+    setWhisperWriteModalVisible(true);
+  };
 
   useEffect(() => {
     if (displayedCharacter?.image_url) {
@@ -826,90 +1087,28 @@ export default function InteriorScreen({
     }
   }, [displayedCharacter?.id, displayedCharacter?.image_url]);
 
-  // Method B: Image-to-Image AI Stage Evolution
+  // Method B: Image-to-Image AI Stage Evolution (Pre-generation Check & Instant Apply)
   const triggerAiEvolution = async (char, stage) => {
     try {
-      let base64Image = null;
-      if (char.image_url.startsWith('data:image')) {
-        base64Image = char.image_url;
-      } else {
-        const resp = await fetch(char.image_url);
-        const blob = await resp.blob();
-        base64Image = await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result);
-          reader.readAsDataURL(blob);
-        });
-      }
-
-      const clientApiKey = (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_GEMINI_API_KEY) || '';
       let evolvedImageUrl = null;
 
-      // 1. Try Supabase Edge Function first
+      // 1. Check if the stage image was already pre-generated in the background!
       try {
-        const { data, error } = await supabase.functions.invoke('generate-petmong', {
-          body: {
-            imageBase64: base64Image,
-            personality: char.personality || '다정한',
-            mode: 'evolve',
-            targetStage: stage.stage,
-            characterName: char.name,
-            apiKey: clientApiKey,
-          }
-        });
-        if (!error && data?.imageUrl) {
-          evolvedImageUrl = data.imageUrl;
+        const cachedStages = await getPetmongStageImages(char.id);
+        if (cachedStages && cachedStages[stage.stage]) {
+          evolvedImageUrl = cachedStages[stage.stage];
+          console.log(`[Instant Evolution] Using pre-generated Stage ${stage.stage} image!`);
         }
-      } catch (edgeErr) {
-        console.log('Edge function evolve try:', edgeErr);
+      } catch (cacheErr) {
+        console.warn('Cache check error:', cacheErr);
       }
 
-      // 2. Client-side Gemini + Imagen fallback if clientApiKey is available
-      if (!evolvedImageUrl && clientApiKey) {
+      // 2. If not pre-generated, generate on-demand using generateStageAiImage
+      if (!evolvedImageUrl) {
         try {
-          const cleanBase64 = base64Image.replace(/^data:image\/\w+;base64,/, '');
-          const visionResp = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${clientApiKey}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{
-                  parts: [
-                    { text: "Analyze this cute 2D pet monster. Describe its body color, shape, face traits, and cute vibe in 2 concise sentences so its evolved form retains 100% identity." },
-                    { inlineData: { mimeType: "image/jpeg", data: cleanBase64 } }
-                  ]
-                }]
-              })
-            }
-          );
-          let traits = "A cute 2D monster";
-          if (visionResp.ok) {
-            const vData = await visionResp.json();
-            traits = vData.candidates?.[0]?.content?.parts?.[0]?.text || traits;
-          }
-
-          const stagePrompt = getStageEvolutionPrompt(stage.stage, traits, char.personality);
-          const imagenResp = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${clientApiKey}`,
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                instances: [{ prompt: `${traits}. ${stagePrompt}` }],
-                parameters: { sampleCount: 1, aspectRatio: "1:1", outputMimeType: "image/jpeg" }
-              })
-            }
-          );
-          if (imagenResp.ok) {
-            const imgData = await imagenResp.json();
-            const b64 = imgData.predictions?.[0]?.bytesBase64Encoded;
-            if (b64) {
-              evolvedImageUrl = `data:image/jpeg;base64,${b64}`;
-            }
-          }
-        } catch (clientErr) {
-          console.log('Client AI evolve fallback:', clientErr);
+          evolvedImageUrl = await generateStageAiImage(char, stage.stage);
+        } catch (genErr) {
+          console.error('On-demand stage generation failed:', genErr);
         }
       }
 
@@ -1027,20 +1226,8 @@ export default function InteriorScreen({
       if (val !== null) setDailyCareCount(parseInt(val, 10) || 0);
     }).catch(() => {});
 
-    // 3. Load theme preference per room & idle drops
+    // 3. Load idle drops
     if (familyId) {
-      const themesKey = `PETMONG_ROOM_THEMES_${familyId}`;
-      AsyncStorage.getItem(themesKey).then(val => {
-        if (val) {
-          try {
-            const parsed = JSON.parse(val);
-            if (parsed && typeof parsed === 'object') {
-              setRoomThemesByRoom(parsed);
-            }
-          } catch (e) {}
-        }
-      }).catch(() => {});
-
       const dropsKey = `PETMONG_ROOM_DROPS_${familyId}`;
       const lastTimeKey = `PETMONG_LAST_IDLE_TIME_${familyId}`;
 
@@ -1102,21 +1289,14 @@ export default function InteriorScreen({
         .ilike('action_type', 'ROOM_THEME_UPDATE:%')
         .order('created_at', { ascending: true })
         .then(({ data, error }) => {
-          if (data && !error) {
-            const dbThemes = {};
-            data.forEach(row => {
-              // Format: ROOM_THEME_UPDATE:userId:themeId
-              const parts = row.action_type.split(':');
-              if (parts.length >= 3) {
-                const uId = parts[1];
-                const tId = parts[2];
-                if (ROOM_THEMES.some(t => t.id === tId)) {
-                  dbThemes[uId] = tId;
-                }
+          if (data && !error && data.length > 0) {
+            const lastRow = data[data.length - 1];
+            const parts = lastRow.action_type.split(':');
+            if (parts.length >= 3) {
+              const tId = parts[2];
+              if (ROOM_THEMES.some(t => t.id === tId)) {
+                setFamilyRoomTheme(tId);
               }
-            });
-            if (Object.keys(dbThemes).length > 0) {
-              setRoomThemesByRoom(prev => ({ ...prev, ...dbThemes }));
             }
           }
         })
@@ -1142,7 +1322,7 @@ export default function InteriorScreen({
     }
   }, [currentUserProfile?.id, myCharacter?.id, familyId, familyMembers.length, dailyHarvestCount]);
 
-  // Real-time Supabase listener for Room Theme Updates across incognito/different devices
+  // Real-time Supabase listener for Family Room Theme Updates across all family devices
   useEffect(() => {
     if (!familyId) return;
     const themeChannel = supabase
@@ -1160,14 +1340,10 @@ export default function InteriorScreen({
           if (actionType.startsWith('ROOM_THEME_UPDATE:')) {
             const parts = actionType.split(':');
             if (parts.length >= 3) {
-              const uId = parts[1];
               const tId = parts[2];
               if (ROOM_THEMES.some(t => t.id === tId)) {
-                setRoomThemesByRoom(prev => {
-                  const updated = { ...prev, [uId]: tId };
-                  AsyncStorage.setItem(`PETMONG_ROOM_THEMES_${familyId}`, JSON.stringify(updated)).catch(() => {});
-                  return updated;
-                });
+                setFamilyRoomTheme(tId);
+                AsyncStorage.setItem(`PETMONG_FAMILY_ROOM_THEME_${familyId}`, tId).catch(() => {});
               }
             }
           }
@@ -1357,7 +1533,7 @@ export default function InteriorScreen({
           actor_id: myCharacter?.id || displayedCharacter.id,
           target_id: displayedCharacter.id,
           action_type: `가족 반려몽 방울 돌봄 품앗이 (+1P) (${nextCare}/${MAX_DAILY_CARE})`,
-        }).then(() => {}).catch(() => {});
+        }).then(() => {}, (e) => console.warn('Activity log error:', e));
       }
 
       Alert.alert(
@@ -1480,7 +1656,7 @@ export default function InteriorScreen({
           actor_id: myCharacter?.id || displayedCharacter.id,
           target_id: displayedCharacter.id,
           action_type: `가족 반려몽 방울 일괄 돌봄 (+${careCountToHarvest}P) (${nextCare}/${MAX_DAILY_CARE})`,
-        }).then(() => {}).catch(() => {});
+        }).then(() => {}, (e) => console.warn('Activity log error:', e));
       }
 
       Alert.alert(
@@ -1549,34 +1725,27 @@ export default function InteriorScreen({
   };
 
   const handleSelectTheme = (themeId) => {
-    if (!currentUserProfile?.id) return;
-    const updatedThemes = {
-      ...roomThemesByRoom,
-      [currentUserProfile.id]: themeId,
-    };
-    setRoomThemesByRoom(updatedThemes);
+    setFamilyRoomTheme(themeId);
     setThemeModalVisible(false);
 
-    // 1. Local storage caching
+    // 1. Local storage caching for family
     if (familyId) {
-      AsyncStorage.setItem(`PETMONG_ROOM_THEMES_${familyId}`, JSON.stringify(updatedThemes)).catch(() => {});
+      AsyncStorage.setItem(`PETMONG_FAMILY_ROOM_THEME_${familyId}`, themeId).catch(() => {});
     }
 
-    // 2. Realtime sync across devices/incognito via Supabase
+    // 2. Realtime sync across all family devices via Supabase
     if (familyId) {
-      const myPetId = myCharacter?.id || (displayedCharacter?.user_id === currentUserProfile.id ? displayedCharacter.id : null);
-      if (myPetId) {
-        supabase.from('petmong_activities').insert({
-          family_id: familyId,
-          actor_id: myPetId,
-          target_id: myPetId,
-          action_type: `ROOM_THEME_UPDATE:${currentUserProfile.id}:${themeId}`,
-        }).then(() => {
-          console.log('Successfully synced room theme to Supabase');
-        }).catch(err => {
-          console.log('Error syncing room theme to DB:', err);
-        });
-      }
+      const petId = familyPetmong?.id || '00000000-0000-0000-0000-000000000000';
+      supabase.from('petmong_activities').insert({
+        family_id: familyId,
+        actor_id: petId,
+        target_id: petId,
+        action_type: `ROOM_THEME_UPDATE:${familyId}:${themeId}`,
+      }).then(() => {
+        console.log('Successfully synced family room theme to Supabase');
+      }).catch(err => {
+        console.log('Error syncing room theme to DB:', err);
+      });
     }
   };
 
@@ -1593,9 +1762,16 @@ export default function InteriorScreen({
   };
 
   // Handle AI Character Creation
+  // Handle AI Character Creation & Reincarnation (Image-to-Image with 500P option)
   const handlePickImageAndCreate = async () => {
     if (!newName.trim()) {
       Alert.alert('알림', '반려몽의 이름을 지어주세요!');
+      return;
+    }
+
+    const isModifying = !!familyPetmong?.id;
+    if (isModifying && (points || 0) < 500) {
+      Alert.alert('포인트 부족', `반려몽 외형 변경에는 500 P가 필요합니다.\n현재 가족 보유 포인트: ${points || 0} P`);
       return;
     }
 
@@ -1615,53 +1791,394 @@ export default function InteriorScreen({
 
     if (!result.canceled && result.assets[0].base64) {
       setIsGenerating(true);
-      try {
-        const { data, error } = await supabase.functions.invoke('generate-petmong', {
-          body: { imageBase64: result.assets[0].base64, personality: newPersonality }
-        });
+      const clientApiKey = (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_GEMINI_API_KEY) || '';
+      let generatedImageUrl = null;
+      let detailedError = null;
+      let detectedColor = '#FFAAA6';
+      let detectedSpecies = 'fantasy';
 
-        if (error) throw new Error(error.message || '서버 응답 오류');
+      // 1. Client-side AI pipeline (Gemini 2.5 Flash Vision -> Gemini 2.5 Flash Image Multimodal Image-to-Image)
+      if (clientApiKey) {
+        try {
+          const cleanBase64 = result.assets[0].base64.replace(/^data:image\/\w+;base64,/, '');
 
-        const newCharData = {
-          user_id: currentUserProfile.id,
-          family_id: familyId,
-          name: newName.trim(),
-          emoji: null,
-          image_url: data.imageUrl,
-          personality: newPersonality,
-          level: 1,
-          exp: 0,
-        };
+          // Step 1: Vision analysis via active gemini-2.5-flash
+          try {
+            const visionResp = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${clientApiKey}`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  contents: [{
+                    parts: [
+                      { text: 'Analyze this photo (person, pet, or avatar). Which of our 10 animal lineages does this image match best in facial features, expression, or vibe? Choose exactly one from [canine, feline, rabbit, bear, bird, fox, deer, rodent, dragon, aquatic]. Return a single line with format: SPECIES: [chosen_species], COLOR: #HEXCOLOR, VIBE: 1-sentence vibe. Color must be a pleasing pastel hex code.' },
+                      { inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } }
+                    ]
+                  }]
+                })
+              }
+            );
 
-        const { data: insertedChar, error: insertError } = await supabase
-          .from('petmong_characters')
-          .insert(newCharData)
-          .select()
-          .single();
+            if (visionResp.ok) {
+              const vData = await visionResp.json();
+              const txt = vData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+              const match = txt.match(/#[0-9a-fA-F]{6}/);
+              if (match) detectedColor = match[0];
 
-        if (insertError) throw insertError;
+              const lower = txt.toLowerCase();
+              if (lower.includes('canine') || lower.includes('dog') || lower.includes('wolf')) detectedSpecies = 'canine';
+              else if (lower.includes('feline') || lower.includes('cat') || lower.includes('tiger') || lower.includes('panther')) detectedSpecies = 'feline';
+              else if (lower.includes('rabbit') || lower.includes('bunny') || lower.includes('hare')) detectedSpecies = 'rabbit';
+              else if (lower.includes('bear') || lower.includes('panda')) detectedSpecies = 'bear';
+              else if (lower.includes('bird') || lower.includes('avian') || lower.includes('chick') || lower.includes('phoenix')) detectedSpecies = 'bird';
+              else if (lower.includes('fox') || lower.includes('kitsune')) detectedSpecies = 'fox';
+              else if (lower.includes('deer') || lower.includes('elk') || lower.includes('stag')) detectedSpecies = 'deer';
+              else if (lower.includes('rodent') || lower.includes('hamster') || lower.includes('squirrel')) detectedSpecies = 'rodent';
+              else if (lower.includes('dragon') || lower.includes('wyvern')) detectedSpecies = 'dragon';
+              else if (lower.includes('aquatic') || lower.includes('seal') || lower.includes('whale') || lower.includes('otter')) detectedSpecies = 'aquatic';
+            }
+          } catch (visionErr) {
+            console.warn('Vision photo analysis fallback:', visionErr);
+          }
 
-        setIsGenerating(false);
-        setMyCharacter(insertedChar);
-        setCreateModalVisible(false);
-        setPetmongCharacters(prev => [...prev, insertedChar]);
-        Alert.alert('탄생 완료! 🎉', '나를 똑닮은 귀여운 반려몽이 부화했어요!');
-      } catch (err) {
-        setIsGenerating(false);
-        console.error('Edge function error:', err);
-        Alert.alert('오류 발생', '반려몽 생성에 실패했습니다. 사진을 다시 올려주세요.');
+          // Step 2: Genuine Multimodal Image-to-Image Generation with uploaded photo
+          const imgCandidates = ['gemini-2.5-flash-image', 'gemini-3.1-flash-image'];
+          for (const m of imgCandidates) {
+            try {
+              const personalityTraitMap = {
+                '다정한': 'affectionate, gentle and warm smiling expression',
+                '장난꾸러기': 'playful, mischievous expression with a cheeky grin',
+                '잠꾸러기': 'sleepy, cozy expression with eyelids drooping sleepily',
+                '애교쟁이': 'super cute, charming and loving sparkling eyes expression',
+                '호기심많은': 'curious, wide-eyed inquisitive expression',
+              };
+              const trait = personalityTraitMap[newPersonality] || `${newPersonality} expression`;
+              const targetStageNum = familyPetmong?.level ? (familyPetmong.level >= 20 ? 4 : familyPetmong.level >= 10 ? 3 : familyPetmong.level >= 5 ? 2 : 1) : 1;
+              const finalPrompt = `IMAGE-TO-IMAGE CREATURE MASCOT GENERATION:
+Transform the uploaded input photo into a 2D flat kawaii vector pet creature mascot hatched from an egg in the 'Sumone' app art style (Stage ${targetStageNum}).
+Crucial requirements:
+1. Inherit the facial features, eye shape, distinct expression, and joyful warm vibe directly from the provided input image.
+2. Species archetype: cute ${detectedSpecies} lineage creature.
+3. Primary theme color: ${detectedColor}, expressing ${trait}.
+4. Vector art: Minimalist, clean thick lines, pastel tones, zero realistic human skin photorealism, fully rendered as an adorable creature mascot.
+5. Plain solid pure white background (#FFFFFF), centered character.`;
+
+              const imgResp = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${clientApiKey}`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    contents: [{
+                      parts: [
+                        { text: finalPrompt },
+                        { inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } }
+                      ]
+                    }]
+                  })
+                }
+              );
+              if (imgResp.ok) {
+                const imgData = await imgResp.json();
+                const parts = imgData.candidates?.[0]?.content?.parts || [];
+                const imgPart = parts.find(p => p.inlineData);
+                if (imgPart?.inlineData?.data) {
+                  generatedImageUrl = `data:${imgPart.inlineData.mimeType || 'image/jpeg'};base64,${imgPart.inlineData.data}`;
+                  break;
+                }
+              }
+            } catch (imgErr) {
+              console.warn(`Image-to-image attempt failed on ${m}:`, imgErr);
+            }
+          }
+
+          // Step 3: Seamless Vector Petmong Generation (tailored to user's photo color, personality, and species)
+          if (!generatedImageUrl) {
+            const targetStageNum = familyPetmong?.level ? (familyPetmong.level >= 20 ? 4 : familyPetmong.level >= 10 ? 3 : familyPetmong.level >= 5 ? 2 : 1) : 1;
+            generatedImageUrl = createPetmongSvg(targetStageNum, detectedColor, newPersonality, detectedSpecies);
+          }
+        } catch (clientErr) {
+          console.error('Client direct generation failed:', clientErr);
+          detailedError = clientErr?.message || String(clientErr);
+        }
+      } else {
+        // Fallback: Supabase Edge Function if clientApiKey is not set
+        try {
+          const { data, error } = await supabase.functions.invoke('generate-petmong', {
+            body: {
+              imageBase64: result.assets[0].base64,
+              personality: newPersonality,
+            }
+          });
+
+          if (error) {
+            let errMsg = error.message;
+            if (error.context) {
+              try {
+                const errJson = await error.context.json();
+                if (errJson?.error) errMsg = errJson.error;
+              } catch (_) {}
+            }
+            throw new Error(errMsg);
+          }
+
+          if (data?.imageUrl) {
+            generatedImageUrl = data.imageUrl;
+          }
+        } catch (edgeErr) {
+          console.warn('Edge Function create error:', edgeErr);
+          detailedError = edgeErr?.message || String(edgeErr);
+        }
       }
+
+      // 3. If generation succeeded, save/update in database
+      if (generatedImageUrl) {
+        try {
+          const SPECIES_EMOJI_MAP = {
+            canine: '🐶',
+            feline: '🐱',
+            rabbit: '🐰',
+            bear: '🐻',
+            bird: '🐥',
+            fox: '🦊',
+            deer: '🦌',
+            rodent: '🐹',
+            dragon: '🐲',
+            aquatic: '🦭',
+          };
+          const matchedEmoji = SPECIES_EMOJI_MAP[detectedSpecies] || newEmoji || '🐶';
+
+          if (isModifying && familyPetmong?.id) {
+            // Re-incarnation / Appearance Modification: Deduct 500P, UPDATE existing character, preserve level & exp
+            if (onDeductPoints) {
+              await onDeductPoints(500, '반려몽 외형 변경/환생');
+            }
+
+            const updateData = {
+              name: newName.trim(),
+              emoji: matchedEmoji,
+              image_url: generatedImageUrl,
+              personality: newPersonality,
+              updated_at: new Date().toISOString(),
+            };
+
+            const { data: updatedChar, error: updateError } = await supabase
+              .from('petmong_characters')
+              .update(updateData)
+              .eq('id', familyPetmong.id)
+              .select()
+              .single();
+
+            if (updateError) throw updateError;
+
+            try {
+              await supabase.from('petmong_activities').insert({
+                character_id: familyPetmong.id,
+                user_id: currentUserProfile.id,
+                activity_type: 'REINCARNATION',
+                notes: `${currentUserProfile.name || '가족'}님이 500P로 우리 반려몽의 외형을 새로 꾸며주었습니다! 🪄`,
+                exp_earned: 0,
+              });
+            } catch (actErr) {
+              console.warn('Activity log error:', actErr);
+            }
+
+            setIsGenerating(false);
+            setMyCharacter(updatedChar);
+            setCreateModalVisible(false);
+            setPetmongCharacters(prev => prev.map(c => c.id === updatedChar.id ? updatedChar : c));
+            Alert.alert('외형 변경 완료! ✨', `500 P를 사용하여 ${newName.trim()}(이)의 외형이 새롭게 환생했습니다! 기존 레벨과 경험치는 그대로 유지됩니다.`);
+
+            if (updatedChar.id && updatedChar.image_url) {
+              const currentStage = (updatedChar.level >= 20 ? 4 : updatedChar.level >= 10 ? 3 : updatedChar.level >= 5 ? 2 : 1);
+              savePetmongStageImage(updatedChar.id, currentStage, updatedChar.image_url);
+            }
+            return;
+          } else {
+            // Initial Creation: Free
+            const newCharData = {
+              user_id: currentUserProfile.id,
+              family_id: familyId,
+              name: newName.trim(),
+              emoji: matchedEmoji,
+              image_url: generatedImageUrl,
+              personality: newPersonality,
+              level: 1,
+              exp: 0,
+            };
+
+            const { data: insertedChar, error: insertError } = await supabase
+              .from('petmong_characters')
+              .insert(newCharData)
+              .select()
+              .single();
+
+            if (insertError) throw insertError;
+
+            setIsGenerating(false);
+            setMyCharacter(insertedChar);
+            setCreateModalVisible(false);
+            setPetmongCharacters(prev => [...prev, insertedChar]);
+            Alert.alert('탄생 완료! 🎉', '나를 똑닮은 귀여운 우리 가족 수호 반려몽이 부화했어요!');
+
+            if (insertedChar.id && insertedChar.image_url) {
+              savePetmongStageImage(insertedChar.id, 1, insertedChar.image_url);
+              startBackgroundStagePreGeneration(insertedChar, (stage, url) => {
+                console.log(`[Stage Pre-Gen] Stage ${stage} completed for ${insertedChar.name}`);
+              });
+            }
+            return;
+          }
+        } catch (insertErr) {
+          setIsGenerating(false);
+          console.error('Database save error:', insertErr);
+          Alert.alert('오류', '반려몽 저장에 실패했습니다.');
+          return;
+        }
+      }
+
+      // 4. If AI Generation failed, prompt fallback option
+      setIsGenerating(false);
+      const isLeakedOrAuth = detailedError && (
+        detailedError.includes('leaked') ||
+        detailedError.includes('PERMISSION_DENIED') ||
+        detailedError.includes('API key') ||
+        detailedError.includes('403') ||
+        detailedError.includes('401')
+      );
+
+      const alertTitle = isLeakedOrAuth ? 'AI API 키 확인 필요' : '반려몽 외형 생성 실패';
+      const alertMsg = isLeakedOrAuth
+        ? 'Google Gemini API 키가 차단되었거나 등록되지 않았습니다.\n(.env 파일에 EXPO_PUBLIC_GEMINI_API_KEY 설정 필요)\n\n기본 귀여운 꼬물이 몽이 외형으로 적용하시겠습니까?'
+        : 'AI 이미지 생성 서버 응답이 원활하지 않습니다.\n기본 귀여운 꼬물이 몽이 외형으로 적용하시겠습니까?';
+
+      Alert.alert(
+        alertTitle,
+        alertMsg,
+        [
+          { text: '취소', style: 'cancel' },
+          {
+            text: isModifying ? '기본 외형으로 변경' : '기본 몽이로 부화 🐣',
+            onPress: async () => {
+              try {
+                setIsGenerating(true);
+                if (isModifying && familyPetmong?.id) {
+                  if (onDeductPoints) await onDeductPoints(500, '반려몽 외형 변경');
+                  const updateData = {
+                    name: newName.trim(),
+                    emoji: '🐣',
+                    image_url: null,
+                    personality: newPersonality,
+                    updated_at: new Date().toISOString(),
+                  };
+                  const { data: updatedChar, error: updateError } = await supabase
+                    .from('petmong_characters')
+                    .update(updateData)
+                    .eq('id', familyPetmong.id)
+                    .select()
+                    .single();
+                  if (updateError) throw updateError;
+                  setIsGenerating(false);
+                  setMyCharacter(updatedChar);
+                  setCreateModalVisible(false);
+                  setPetmongCharacters(prev => prev.map(c => c.id === updatedChar.id ? updatedChar : c));
+                  Alert.alert('외형 변경 완료! ✨', '기본 꼬물이 몽이 외형으로 변경되었습니다!');
+                  return;
+                }
+
+                // Initial creation fallback
+                const newCharData = {
+                  user_id: currentUserProfile.id,
+                  family_id: familyId,
+                  name: newName.trim(),
+                  emoji: '🐣',
+                  image_url: null,
+                  personality: newPersonality,
+                  level: 1,
+                  exp: 0,
+                };
+                const { data: insertedChar, error: insertError } = await supabase
+                  .from('petmong_characters')
+                  .insert(newCharData)
+                  .select()
+                  .single();
+                if (insertError) throw insertError;
+                setIsGenerating(false);
+                setMyCharacter(insertedChar);
+                setCreateModalVisible(false);
+                setPetmongCharacters(prev => [...prev, insertedChar]);
+                Alert.alert('탄생 완료! 🎉', '귀여운 아기 꼬물이 몽이가 부화했어요!');
+              } catch (e) {
+                setIsGenerating(false);
+                Alert.alert('오류', '반려몽 생성에 실패했습니다.');
+              }
+            }
+          }
+        ]
+      );
     }
   };
 
-  // Handle Quick Character Creation with Emoji
+  // Handle Quick Character Creation & Appearance Change with Emoji (500P for modification)
   const handleCreateWithEmoji = async () => {
     if (!newName.trim()) {
       Alert.alert('알림', '반려몽의 이름을 지어주세요!');
       return;
     }
+
+    const isModifying = !!familyPetmong?.id;
+    if (isModifying && (points || 0) < 500) {
+      Alert.alert('포인트 부족', `반려몽 외형 변경에는 500 P가 필요합니다.\n현재 가족 보유 포인트: ${points || 0} P`);
+      return;
+    }
+
     try {
       setIsGenerating(true);
+
+      if (isModifying && familyPetmong?.id) {
+        if (onDeductPoints) {
+          await onDeductPoints(500, '반려몽 외형 변경');
+        }
+
+        const updateData = {
+          name: newName.trim(),
+          emoji: newEmoji || '🐶',
+          image_url: null,
+          personality: newPersonality,
+          updated_at: new Date().toISOString(),
+        };
+
+        const { data: updatedChar, error: updateError } = await supabase
+          .from('petmong_characters')
+          .update(updateData)
+          .eq('id', familyPetmong.id)
+          .select()
+          .single();
+
+        if (updateError) throw updateError;
+
+        try {
+          await supabase.from('petmong_activities').insert({
+            character_id: familyPetmong.id,
+            user_id: currentUserProfile.id,
+            activity_type: 'REINCARNATION',
+            notes: `${currentUserProfile.name || '가족'}님이 500P로 우리 반려몽의 모습을 ${newEmoji}로 변경했습니다!`,
+            exp_earned: 0,
+          });
+        } catch (actErr) {
+          console.warn('Activity log error:', actErr);
+        }
+
+        setIsGenerating(false);
+        setMyCharacter(updatedChar);
+        setCreateModalVisible(false);
+        setPetmongCharacters(prev => prev.map(c => c.id === updatedChar.id ? updatedChar : c));
+        Alert.alert('외형 변경 완료! ✨', `500 P를 사용하여 ${newName.trim()}(이)의 외형이 새롭게 변경되었습니다!`);
+        return;
+      }
+
+      // Initial Free Creation
       const newCharData = {
         user_id: currentUserProfile.id,
         family_id: familyId,
@@ -1729,105 +2246,80 @@ export default function InteriorScreen({
         cachePolicy="memory-disk"
       />
 
-      {/* Top Floating Glass Header (Family Room Tabs & Quick Actions) */}
+      {/* Top Floating Glass Header (우리 가족 거실) */}
       <View style={styles.topFloatingHeader}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.familyTabsScroll}
-          contentContainerStyle={styles.familyTabsRow}
-        >
-          {/* My Room Chip */}
-          <TouchableOpacity
-            style={[
-              styles.familyRoomChip,
-              selectedRoomUserId === currentUserProfile?.id && styles.familyRoomChipActive,
-            ]}
-            onPress={() => setSelectedRoomUserId(currentUserProfile?.id)}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.familyRoomChipAvatar}>🏠</Text>
-            <Text
-              style={[
-                styles.familyRoomChipText,
-                selectedRoomUserId === currentUserProfile?.id && styles.familyRoomChipTextActive,
-              ]}
+        <View style={styles.familyRoomBadgeContainer}>
+          {familyPetmong ? (
+            <TouchableOpacity
+              style={styles.familyPetmongPill}
+              onPress={() => {
+                setGrowthBookTargetChar(displayedCharacter || myCharacter);
+                setGrowthBookInitialTab('growth');
+                setFamilyBookModalVisible(true);
+              }}
+              activeOpacity={0.75}
             >
-              내 방
-            </Text>
-            {myCharacter && (
-              <Text style={{ fontSize: 11, marginLeft: 3 }}>
-                {myCharacter.emoji || '🐾'}
+              <Text style={{ fontSize: 13, marginRight: 4 }}>
+                {familyPetmong.emoji || '🐾'}
               </Text>
-            )}
-          </TouchableOpacity>
+              <Text style={styles.familyPetmongPillText}>
+                {familyPetmong.name}
+              </Text>
+              <View style={styles.petLevelTag}>
+                <Text style={styles.petLevelTagText}>Lv.{familyPetmong.level || 1}</Text>
+              </View>
+              <BookOpen size={12} color="#E11D48" style={{ marginLeft: 5 }} />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.familyPetmongPill}>
+              <Text style={{ fontSize: 13, marginRight: 4 }}>🏡</Text>
+              <Text style={styles.familyPetmongPillText}>우리 가족 거실</Text>
+            </View>
+          )}
+        </View>
 
-          {/* Other Family Members' Rooms Chips */}
-          {familyMembers
-            .filter((m) => m.id !== currentUserProfile?.id)
-            .map((member) => {
-              const memberPet = petmongCharacters.find(c => c.user_id === member.id);
-              const isSelected = selectedRoomUserId === member.id;
-              return (
-                <TouchableOpacity
-                  key={member.id}
-                  style={[
-                    styles.familyRoomChip,
-                    isSelected && styles.familyRoomChipActive,
-                  ]}
-                  onPress={() => setSelectedRoomUserId(member.id)}
-                  activeOpacity={0.8}
-                >
-                  <UserAvatar avatar={member.avatar} size={18} style={{ marginRight: 6 }} />
-                  <Text
-                    style={[
-                      styles.familyRoomChipText,
-                      isSelected && styles.familyRoomChipTextActive,
-                    ]}
-                  >
-                    {member.name}의 방
-                  </Text>
-                  {memberPet && (
-                    <Text style={{ fontSize: 11, marginLeft: 3 }}>
-                      {memberPet.emoji || '🐾'}
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-        </ScrollView>
-
-        {/* Top Right Action Icons */}
+        {/* Top Right Action Icons (2 Actions: 귓속말, 거실 꾸미기) */}
         <View style={styles.topActionsRow}>
-          {/* Room Theme Selector (Active for my room, informs owner theme when visiting) */}
+          {/* 1. Secret Whisper Courier Button */}
+          {displayedCharacter && (
+            <TouchableOpacity
+              style={[
+                styles.topActionIconBtn,
+                styles.topActionIconBtnPink,
+                unreadWhispers.length > 0 && styles.topActionIconBtnPinkActive,
+              ]}
+              onPress={() => {
+                if (unreadWhispers.length > 0) {
+                  setActiveWhisperToRead(unreadWhispers[0]);
+                  setWhisperReadModalVisible(true);
+                } else {
+                  setWhisperWriteModalVisible(true);
+                }
+              }}
+              activeOpacity={0.8}
+            >
+              <Mail size={14} color="#FF4D6D" />
+              <Text style={[styles.topActionBtnText, { color: '#FF4D6D' }]}>
+                귓속말{unreadWhispers.length > 0 ? ` (${unreadWhispers.length})` : ' 💌'}
+              </Text>
+              {unreadWhispers.length > 0 && (
+                <View style={styles.unreadBadgeDot} />
+              )}
+            </TouchableOpacity>
+          )}
+
+          {/* 2. Decorate & Customize Hub (Room Theme + Appearance) */}
           <TouchableOpacity
-            style={[styles.topActionIconBtn, isVisitingOther && { opacity: 0.85 }]}
+            style={[styles.topActionIconBtn, styles.topActionIconBtnPurple]}
             onPress={() => {
-              if (isVisitingOther) {
-                const currentThemeObj = ROOM_THEMES.find(t => t.id === activeRoomTheme) || ROOM_THEMES[0];
-                Alert.alert(
-                  '방 테마 안내 🏡',
-                  `${displayedOwner?.name || '가족'} 님이 설정한 '${currentThemeObj.name}' 테마입니다.\n방 테마 변경은 '내 방'에서 자유롭게 하실 수 있어요!`
-                );
-              } else {
-                setThemeModalVisible(true);
-              }
+              setDecorModalTab('theme');
+              setDecorModalVisible(true);
             }}
             activeOpacity={0.8}
           >
-            <Palette size={14} color="#D9534F" />
-            <Text style={styles.topActionBtnText}>테마</Text>
-          </TouchableOpacity>
-
-          {/* Family Pet Book Modal */}
-          <TouchableOpacity
-            style={[styles.topActionIconBtn, styles.topActionIconBtnBlue]}
-            onPress={() => setFamilyBookModalVisible(true)}
-            activeOpacity={0.8}
-          >
-            <BookOpen size={14} color="#2563EB" />
-            <Text style={[styles.topActionBtnText, { color: '#2563EB' }]}>
-              도감 ({petmongCharacters.length})
+            <Palette size={14} color="#7C3AED" />
+            <Text style={[styles.topActionBtnText, { color: '#7C3AED' }]}>
+              거실 테마
             </Text>
           </TouchableOpacity>
         </View>
@@ -1842,7 +2334,7 @@ export default function InteriorScreen({
           visitorCharacter={myCharacter}
           theme={activeRoomTheme}
           insets={insets}
-          vitals={petVitals}
+          vitals={activeVitals}
           onUpdateVitals={handleUpdateVitals}
           onGainExp={handleGameGainExp}
           onAwardPoints={onAwardPoints}
@@ -1850,142 +2342,273 @@ export default function InteriorScreen({
           maxDailyCare={MAX_DAILY_CARE}
           onCareAction={handleGameCareAction}
           transparentUrl={displayedTransparentUrl || transparentImageCache.get(displayedCharacter.image_url)}
+          onOpenGrowthBook={() => {
+            setGrowthBookTargetChar(displayedCharacter || myCharacter);
+            setGrowthBookInitialTab('growth');
+            setFamilyBookModalVisible(true);
+          }}
+          unreadWhispers={unreadWhispers}
+          onOpenWhisper={(w) => {
+            setActiveWhisperToRead(w);
+            setWhisperReadModalVisible(true);
+          }}
+          onOpenWriteWhisper={() => {
+            setWhisperWriteModalVisible(true);
+          }}
         />
       ) : (
         /* Empty Room Banner */
         <View style={styles.fullscreenOverlayCanvas} pointerEvents="box-none">
           <View style={styles.createPromptBanner}>
             <Text style={styles.createPromptTitle}>
-              {isVisitingOther
-                ? `${displayedOwner?.name || '가족'} 님의 방`
-                : '아늑한 우리 가족의 방 🏡'}
+              아늑한 우리 가족의 거실 🏡
             </Text>
             <Text style={styles.createPromptSub}>
-              {isVisitingOther
-                ? '아직 반려몽이 태어나지 않은 방입니다.'
-                : '나를 쏙 닮은 귀여운 AI 반려몽을 입주시켜보세요!'}
+              온 가족이 함께 돌보고 키워나갈 우리 집 대표 AI 수호 반려몽을 입주시켜보세요!
             </Text>
-            {!isVisitingOther && (
-              <TouchableOpacity
-                style={styles.createPromptBtn}
-                onPress={() => setCreateModalVisible(true)}
-                activeOpacity={0.8}
-              >
-                <Sparkles size={16} color="#FFFFFF" />
-                <Text style={styles.createPromptBtnText}>반려몽 태어나기 🐣</Text>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity
+              style={styles.createPromptBtn}
+              onPress={() => setCreateModalVisible(true)}
+              activeOpacity={0.8}
+            >
+              <Sparkles size={16} color="#FFFFFF" />
+              <Text style={styles.createPromptBtnText}>우리 가족 반려몽 태어나기 🐣</Text>
+            </TouchableOpacity>
           </View>
         </View>
       )}
 
-      {/* AI Character Creation Modal (FamLink Unified Style - Identical to SmallTalkScreen) */}
+      {/* Unified Decorate & Customize Modal (거실 테마 & 반려몽 외형 변경) */}
       <Modal
         animationType="slide"
         transparent={true}
-        visible={createModalVisible}
-        onRequestClose={() => setCreateModalVisible(false)}
+        visible={decorModalVisible}
+        onRequestClose={() => setDecorModalVisible(false)}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
         >
           <View style={styles.modalView}>
+            {/* Modal Header */}
             <View style={styles.modalHeaderRow}>
               <View style={styles.modalHeaderTitleRow}>
-                <Sparkles size={20} color="#FF7E82" style={{ marginRight: 6 }} />
-                <Text style={styles.modalHeader}>나만의 AI 반려몽 태어나기 🐣</Text>
+                <Sparkles size={20} color="#7C3AED" style={{ marginRight: 6 }} />
+                <Text style={styles.modalHeader}>거실 테마 & 반려친구 ✨</Text>
               </View>
-              <TouchableOpacity onPress={() => setCreateModalVisible(false)}>
+              <TouchableOpacity onPress={() => setDecorModalVisible(false)}>
                 <X size={20} color="#8E8E93" />
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.modalSubDesc}>
-              얼굴 사진을 올리면 AI가 나를 닮은 귀여운 맞춤 캐릭터 반려몽을 만들어 드려요!
-            </Text>
-
-            <Text style={styles.modalLabel}>반려몽 이름</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="예: 몽몽이"
-              value={newName}
-              onChangeText={setNewName}
-              placeholderTextColor="#AEAEB2"
-            />
-
-            <Text style={styles.modalLabel}>성격 선택</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row', marginBottom: 12 }}>
-              {PERSONALITY_OPTIONS.map((p) => (
+            {/* Segmented Tab Controls (Only if pet exists) */}
+            {displayedCharacter && (
+              <View style={styles.decorSegmentRow}>
                 <TouchableOpacity
-                  key={p}
                   style={[
-                    styles.traitSelectBtn,
-                    newPersonality === p && styles.traitSelectBtnActive,
+                    styles.decorSegmentBtn,
+                    decorModalTab === 'theme' && styles.decorSegmentBtnActive,
                   ]}
-                  onPress={() => setNewPersonality(p)}
+                  onPress={() => setDecorModalTab('theme')}
+                  activeOpacity={0.8}
                 >
+                  <Palette size={15} color={decorModalTab === 'theme' ? '#7C3AED' : '#6B7280'} />
                   <Text
                     style={[
-                      styles.traitSelectText,
-                      newPersonality === p && styles.traitSelectTextActive,
+                      styles.decorSegmentText,
+                      decorModalTab === 'theme' && styles.decorSegmentTextActive,
                     ]}
                   >
-                    {p}
+                    거실 테마 (5종)
                   </Text>
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
 
-            <Text style={styles.modalLabel}>캐릭터 선택 (기본 캐릭터 또는 AI 사진 생성)</Text>
-            <View style={styles.emojiPickerRow}>
-              {['🐶', '🐱', '🐰', '🐻', '🦊', '🐥', '🐼', '🐨'].map((em) => (
                 <TouchableOpacity
-                  key={em}
                   style={[
-                    styles.emojiPickBtn,
-                    newEmoji === em && styles.emojiPickBtnActive,
+                    styles.decorSegmentBtn,
+                    decorModalTab === 'appearance' && styles.decorSegmentBtnActive,
                   ]}
-                  onPress={() => setNewEmoji(em)}
+                  onPress={() => setDecorModalTab('appearance')}
+                  activeOpacity={0.8}
                 >
-                  <Text style={{ fontSize: 24 }}>{em}</Text>
+                  <Sparkles size={15} color={decorModalTab === 'appearance' ? '#7C3AED' : '#6B7280'} />
+                  <Text
+                    style={[
+                      styles.decorSegmentText,
+                      decorModalTab === 'appearance' && styles.decorSegmentTextActive,
+                    ]}
+                  >
+                    반려몽 외형 변경
+                  </Text>
                 </TouchableOpacity>
-              ))}
-            </View>
-
-            <View style={styles.creationBtnGroup}>
-              <TouchableOpacity
-                style={styles.modalEmojiConfirmBtn}
-                onPress={handleCreateWithEmoji}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.modalEmojiConfirmBtnText}>
-                  {newEmoji} 캐릭터로 바로 입주하기
-                </Text>
-              </TouchableOpacity>
-
-              <View style={styles.orDividerRow}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>또는 AI로 특별하게</Text>
-                <View style={styles.dividerLine} />
               </View>
+            )}
 
-              <TouchableOpacity
-                style={styles.modalConfirmBtn}
-                onPress={handlePickImageAndCreate}
-                activeOpacity={0.8}
-              >
-                <Camera size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-                <Text style={styles.modalConfirmBtnText}>내 사진으로 AI 반려몽 그리기</Text>
-              </TouchableOpacity>
-            </View>
+            {/* Scrollable Content */}
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 20 }}
+            >
+              {decorModalTab === 'theme' ? (
+                /* TAB 1: 거실 배경 테마 선택 (5종) */
+                <View>
+                  <Text style={styles.modalSubDesc}>
+                    원하는 분위기의 거실을 선택하면 온 가족의 화면에 실시간으로 반영됩니다! 🏡
+                  </Text>
+
+                  <View style={{ gap: 10, marginTop: 4 }}>
+                    {ROOM_THEMES.map((theme) => {
+                      const isSelected = activeRoomTheme === theme.id;
+                      return (
+                        <TouchableOpacity
+                          key={theme.id}
+                          style={[
+                            styles.themeCardItem,
+                            isSelected && styles.themeCardItemActive,
+                          ]}
+                          onPress={() => handleSelectTheme(theme.id)}
+                          activeOpacity={0.8}
+                        >
+                          <View style={styles.themeCardIconWrap}>
+                            <Text style={{ fontSize: 28 }}>{theme.emoji}</Text>
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                              <Text style={styles.themeCardTitle}>{theme.name}</Text>
+                              {isSelected && (
+                                <View style={styles.themeSelectedBadge}>
+                                  <Check size={11} color="#FFFFFF" style={{ marginRight: 2 }} />
+                                  <Text style={styles.themeSelectedBadgeText}>사용 중</Text>
+                                </View>
+                              )}
+                            </View>
+                            <Text style={styles.themeCardDesc}>{theme.desc}</Text>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              ) : (
+                /* TAB 2: 반려몽 외형 변경 / 생성 */
+                <View>
+                  <Text style={styles.modalSubDesc}>
+                    {displayedCharacter
+                      ? '가족 사진을 올려 반려몽의 외형을 새롭게 바꿀 수 있어요! 기존 누적 레벨과 경험치는 그대로 영구 보존됩니다.'
+                      : '가족 사진이나 이미지를 올리면 AI가 우리 가족을 지켜줄 든든하고 귀여운 맞춤 수호 반려몽을 만들어 드려요!'}
+                  </Text>
+
+                  {/* Point info badge for modification */}
+                  {displayedCharacter && (
+                    <View style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      backgroundColor: (points || 0) >= 500 ? '#F5F3FF' : '#FFF1F2',
+                      paddingHorizontal: 14,
+                      paddingVertical: 9,
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: (points || 0) >= 500 ? '#DDD6FE' : '#FECDD3',
+                      marginBottom: 12,
+                    }}>
+                      <Text style={{ fontSize: 12.5, fontWeight: '700', color: (points || 0) >= 500 ? '#6D28D9' : '#BE123C' }}>
+                        🪄 외형 변경 비용: 500 P
+                      </Text>
+                      <Text style={{ fontSize: 12, fontWeight: '800', color: (points || 0) >= 500 ? '#7C3AED' : '#E11D48' }}>
+                        가족 보유: {points || 0} P {(points || 0) >= 500 ? '✅' : '❌ (부족)'}
+                      </Text>
+                    </View>
+                  )}
+
+                  <Text style={styles.modalLabel}>반려몽 이름</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="예: 몽몽이"
+                    value={newName}
+                    onChangeText={setNewName}
+                    placeholderTextColor="#AEAEB2"
+                  />
+
+                  <Text style={styles.modalLabel}>성격 선택</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row', marginBottom: 12 }}>
+                    {PERSONALITY_OPTIONS.map((p) => (
+                      <TouchableOpacity
+                        key={p}
+                        style={[
+                          styles.traitSelectBtn,
+                          newPersonality === p && styles.traitSelectBtnActive,
+                        ]}
+                        onPress={() => setNewPersonality(p)}
+                      >
+                        <Text
+                          style={[
+                            styles.traitSelectText,
+                            newPersonality === p && styles.traitSelectTextActive,
+                          ]}
+                        >
+                          {p}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+
+                  <Text style={styles.modalLabel}>캐릭터 선택 (기본 캐릭터 또는 AI 사진 생성)</Text>
+                  <View style={styles.emojiPickerRow}>
+                    {['🐶', '🐱', '🐰', '🐻', '🦊', '🐥', '🐼', '🐨'].map((em) => (
+                      <TouchableOpacity
+                        key={em}
+                        style={[
+                          styles.emojiPickBtn,
+                          newEmoji === em && styles.emojiPickBtnActive,
+                        ]}
+                        onPress={() => setNewEmoji(em)}
+                      >
+                        <Text style={{ fontSize: 24 }}>{em}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <View style={styles.creationBtnGroup}>
+                    <TouchableOpacity
+                      style={styles.modalEmojiConfirmBtn}
+                      onPress={handleCreateWithEmoji}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.modalEmojiConfirmBtnText}>
+                        {displayedCharacter ? `${newEmoji} 모습으로 변경하기 (500P)` : `${newEmoji} 캐릭터로 바로 입주하기`}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <View style={styles.orDividerRow}>
+                      <View style={styles.dividerLine} />
+                      <Text style={styles.dividerText}>또는 AI로 특별하게</Text>
+                      <View style={styles.dividerLine} />
+                    </View>
+
+                    <TouchableOpacity
+                      style={styles.modalConfirmBtn}
+                      onPress={handlePickImageAndCreate}
+                      activeOpacity={0.8}
+                    >
+                      <Camera size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                      <Text style={styles.modalConfirmBtnText}>
+                        {displayedCharacter ? '내 사진으로 AI 외형 변경 (500P)' : '내 사진으로 AI 반려몽 그리기'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+            </ScrollView>
 
             {/* AI Generation Loading Overlay */}
             {isGenerating && (
               <View style={styles.generatingOverlay}>
                 <ActivityIndicator size="large" color="#FF7E82" />
                 <Text style={styles.generatingText}>
-                  AI가 나를 닮은 귀여운 반려몽을{'\n'}정성껏 그리는 중입니다... 🎨
+                  {displayedCharacter
+                    ? `AI가 사진을 분석하여 우리 반려몽을\n멋지게 새 단장하고 있습니다... 🪄`
+                    : `AI가 나를 닮은 귀여운 반려몽을\n정성껏 그리는 중입니다... 🎨`}
                 </Text>
               </View>
             )}
@@ -2111,7 +2734,7 @@ export default function InteriorScreen({
                 )}
 
                 <Text style={styles.evolutionDesc}>
-                  {evolutionData.character.name}이(가) 가족의 깊은 애정과 사랑으로 {evolutionData.stage.name}(으)로 멋지게 진화했습니다!
+                  {evolutionData.character.name}이(가) 가족의 깊은 애정과 사랑으로 {getStageNameWithPet(evolutionData.stage.stage, evolutionData.character.name)}(으)로 멋지게 성장했습니다!
                   {'\n'}{evolutionData.stage.desc}
                 </Text>
 
@@ -2162,156 +2785,194 @@ export default function InteriorScreen({
         </View>
       </Modal>
 
-      {/* Family Petmong Book / Roster Modal (가족 반려몽 도감) */}
+      {/* Petmong Growth & Family Illustrated Book Modal (반려몽 성장 도감 & 가족 도감) */}
+      <PetmongGrowthBookModal
+        visible={familyBookModalVisible}
+        onClose={() => setFamilyBookModalVisible(false)}
+        character={growthBookTargetChar || displayedCharacter || myCharacter}
+        allCharacters={petmongCharacters}
+        familyMembers={familyMembers}
+        currentUserProfile={currentUserProfile}
+        initialTab={growthBookInitialTab}
+        onSelectCharacter={(char) => {
+          setGrowthBookTargetChar(char);
+        }}
+        onInteractWithCharacter={(char) => {
+          setFamilyBookModalVisible(false);
+          handleSubCharPress(char);
+        }}
+      />
+
+      {/* 1. Write Secret Whisper Modal */}
       <Modal
         animationType="slide"
         transparent={true}
-        visible={familyBookModalVisible}
-        onRequestClose={() => setFamilyBookModalVisible(false)}
+        visible={whisperWriteModalVisible}
+        onRequestClose={() => setWhisperWriteModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalView, { maxHeight: '85%' }]}>
-            <View style={styles.modalHeaderRow}>
-              <View style={styles.modalHeaderTitleRow}>
-                <Users size={20} color="#4A90E2" style={{ marginRight: 6 }} />
-                <Text style={styles.modalHeader}>우리 가족 반려몽 도감 ({petmongCharacters.length}마리)</Text>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.whisperOverlay}
+        >
+          <View style={styles.whisperCard}>
+            <View style={styles.whisperHeaderRow}>
+              <View style={styles.whisperTitleRow}>
+                <Mail size={20} color="#FF4D6D" />
+                <Text style={styles.whisperTitle}>반려몽 비밀 귓속말 맡기기 💌</Text>
               </View>
-              <TouchableOpacity onPress={() => setFamilyBookModalVisible(false)}>
+              <TouchableOpacity onPress={() => setWhisperWriteModalVisible(false)}>
                 <X size={20} color="#8E8E93" />
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.modalSubDesc}>
-              온 가족의 반려몽 현황을 한눈에 보고 마음을 전해보세요! 방 안에는 쾌적한 환경을 위해 최대 {MAX_ACTIVE_ROAMING}마리가 번갈아 산책하고 가구에서 쉬어갑니다.
+            <Text style={styles.whisperDesc}>
+              직접 말하기 쑥스러웠던 응원이나 고마움을 적어보세요. 그 가족이 방에 들어오면 몽이가 살짝 비밀 귓속말로 전해드려요! 🤫
             </Text>
 
-            <ScrollView style={{ marginTop: 8 }} showsVerticalScrollIndicator={false}>
-              {petmongCharacters.map((char) => {
-                const owner = familyMembers.find(m => m.id === char.user_id);
-                const isMine = char.user_id === currentUserProfile?.id;
-                const isRoaming = !isMine && familyCharacters.slice(0, MAX_ACTIVE_ROAMING).some(c => c.id === char.id);
-
-                return (
-                  <View key={char.id} style={[styles.bookPetCard, isMine && styles.bookPetCardMine]}>
-                    <View style={styles.bookPetAvatarBox}>
-                      {char.image_url ? (
-                        <Image source={{ uri: char.image_url }} style={styles.bookPetImg} resizeMode="contain" />
-                      ) : (
-                        <Text style={{ fontSize: 32 }}>{char.emoji || '🐶'}</Text>
-                      )}
-                    </View>
-
-                    <View style={styles.bookPetInfo}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                        <UserAvatar avatar={owner?.avatar} size={16} />
-                        <Text style={styles.bookPetOwnerName}>
-                          {owner?.name || '가족'} {isMine ? '(나)' : ''}
-                        </Text>
-                        {isMine ? (
-                          <View style={styles.bookTagMine}>
-                            <Text style={styles.bookTagMineText}>내 반려몽</Text>
-                          </View>
-                        ) : isRoaming ? (
-                          <View style={styles.bookTagRoaming}>
-                            <Text style={styles.bookTagRoamingText}>방에서 배회 중 🐾</Text>
-                          </View>
-                        ) : (
-                          <View style={styles.bookTagResting}>
-                            <Text style={styles.bookTagRestingText}>가구에서 휴식 중 💤</Text>
-                          </View>
-                        )}
-                      </View>
-
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <Text style={styles.bookPetName}>{char.name}</Text>
-                        <Text style={styles.bookPetLevel}>Lv.{char.level || 1}</Text>
-                        <View style={styles.bookPetPersonalityTag}>
-                          <Text style={styles.bookPetPersonalityText}>{char.personality || '다정한'}</Text>
-                        </View>
-                      </View>
-
-                      {/* Small Exp Bar */}
-                      <View style={styles.bookExpBarBg}>
-                        <View style={[styles.bookExpBarFill, { width: `${Math.min(100, char.exp || 0)}%` }]} />
-                      </View>
-                    </View>
-
-                    {!isMine && (
-                      <TouchableOpacity
-                        style={styles.bookInteractBtn}
-                        onPress={() => {
-                          setFamilyBookModalVisible(false);
-                          handleSubCharPress(char);
-                        }}
-                        activeOpacity={0.8}
+            {/* Target Family Member Selector */}
+            <Text style={styles.whisperTargetLabel}>받을 가족 선택</Text>
+            <View style={styles.whisperMemberList}>
+              {familyMembers
+                .filter(m => m.id !== currentUserProfile?.id)
+                .map((member) => {
+                  const isSelected = whisperTargetUser?.id === member.id;
+                  return (
+                    <TouchableOpacity
+                      key={member.id}
+                      style={[
+                        styles.whisperMemberChip,
+                        isSelected && styles.whisperMemberChipActive,
+                      ]}
+                      onPress={() => setWhisperTargetUser(member)}
+                      activeOpacity={0.8}
+                    >
+                      <UserAvatar avatar={member.avatar} size={18} />
+                      <Text
+                        style={[
+                          styles.whisperMemberChipText,
+                          isSelected && styles.whisperMemberChipTextActive,
+                        ]}
                       >
-                        <Heart size={14} color="#FF4D6D" fill="#FF4D6D" style={{ marginRight: 4 }} />
-                        <Text style={styles.bookInteractBtnText}>마음 전하기</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                );
-              })}
-            </ScrollView>
+                        {member.name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+            </View>
+
+            {/* Message Input */}
+            <TextInput
+              style={styles.whisperInputBox}
+              placeholder="예: 엄마 오늘 일하느라 피곤했지? 냉장고에 과일 깎아뒀어 사랑해 ❤️"
+              placeholderTextColor="#94A3B8"
+              value={whisperMessage}
+              onChangeText={setWhisperMessage}
+              multiline
+              maxLength={100}
+            />
+            <Text style={styles.whisperCharCount}>{whisperMessage.length}/100자</Text>
+
+            {/* Submit Button */}
+            <TouchableOpacity
+              style={[
+                styles.whisperSendBtn,
+                (!whisperTargetUser || !whisperMessage.trim() || isSendingWhisper) && styles.whisperSendBtnDisabled,
+              ]}
+              onPress={handleSendWhisper}
+              disabled={!whisperTargetUser || !whisperMessage.trim() || isSendingWhisper}
+              activeOpacity={0.85}
+            >
+              {isSendingWhisper ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Send size={16} color="#FFFFFF" />
+                  <Text style={styles.whisperSendBtnText}>몽이 입에 편지 물려주기 (+5 EXP) 💌</Text>
+                </>
+              )}
+            </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
-      {/* Sumone-Style Empty Room Theme Selection Modal */}
+      {/* 2. Read Secret Whisper Postcard Modal */}
       <Modal
-        animationType="slide"
+        animationType="fade"
         transparent={true}
-        visible={themeModalVisible}
-        onRequestClose={() => setThemeModalVisible(false)}
+        visible={whisperReadModalVisible}
+        onRequestClose={() => setWhisperReadModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalView}>
-            <View style={styles.modalHeaderRow}>
-              <View style={styles.modalHeaderTitleRow}>
-                <Layers size={20} color="#FF7E82" style={{ marginRight: 6 }} />
-                <Text style={styles.modalHeader}>방 테마 선택</Text>
+        <View style={styles.whisperOverlay}>
+          <View style={styles.whisperCard}>
+            <View style={styles.whisperHeaderRow}>
+              <View style={styles.whisperTitleRow}>
+                <Sparkles size={20} color="#FF4D6D" />
+                <Text style={styles.whisperTitle}>비밀 귓속말 도착! 💌</Text>
               </View>
-              <TouchableOpacity onPress={() => setThemeModalVisible(false)}>
+              <TouchableOpacity onPress={() => setWhisperReadModalVisible(false)}>
                 <X size={20} color="#8E8E93" />
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.modalSubDesc}>
-              원하는 분위기의 방을 선택하여 우리 가족만의 아늑한 힐링 공간을 꾸며보세요!
+            <Text style={styles.whisperDesc}>
+              쉿! 몽이가 방 안에서 소중히 품고 있던 비밀 편지예요!
             </Text>
 
-            <View style={{ gap: 12, marginTop: 4 }}>
-              {ROOM_THEMES.map((theme) => {
-                const isSelected = activeRoomTheme === theme.id;
-                return (
-                  <TouchableOpacity
-                    key={theme.id}
-                    style={[
-                      styles.themeCardItem,
-                      isSelected && styles.themeCardItemActive,
-                    ]}
-                    onPress={() => handleSelectTheme(theme.id)}
-                    activeOpacity={0.8}
-                  >
-                    <View style={styles.themeCardIconWrap}>
-                      <Text style={{ fontSize: 28 }}>{theme.emoji}</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <Text style={styles.themeCardTitle}>{theme.name}</Text>
-                        {isSelected && (
-                          <View style={styles.themeSelectedBadge}>
-                            <Check size={11} color="#FFFFFF" style={{ marginRight: 2 }} />
-                            <Text style={styles.themeSelectedBadgeText}>사용 중</Text>
-                          </View>
-                        )}
-                      </View>
-                      <Text style={styles.themeCardDesc}>{theme.desc}</Text>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            {/* Cozy Postcard */}
+            {activeWhisperToRead && (
+              <View style={styles.whisperPostcard}>
+                <View style={styles.whisperPostcardSenderRow}>
+                  {(() => {
+                    const sender = familyMembers.find(m => m.id === activeWhisperToRead.from_user_id);
+                    return (
+                      <>
+                        <UserAvatar avatar={sender?.avatar} size={28} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.whisperPostcardSenderName}>
+                            {sender?.name || '가족'}님이 보낸 편지
+                          </Text>
+                          <Text style={styles.whisperPostcardDate}>
+                            {new Date(activeWhisperToRead.created_at).toLocaleDateString('ko-KR', {
+                              month: 'long',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </Text>
+                        </View>
+                      </>
+                    );
+                  })()}
+                </View>
+
+                <Text style={styles.whisperPostcardBody}>
+                  "{activeWhisperToRead.message}"
+                </Text>
+              </View>
+            )}
+
+            {/* Action Buttons */}
+            <TouchableOpacity
+              style={styles.whisperThankYouBtn}
+              onPress={() => handleConfirmReadWhisper(activeWhisperToRead)}
+              activeOpacity={0.85}
+            >
+              <Heart size={16} color="#FFFFFF" fill="#FFFFFF" />
+              <Text style={styles.whisperThankYouBtnText}>
+                고마워 하트 보내기 (+10 EXP) 💖
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.whisperReplyBtn}
+              onPress={() => handleReplyWhisper(activeWhisperToRead)}
+              activeOpacity={0.8}
+            >
+              <Mail size={15} color="#475569" />
+              <Text style={styles.whisperReplyBtnText}>
+                나도 답장 귓속말 남기기 💌
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>

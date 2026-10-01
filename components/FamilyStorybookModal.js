@@ -29,6 +29,7 @@ import {
   Package,
 } from 'lucide-react-native';
 import { colors, typography, commonStyles } from '../theme';
+import UserAvatar from './UserAvatar';
 
 const { width } = Dimensions.get('window');
 
@@ -50,11 +51,21 @@ export default function FamilyStorybookModal({
   onSendOrderNotice,
   points = 0,
   onDeductPoints,
+  customSmallTalks = [],
+  initialTitle,
+  initialSubtitle,
+  initialTheme,
 }) {
   const [currentPage, setCurrentPage] = useState(0); // 0 to 7 (8 pages)
-  const [selectedTheme, setSelectedTheme] = useState(COVER_THEMES[0]);
-  const [bookTitle, setBookTitle] = useState('우리 가족의 따뜻한 기록');
-  const [bookSubtitle, setBookSubtitle] = useState('FamLink Story Vol.1');
+  const [selectedTheme, setSelectedTheme] = useState(() => {
+    if (initialTheme) {
+      const match = COVER_THEMES.find(t => t.id === initialTheme || t.id === initialTheme?.id);
+      if (match) return match;
+    }
+    return COVER_THEMES[0];
+  });
+  const [bookTitle, setBookTitle] = useState(initialTitle || '우리 가족의 따뜻한 기록');
+  const [bookSubtitle, setBookSubtitle] = useState(initialSubtitle || 'FamLink Story Vol.1');
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiStory, setAiStory] = useState(null);
   const [orderModalVisible, setOrderModalVisible] = useState(false);
@@ -82,7 +93,11 @@ export default function FamilyStorybookModal({
   }, [messages]);
 
   // Extract smalltalk Q&A
-  const smallTalkQuestions = useMemo(() => {
+  const smallTalkList = useMemo(() => {
+    if (customSmallTalks && Array.isArray(customSmallTalks) && customSmallTalks.length > 0) {
+      return customSmallTalks;
+    }
+
     const topic = smallTalkState?.topic || '오늘 우리 가족에게 가장 고마웠던 순간은?';
     const responses = smallTalkState?.responses || {};
 
@@ -111,8 +126,10 @@ export default function FamilyStorybookModal({
       });
     }
 
-    return { topic, items };
-  }, [smallTalkState, familyMembers]);
+    return [{ topic, items }];
+  }, [customSmallTalks, smallTalkState, familyMembers]);
+
+  const smallTalkQuestions = smallTalkList[0] || { topic: '우리 가족의 대화', items: [] };
 
   // Total pages
   const TOTAL_PAGES = 7;
@@ -370,7 +387,7 @@ ${answersText || '아직 답변이 많지 않지만, 언제나 서로를 아끼�
                         ]
                     ).map((m, idx) => (
                       <View key={m.id || idx} style={styles.memberCard}>
-                        <Text style={styles.memberAvatarBig}>{m.avatar || '👦'}</Text>
+                        <UserAvatar avatar={m.avatar} size={48} style={{ marginBottom: 8 }} />
                         <Text style={styles.memberCardName}>{m.name}</Text>
                         <Text style={styles.memberCardRole}>
                           {m.role === 'mom'
@@ -397,23 +414,30 @@ ${answersText || '아직 답변이 많지 않지만, 언제나 서로를 아끼�
               )}
 
               {/* PAGE 2 & 3: CHAPTER 1 - SMALL TALK INTERVIEWS */}
-              {(currentPage === 2 || currentPage === 3) && (
-                <View style={styles.pageContent}>
-                  <Text style={styles.chapterHeader}>CHAPTER 01</Text>
-                  <Text style={styles.pageTitle}>매일의 대화와 마음 ({currentPage === 2 ? '1' : '2'})</Text>
+              {(currentPage === 2 || currentPage === 3) && (() => {
+                const isMultiTopic = smallTalkList.length >= 2;
+                const activeTopicObj = isMultiTopic
+                  ? (smallTalkList[currentPage - 2] || smallTalkList[0])
+                  : smallTalkList[0];
+                const activeItems = isMultiTopic
+                  ? (activeTopicObj?.items || [])
+                  : (activeTopicObj?.items || []).slice((currentPage - 2) * 2, (currentPage - 2) * 2 + 2);
 
-                  <View style={styles.interviewTopicBox}>
-                    <Award size={18} color="#FF7E82" style={{ marginRight: 6 }} />
-                    <Text style={styles.interviewTopicTitle}>"{smallTalkQuestions.topic}"</Text>
-                  </View>
+                return (
+                  <View style={styles.pageContent}>
+                    <Text style={styles.chapterHeader}>CHAPTER 01 · FAMILY INTERVIEW</Text>
+                    <Text style={styles.pageTitle}>매일의 대화와 마음 ({currentPage === 2 ? '1' : '2'})</Text>
 
-                  <View style={styles.interviewList}>
-                    {smallTalkQuestions.items
-                      .slice((currentPage - 2) * 2, (currentPage - 2) * 2 + 2)
-                      .map((item, idx) => (
+                    <View style={styles.interviewTopicBox}>
+                      <Award size={18} color="#FF6B47" style={{ marginRight: 6 }} />
+                      <Text style={styles.interviewTopicTitle}>"{activeTopicObj?.topic || '가족의 따뜻한 대화'}"</Text>
+                    </View>
+
+                    <View style={styles.interviewList}>
+                      {activeItems.map((item, idx) => (
                         <View key={idx} style={styles.interviewItem}>
                           <View style={styles.interviewSpeaker}>
-                            <Text style={styles.interviewAvatar}>{item.avatar}</Text>
+                            <UserAvatar avatar={item.avatar} size={28} style={{ marginRight: 8 }} />
                             <View>
                               <Text style={styles.interviewName}>{item.name}</Text>
                               <Text style={styles.interviewRoleBadge}>{item.role}</Text>
@@ -425,16 +449,17 @@ ${answersText || '아직 답변이 많지 않지만, 언제나 서로를 아끼�
                         </View>
                       ))}
 
-                    {smallTalkQuestions.items.length === 0 && (
-                      <View style={styles.emptyPromptBox}>
-                        <Text style={styles.emptyPromptText}>
-                          아직 기록된 스몰톡 답변이 없습니다.{'\n'}스몰톡 탭에서 오늘의 질문에 답변을 남겨보세요!
-                        </Text>
-                      </View>
-                    )}
+                      {activeItems.length === 0 && (
+                        <View style={styles.emptyPromptBox}>
+                          <Text style={styles.emptyPromptText}>
+                            아직 기록된 스몰톡 답변이 없습니다.{'\n'}스몰톡 아카이브에서 질문을 선택해 포토북에 담아보세요!
+                          </Text>
+                        </View>
+                      )}
+                    </View>
                   </View>
-                </View>
-              )}
+                );
+              })()}
 
               {/* PAGE 4 & 5: CHAPTER 2 - PHOTO GALLERY MEMORIES */}
               {(currentPage === 4 || currentPage === 5) && (

@@ -12,9 +12,41 @@ import {
 } from 'react-native';
 import Svg, { Line, Circle, G, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { Image as ExpoImage } from 'expo-image';
-import { Trophy, Sparkles, X, Moon, Star, RotateCcw, Check, Clock, Zap, Gift } from 'lucide-react-native';
+import {
+  Trophy,
+  Sparkles,
+  X,
+  Moon,
+  Star,
+  RotateCcw,
+  Check,
+  Clock,
+  Zap,
+  Gift,
+  Heart,
+  Crown,
+  PawPrint,
+  Play,
+  Cloud,
+} from 'lucide-react-native';
 
 const { width: INITIAL_WIDTH, height: INITIAL_HEIGHT } = Dimensions.get('window');
+
+// Vector Constellation Category Icon Component
+function ConstellationIcon({ id, size = 16, color = '#FDE047' }) {
+  switch (id) {
+    case 'bear':
+      return <Star size={size} color={color} fill={color} />;
+    case 'heart':
+      return <Heart size={size} color="#EC4899" fill="#EC4899" />;
+    case 'crown':
+      return <Crown size={size} color="#F59E0B" fill="#F59E0B" />;
+    case 'paw':
+      return <PawPrint size={size} color="#818CF8" fill="#818CF8" />;
+    default:
+      return <Star size={size} color={color} fill={color} />;
+  }
+}
 
 const GAME_DURATION = 40; // 40 seconds relaxed healing time
 const STAR_RADIUS = 22;
@@ -361,15 +393,15 @@ export default function DreamConstellationGame({
   // Compute Grade & Rewards
   const getGameGrade = (finalCompleted, finalScore) => {
     if (finalCompleted >= 4 || finalScore >= 800) {
-      return { grade: 'S', color: '#FAAD14', title: '꿈나라 지휘자 👑' };
+      return { grade: 'S', color: '#FAAD14', title: '꿈나라 지휘자' };
     }
     if (finalCompleted >= 3 || finalScore >= 550) {
-      return { grade: 'A', color: '#52C41A', title: '밤하늘 천문학자 🌟' };
+      return { grade: 'A', color: '#52C41A', title: '밤하늘 천문학자' };
     }
     if (finalCompleted >= 2 || finalScore >= 350) {
-      return { grade: 'B', color: '#38BDF8', title: '별빛 탐험가 🔭' };
+      return { grade: 'B', color: '#38BDF8', title: '별빛 탐험가' };
     }
-    return { grade: 'C', color: '#8C8C8C', title: '초보 별지기 🌱' };
+    return { grade: 'C', color: '#8C8C8C', title: '초보 별지기' };
   };
 
   const handleClaimAndClose = () => {
@@ -473,8 +505,8 @@ export default function DreamConstellationGame({
 
           {/* Constellation Progress */}
           <View style={styles.constProgressPill}>
-            <Text style={{ fontSize: 13, marginRight: 4 }}>{currentConstellation.emoji}</Text>
-            <Text style={styles.constProgressText}>
+            <ConstellationIcon id={currentConstellation.id} size={14} />
+            <Text style={[styles.constProgressText, { marginLeft: 5 }]}>
               {currentConstIndex + 1}/{CONSTELLATIONS.length} {currentConstellation.name}
             </Text>
           </View>
@@ -637,11 +669,11 @@ export default function DreamConstellationGame({
             onPress={() => {
               setShootingStar(null);
               setScore(s => s + 80);
-              triggerToast('🌠 별똥별 소원 보너스! (+80 P)', '#FBBF24', shootingStar.x, shootingStar.y);
+              triggerToast('별똥별 소원 보너스! (+80 P)', '#FBBF24', shootingStar.x, shootingStar.y);
             }}
             activeOpacity={0.8}
           >
-            <Text style={{ fontSize: 20 }}>🌠</Text>
+            <Sparkles size={18} color="#FFF" fill="#FFF" />
             <Text style={styles.shootingStarText}>소원 빌기 탭!</Text>
           </TouchableOpacity>
         )}
@@ -660,8 +692,9 @@ export default function DreamConstellationGame({
           >
             {/* Dream Thought Bubble */}
             <View style={styles.dreamBubble}>
+              <Sparkles size={11} color="#4338CA" style={{ marginRight: 3 }} />
               <Text style={styles.dreamBubbleText}>
-                {completedConstCount > 0 ? '✨ 포근한 별자리 꿈... 💭' : '쿠울... 쿨쿨 zZ 🌙'}
+                {completedConstCount > 0 ? '포근한 별자리 꿈... zZ' : '쿠울... 쿨쿨 zZ'}
               </Text>
             </View>
 
@@ -680,7 +713,11 @@ export default function DreamConstellationGame({
 
             {/* Cozy Cloud Pillows */}
             <View style={styles.cozyCloudBed}>
-              <Text style={styles.cloudBedEmoji}>☁️ ☁️ ☁️</Text>
+              <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                <Cloud size={24} color="#C7D2FE" fill="#E0E7FF" />
+                <Cloud size={30} color="#C7D2FE" fill="#E0E7FF" />
+                <Cloud size={24} color="#C7D2FE" fill="#E0E7FF" />
+              </View>
             </View>
           </Animated.View>
         </View>
@@ -711,7 +748,8 @@ export default function DreamConstellationGame({
                   <Text style={styles.gameNoBadgeText}>제4탄 미니게임</Text>
                 </View>
                 <View style={styles.categoryBadge}>
-                  <Text style={styles.categoryBadgeText}>🌙 재우기</Text>
+                  <Moon size={12} color="#38BDF8" fill="#38BDF8" style={{ marginRight: 4 }} />
+                  <Text style={styles.categoryBadgeText}>재우기</Text>
                 </View>
               </View>
 
@@ -723,19 +761,27 @@ export default function DreamConstellationGame({
               {/* Constellation Preview */}
               <View style={styles.readyPreviewBox}>
                 <View style={styles.readyConstItem}>
-                  <Text style={{ fontSize: 26 }}>🐻</Text>
+                  <View style={[styles.readyConstIconCircle, { backgroundColor: 'rgba(251, 191, 36, 0.15)' }]}>
+                    <ConstellationIcon id="bear" size={22} color="#FBBF24" />
+                  </View>
                   <Text style={styles.readyConstLabel}>꼬마곰자리</Text>
                 </View>
                 <View style={styles.readyConstItem}>
-                  <Text style={{ fontSize: 26 }}>💖</Text>
+                  <View style={[styles.readyConstIconCircle, { backgroundColor: 'rgba(236, 72, 153, 0.15)' }]}>
+                    <ConstellationIcon id="heart" size={22} />
+                  </View>
                   <Text style={styles.readyConstLabel}>하트자리</Text>
                 </View>
                 <View style={styles.readyConstItem}>
-                  <Text style={{ fontSize: 26 }}>👑</Text>
+                  <View style={[styles.readyConstIconCircle, { backgroundColor: 'rgba(245, 158, 11, 0.15)' }]}>
+                    <ConstellationIcon id="crown" size={22} />
+                  </View>
                   <Text style={styles.readyConstLabel}>왕관자리</Text>
                 </View>
                 <View style={styles.readyConstItem}>
-                  <Text style={{ fontSize: 26 }}>🐾</Text>
+                  <View style={[styles.readyConstIconCircle, { backgroundColor: 'rgba(129, 140, 248, 0.15)' }]}>
+                    <ConstellationIcon id="paw" size={22} />
+                  </View>
                   <Text style={styles.readyConstLabel}>수호자리</Text>
                 </View>
               </View>
@@ -743,19 +789,19 @@ export default function DreamConstellationGame({
               {/* Instructions */}
               <View style={styles.instructionsList}>
                 <View style={styles.instructionItem}>
-                  <Text style={styles.instructionEmoji}>✨</Text>
+                  <Sparkles size={16} color="#38BDF8" fill="#BAE6FD" style={{ marginRight: 8 }} />
                   <Text style={styles.instructionText}>
                     1번 별부터 시작하여 2번, 3번 별을 차례대로 탭하거나 드래그하여 잇습니다.
                   </Text>
                 </View>
                 <View style={styles.instructionItem}>
-                  <Text style={styles.instructionEmoji}>🌠</Text>
+                  <Star size={16} color="#FBBF24" fill="#FDE68A" style={{ marginRight: 8 }} />
                   <Text style={styles.instructionText}>
                     가끔 날아가는 별똥별을 터치하면 깜짝 추가 별가루 보너스!
                   </Text>
                 </View>
                 <View style={styles.instructionItem}>
-                  <Text style={styles.instructionEmoji}>🎁</Text>
+                  <Gift size={16} color="#A5B4FC" style={{ marginRight: 8 }} />
                   <Text style={styles.instructionText}>
                     완성 시 에너지 100% 완충 + 대량 EXP 및 포인트 보상 지급!
                   </Text>
@@ -768,7 +814,7 @@ export default function DreamConstellationGame({
                 onPress={startGame}
                 activeOpacity={0.85}
               >
-                <Sparkles size={20} color="#FFF" style={{ marginRight: 6 }} />
+                <Play size={18} color="#FFF" fill="#FFF" style={{ marginRight: 6 }} />
                 <Text style={styles.startButtonText}>별자리 잇기 시작 (START)</Text>
               </TouchableOpacity>
             </View>

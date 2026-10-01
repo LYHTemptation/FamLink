@@ -245,3 +245,83 @@ export function TabFamilyIcon({ size = 20, color = '#8E8E93', focused = false, s
     </Svg>
   );
 }
+
+/**
+ * 8. 홈 대시보드 탭 아이콘 (TabHomeIcon)
+ * 둥근 지붕과 출입문이 있는 모던 홈 아이콘
+ */
+export function TabHomeIcon({ size = 20, color = '#8E8E93', focused = false, strokeWidth = 2, ...props }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
+      <Path
+        d="M3 10.5L12 3L21 10.5V20C21 20.5523 20.5523 21 20 21H4C3.44772 21 3 20.5523 3 20V10.5Z"
+        stroke={color}
+        strokeWidth={focused ? strokeWidth + 0.3 : strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill={focused ? color + '18' : 'none'}
+      />
+      <Path
+        d="M9 21V14C9 13.4477 9.44772 13 10 13H14C14.5523 13 15 13.4477 15 14V21"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/**
+ * 9. 퀘스트 탭 아이콘 (TabQuestIcon)
+ * 둥근 배지 속 체크마크 (Figma Quests ✅)
+ */
+export function TabQuestIcon({ size = 20, color = '#8E8E93', focused = false, strokeWidth = 2, ...props }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
+      <Circle
+        cx="12"
+        cy="12"
+        r="9"
+        stroke={color}
+        strokeWidth={focused ? strokeWidth + 0.3 : strokeWidth}
+        fill={focused ? color + '18' : 'none'}
+      />
+      <Path
+        d="M8.5 12.3L10.8 14.6L15.5 9.8"
+        stroke={color}
+        strokeWidth={focused ? strokeWidth + 0.4 : strokeWidth + 0.2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+/**
+ * 10. 이야기책/앨범 탭 아이콘 (TabBookIcon)
+ * 펼쳐진 책과 기억의 책갈피 (Figma Book 📖)
+ */
+export function TabBookIcon({ size = 20, color = '#8E8E93', focused = false, strokeWidth = 2, ...props }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
+      <Path
+        d="M4 19.5C5.8 18.5 8.2 18.5 12 19.5C15.8 18.5 18.2 18.5 20 19.5V5.5C18.2 4.5 15.8 4.5 12 5.5C8.2 4.5 5.8 4.5 4 5.5V19.5Z"
+        stroke={color}
+        strokeWidth={focused ? strokeWidth + 0.3 : strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill={focused ? color + '15' : 'none'}
+      />
+      <Path
+        d="M12 5.5V19.5"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+

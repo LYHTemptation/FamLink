@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -127,6 +127,12 @@ export default function CalendarScreen({
 
   const mainScrollRef = useRef(null);
   const [currentDate, setCurrentDate] = useState(new Date());
+
+  const todayFormattedKorean = useMemo(() => {
+    const now = new Date();
+    const days = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+    return `${now.getMonth() + 1}월 ${now.getDate()}일 ${days[now.getDay()]}`;
+  }, []);
   const [selectedDate, setSelectedDate] = useState(getTodayString());
   const [modalVisible, setModalVisible] = useState(false);
   const [title, setTitle] = useState('');
@@ -357,22 +363,72 @@ export default function CalendarScreen({
         contentContainerStyle={styles.mainScrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Sub-header Bar */}
-        <View style={styles.calendarHeader}>
-          <View>
-            <Text style={styles.subHeaderTitle}>캘린더</Text>
-            <Text style={styles.subHeaderSub}>이번 달 가족 일정 {monthEventsCount}개</Text>
-          </View>
+        {/* ========================================================= */}
+        {/* 1. 상단 헤더 & 지오메트릭 액센트 (HomeScreen 스타일)       */}
+        {/* ========================================================= */}
+        <View style={styles.headerSection}>
+          <View style={[styles.blobCircle, styles.blobCoral]} />
+          <View style={[styles.blobCircle, styles.blobOrange]} />
+          <View style={[styles.blobCircle, styles.blobMint]} />
+          <View style={[styles.blobRect, styles.blobLavender]} />
 
-          <TouchableOpacity style={styles.addButton} onPress={handleOpenAddModal} activeOpacity={0.8}>
-            <Plus size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
-            <Text style={styles.addButtonText}>일정 추가</Text>
-          </TouchableOpacity>
+          <View style={styles.headerTopRow}>
+            <View style={styles.headerTitleCol}>
+              <Text style={styles.headerDateBadge}>{todayFormattedKorean.toUpperCase()}</Text>
+              <Text style={styles.headerMainTitle}>가족 캘린더 📅</Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={handleOpenAddModal}
+              activeOpacity={0.85}
+            >
+              <Plus size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
+              <Text style={styles.addButtonText}>일정 추가</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        {/* D-Day Banner Carousel */}
+        {/* ========================================================= */}
+        {/* 2. 이번 달 가족 일정 대시보드 하이라이트 카드 (핵심 강조)  */}
+        {/* ========================================================= */}
+        <View style={styles.cardSection}>
+          <View style={[styles.dashboardCard, styles.monthSummaryTheme]}>
+            <View style={styles.summaryHeaderRow}>
+              <View style={styles.summaryLeftCol}>
+                <Text style={styles.summarySubLabel}>이번 달 가족 일정</Text>
+                <View style={styles.summaryCountRow}>
+                  <Text style={styles.summaryBigNumber}>{monthEventsCount}</Text>
+                  <Text style={styles.summaryUnitText}>개의 소중한 일정</Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={styles.summaryTodayBtn}
+                onPress={handleToday}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.summaryTodayText}>오늘 보기 🗓️</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.summaryDivider} />
+
+            <View style={styles.summaryFooterRow}>
+              <Text style={styles.summaryFooterText}>
+                {monthEventsCount > 0
+                  ? `가족들과 함께할 ${monthEventsCount}개의 약속이 있어요! ✨`
+                  : '이번 달 일정이 아직 없어요. 새로운 일정을 등록해보세요! 🌱'}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* ========================================================= */}
+        {/* 3. 다가오는 D-Day 캐러셀                                   */}
+        {/* ========================================================= */}
         {dDayItems.length > 0 && (
-          <View style={styles.dDayContainer}>
+          <View style={styles.dDaySection}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dDayScroll}>
               {dDayItems.map((item) => {
                 const catInfo = getCategoryInfo(item.category);
@@ -382,18 +438,18 @@ export default function CalendarScreen({
                 return (
                   <TouchableOpacity
                     key={item.id}
-                    style={[
-                      styles.dDayChip,
-                      { backgroundColor: catColor + '15', borderColor: catColor + '40' }
-                    ]}
+                    style={styles.dDayChip}
                     onPress={() => handleSelectDate(item.date)}
+                    activeOpacity={0.85}
                   >
-                    {CatIcon ? (
-                      <CatIcon size={16} color={catColor} style={{ marginRight: 6 }} />
-                    ) : (
-                      <PartyPopper size={16} color={catColor} style={{ marginRight: 6 }} />
-                    )}
-                    <Text style={styles.dDayTitle}>{item.title}</Text>
+                    <View style={[styles.dDayIconBox, { backgroundColor: catColor + '18' }]}>
+                      {CatIcon ? (
+                        <CatIcon size={14} color={catColor} />
+                      ) : (
+                        <PartyPopper size={14} color={catColor} />
+                      )}
+                    </View>
+                    <Text style={styles.dDayTitle} numberOfLines={1}>{item.title}</Text>
                     <View style={[styles.dDayBadge, { backgroundColor: catColor }]}>
                       <Text style={styles.dDayBadgeText}>
                         {item.isOngoing ? '진행 중' : (item.diffDays === 0 ? 'D-Day' : `D-${item.diffDays}`)}
@@ -406,85 +462,123 @@ export default function CalendarScreen({
           </View>
         )}
 
-        {/* Calendar Month Navigation Bar */}
-        <View style={styles.monthNavRow}>
-          <View style={styles.monthNavControls}>
-            <TouchableOpacity onPress={handlePrevMonth} style={styles.navArrowBtn} activeOpacity={0.7}>
-              <ChevronLeft size={20} color="#1C1C1E" />
-            </TouchableOpacity>
-            <Text style={styles.monthNavTitle}>{year}년 {month}월</Text>
-            <TouchableOpacity onPress={handleNextMonth} style={styles.navArrowBtn} activeOpacity={0.7}>
-              <ChevronRight size={20} color="#1C1C1E" />
-            </TouchableOpacity>
-          </View>
-
-          <TouchableOpacity style={styles.todayBtn} onPress={handleToday} activeOpacity={0.7}>
-            <Text style={styles.todayBtnText}>오늘</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Weekdays Row */}
-        <View style={styles.weekdaysRow}>
-          {['일', '월', '화', '수', '목', '금', '토'].map((w, index) => (
-            <Text key={w} style={[styles.weekdayText, index === 0 && { color: '#E74C3C' }, index === 6 && { color: '#4A90E2' }]}>
-              {w}
-            </Text>
-          ))}
-        </View>
-
-        {/* Days Grid */}
-        <View style={styles.daysGrid}>
-          {calendarCells.map((dateStr, index) => {
-            if (!dateStr) {
-              return <View key={`empty-${index}`} style={styles.dayCell} />;
-            }
-
-            const dayNum = parseInt(dateStr.split('-')[2], 10);
-            const isSelected = selectedDate === dateStr;
-            const dayEvents = getEventsForDate(dateStr);
-
-            return (
-              <TouchableOpacity
-                key={dateStr}
-                style={[styles.dayCell, isSelected && styles.selectedDayCell]}
-                onPress={() => handleSelectDate(dateStr)}
-              >
-                <Text style={[styles.dayNumber, isSelected && styles.selectedDayNumber]}>
-                  {dayNum}
-                </Text>
-                <View style={styles.dotRow}>
-                  {dayEvents.length <= 3 ? (
-                    dayEvents.map((evt, i) => {
-                      const catColor = getCategoryInfo(evt.category).color;
-                      return <View key={i} style={[styles.eventDot, { backgroundColor: catColor }]} />;
-                    })
-                  ) : (
-                    <>
-                      {dayEvents.slice(0, 2).map((evt, i) => {
-                        const catColor = getCategoryInfo(evt.category).color;
-                        return <View key={i} style={[styles.eventDot, { backgroundColor: catColor }]} />;
-                      })}
-                      <View style={styles.moreDotBadge}>
-                        <Text style={styles.moreDotBadgeText}>+{dayEvents.length - 2}</Text>
-                      </View>
-                    </>
-                  )}
-                </View>
+        {/* ========================================================= */}
+        {/* 4. 월간 달력 카드 (HomeScreen 카드 스타일)                  */}
+        {/* ========================================================= */}
+        <View style={styles.cardSection}>
+          <View style={[styles.dashboardCard, styles.calendarGridCard]}>
+            {/* Calendar Month Navigation Bar */}
+            <View style={styles.monthNavRow}>
+              <TouchableOpacity onPress={handlePrevMonth} style={styles.navArrowBtn} activeOpacity={0.7}>
+                <ChevronLeft size={20} color="#1C1917" />
               </TouchableOpacity>
-            );
-          })}
+              
+              <Text style={styles.monthNavTitle}>{year}년 {month}월</Text>
+              
+              <TouchableOpacity onPress={handleNextMonth} style={styles.navArrowBtn} activeOpacity={0.7}>
+                <ChevronRight size={20} color="#1C1917" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Weekdays Row */}
+            <View style={styles.weekdaysRow}>
+              {['일', '월', '화', '수', '목', '금', '토'].map((w, index) => (
+                <Text
+                  key={w}
+                  style={[
+                    styles.weekdayText,
+                    index === 0 && styles.weekdaySunday,
+                    index === 6 && styles.weekdaySaturday,
+                  ]}
+                >
+                  {w}
+                </Text>
+              ))}
+            </View>
+
+            {/* Days Grid */}
+            <View style={styles.daysGrid}>
+              {calendarCells.map((dateStr, index) => {
+                if (!dateStr) {
+                  return <View key={`empty-${index}`} style={styles.dayCell} />;
+                }
+
+                const dayNum = parseInt(dateStr.split('-')[2], 10);
+                const isSelected = selectedDate === dateStr;
+                const dayEvents = getEventsForDate(dateStr);
+                const dayOfWeek = (startDayOfWeek + dayNum - 1) % 7;
+                const isSunday = dayOfWeek === 0;
+                const isSaturday = dayOfWeek === 6;
+
+                return (
+                  <TouchableOpacity
+                    key={dateStr}
+                    style={[styles.dayCell, isSelected && styles.selectedDayCell]}
+                    onPress={() => handleSelectDate(dateStr)}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      style={[
+                        styles.dayNumber,
+                        isSunday && styles.sundayText,
+                        isSaturday && styles.saturdayText,
+                        isSelected && styles.selectedDayNumber,
+                      ]}
+                    >
+                      {dayNum}
+                    </Text>
+                    <View style={styles.dotRow}>
+                      {dayEvents.length <= 3 ? (
+                        dayEvents.map((evt, i) => {
+                          const catColor = getCategoryInfo(evt.category).color;
+                          return <View key={i} style={[styles.eventDot, { backgroundColor: catColor }]} />;
+                        })
+                      ) : (
+                        <>
+                          {dayEvents.slice(0, 2).map((evt, i) => {
+                            const catColor = getCategoryInfo(evt.category).color;
+                            return <View key={i} style={[styles.eventDot, { backgroundColor: catColor }]} />;
+                          })}
+                          <View style={styles.moreDotBadge}>
+                            <Text style={styles.moreDotBadgeText}>+{dayEvents.length - 2}</Text>
+                          </View>
+                        </>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
         </View>
 
-        {/* Selected Date Events List */}
-        <View style={styles.eventSection}>
+        {/* ========================================================= */}
+        {/* 5. 선택한 날짜 일정 섹션                                    */}
+        {/* ========================================================= */}
+        <View style={styles.cardSection}>
           <View style={styles.eventSectionHeader}>
-            <Text style={styles.eventSectionTitle}>{selectedDate} 일정</Text>
-            <Text style={styles.eventCount}>{selectedDateEvents.length}개 건</Text>
+            <View>
+              <Text style={styles.eventSectionSub}>선택한 날짜</Text>
+              <Text style={styles.eventSectionTitle}>{selectedDate} 일정</Text>
+            </View>
+            <View style={styles.eventCountBadge}>
+              <Text style={styles.eventCountBadgeText}>{selectedDateEvents.length}개 일정</Text>
+            </View>
           </View>
 
           <View style={styles.eventList}>
             {selectedDateEvents.length === 0 ? (
-              <Text style={styles.emptyText}>등록된 가족 일정이 없습니다.</Text>
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyEmoji}>🕊️</Text>
+                <Text style={styles.emptyText}>등록된 가족 일정이 없습니다.</Text>
+                <TouchableOpacity
+                  style={styles.emptyAddBtn}
+                  onPress={handleOpenAddModal}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.emptyAddBtnText}>+ 새 일정 등록하기</Text>
+                </TouchableOpacity>
+              </View>
             ) : (
               selectedDateEvents.map((item) => {
                 const catInfo = getCategoryInfo(item.category);
@@ -497,7 +591,7 @@ export default function CalendarScreen({
                     <View style={styles.eventContent}>
                       <Text style={styles.eventTitle}>{item.title}</Text>
                       <View style={styles.eventMetaRow}>
-                        <Clock size={12} color="#8E8E93" style={{ marginRight: 4 }} />
+                        <Clock size={12} color="#A8A29E" style={{ marginRight: 4 }} />
                         <Text style={styles.eventMetaText}>
                           {item.date && (item.endDate || item.end_date) && item.date !== (item.endDate || item.end_date)
                             ? `${item.date} ~ ${item.endDate || item.end_date} (${item.time})`
@@ -527,15 +621,17 @@ export default function CalendarScreen({
                         <TouchableOpacity
                           style={styles.editButton}
                           onPress={() => handleOpenEditModal(item)}
+                          activeOpacity={0.7}
                         >
-                          <Edit3 size={16} color="#4A90E2" />
+                          <Edit3 size={15} color="#FF6B47" />
                         </TouchableOpacity>
 
                         <TouchableOpacity
                           style={styles.deleteButton}
                           onPress={() => handleDeleteClick(item)}
+                          activeOpacity={0.7}
                         >
-                          <Trash2 size={16} color="#FF7E82" />
+                          <Trash2 size={15} color="#A8A29E" />
                         </TouchableOpacity>
                       </View>
                     )}
@@ -771,160 +867,317 @@ export default function CalendarScreen({
 }
 
 const styles = StyleSheet.create({
-  container: commonStyles.screenContainer,
+  container: {
+    flex: 1,
+    backgroundColor: '#FAF8F3', // Figma 홈 화면과 100% 동일한 웜 린넨 테마 배경
+  },
   mainScrollView: {
     flex: 1,
   },
   mainScrollContent: {
-    paddingBottom: 40,
+    paddingBottom: 48,
   },
-  dDayContainer: {
-    backgroundColor: '#FFFFFF',
+
+  // 1. 헤더 섹션 & 지오메트릭 액센트 (HomeScreen 스타일)
+  headerSection: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 16,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  blobCircle: {
+    position: 'absolute',
+    borderRadius: 9999,
+  },
+  blobCoral: {
+    width: 192,
+    height: 192,
+    top: -40,
+    right: -30,
+    backgroundColor: '#FF6B47',
+    opacity: 0.12,
+  },
+  blobOrange: {
+    width: 90,
+    height: 90,
+    top: 66,
+    right: 20,
+    backgroundColor: '#FFB347',
+    opacity: 0.10,
+  },
+  blobMint: {
+    width: 128,
+    height: 128,
+    top: 45,
+    left: -20,
+    backgroundColor: '#A7F3D0',
+    opacity: 0.12,
+  },
+  blobRect: {
+    position: 'absolute',
+    width: 38,
+    height: 38,
+    top: 78,
+    right: 50,
+    backgroundColor: '#DDA0DD',
+    opacity: 0.18,
+    borderRadius: 18,
+  },
+  headerTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    zIndex: 2,
+  },
+  headerTitleCol: {
+    flex: 1,
+  },
+  headerDateBadge: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#A8A29E',
+    letterSpacing: 0.8,
+    marginBottom: 4,
+    textTransform: 'uppercase',
+  },
+  headerMainTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#1C1917',
+    letterSpacing: -0.4,
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF6B47',
+    paddingHorizontal: 16,
     paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
+    borderRadius: 22,
+    shadowColor: '#FF6B47',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  addButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+    fontSize: 13,
+  },
+
+  // 2. 공통 카드 섹션 & 대시보드 하이라이트 카드 (이번 달 가족 일정)
+  cardSection: {
+    paddingHorizontal: 20,
+    marginTop: 16,
+  },
+  dashboardCard: {
+    borderRadius: 24,
+    borderWidth: 1.2,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    elevation: 1,
+  },
+  monthSummaryTheme: {
+    backgroundColor: '#FEFBF2',
+    borderColor: '#F6E8B8',
+  },
+  summaryHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  summaryLeftCol: {
+    flex: 1,
+  },
+  summarySubLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#854D0E',
+    marginBottom: 4,
+    letterSpacing: -0.2,
+  },
+  summaryCountRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  summaryBigNumber: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#FF6B47',
+    letterSpacing: -0.5,
+  },
+  summaryUnitText: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#1C1917',
+    marginLeft: 6,
+  },
+  summaryTodayBtn: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#F6E8B8',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  summaryTodayText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#854D0E',
+  },
+  summaryDivider: {
+    height: 1,
+    width: '100%',
+    backgroundColor: '#F8E8BE',
+    marginVertical: 14,
+  },
+  summaryFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  summaryFooterText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#78716C',
+  },
+
+  // 3. D-Day 캐러셀
+  dDaySection: {
+    marginTop: 14,
   },
   dDayScroll: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
+    gap: 10,
   },
   dDayChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F5EEF8',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 12,
-    marginRight: 10,
-    borderWidth: 1,
-    borderColor: '#E8DAEF',
+    borderRadius: 16,
+    borderWidth: 1.2,
+    borderColor: '#E8E0D0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
   },
-  dDayTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#1C1C1E',
+  dDayIconBox: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginRight: 8,
   },
+  dDayTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#1C1917',
+    marginRight: 8,
+    maxWidth: 120,
+  },
   dDayBadge: {
-    backgroundColor: '#9B59B6',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
   },
   dDayBadgeText: {
     color: '#FFFFFF',
     fontSize: 11,
     fontWeight: '800',
   },
-  calendarHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    height: 64,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
+
+  // 4. 월간 달력 카드
+  calendarGridCard: {
     backgroundColor: '#FFFFFF',
-  },
-  subHeaderTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#1C1C1E',
-  },
-  subHeaderSub: {
-    fontSize: 12,
-    color: '#8E8E93',
-    marginTop: 2,
+    borderColor: '#E8E0D0',
+    paddingTop: 16,
+    paddingBottom: 16,
   },
   monthNavRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
-  },
-  monthNavControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    marginBottom: 14,
   },
   navArrowBtn: {
-    padding: 6,
-    borderRadius: 8,
-    backgroundColor: '#F8F9FA',
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#FAF8F3',
+    borderWidth: 1,
+    borderColor: '#E8E0D0',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   monthNavTitle: {
     fontSize: 17,
-    fontWeight: '800',
-    color: '#1C1C1E',
-    marginHorizontal: 12,
-  },
-  todayBtn: {
-    backgroundColor: '#FFF2F3',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#FFA2A5',
-  },
-  todayBtnText: {
-    fontSize: 12,
-    color: '#FF7E82',
-    fontWeight: '700',
-  },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FF7E82',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  addButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 13,
+    fontWeight: '900',
+    color: '#1C1917',
   },
   weekdaysRow: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
+    borderBottomColor: '#F5F0E8',
+    marginBottom: 8,
   },
   weekdayText: {
     flex: 1,
     textAlign: 'center',
     fontSize: 12,
     fontWeight: '700',
-    color: '#8E8E93',
+    color: '#78716C',
+  },
+  weekdaySunday: {
+    color: '#EF4444',
+  },
+  weekdaySaturday: {
+    color: '#3B82F6',
   },
   daysGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    backgroundColor: '#FFFFFF',
-    paddingBottom: 10,
   },
   dayCell: {
     width: '14.28%',
     height: 52,
     alignItems: 'center',
     justifyContent: 'flex-start',
-    paddingTop: 6,
+    paddingTop: 4,
+    borderRadius: 14,
   },
   selectedDayCell: {
-    backgroundColor: '#FFF2F3',
-    borderRadius: 10,
+    backgroundColor: '#FF6B47',
   },
   dayNumber: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#1C1C1E',
+    fontWeight: '700',
+    color: '#1C1917',
+  },
+  sundayText: {
+    color: '#EF4444',
+  },
+  saturdayText: {
+    color: '#3B82F6',
   },
   selectedDayNumber: {
-    color: '#FF7E82',
-    fontWeight: '800',
+    color: '#FFFFFF',
+    fontWeight: '900',
   },
   dotRow: {
     flexDirection: 'row',
@@ -939,7 +1192,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 1,
   },
   moreDotBadge: {
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#F5F0E8',
     paddingHorizontal: 2.5,
     paddingVertical: 0.5,
     borderRadius: 4,
@@ -948,50 +1201,90 @@ const styles = StyleSheet.create({
   moreDotBadgeText: {
     fontSize: 8,
     fontWeight: '800',
-    color: '#8E8E93',
-    lineHeight: 9,
+    color: '#78716C',
   },
-  eventSection: {
-    padding: 16,
-  },
+
+  // 5. 선택한 날짜 일정 섹션
   eventSectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     marginBottom: 12,
   },
-  eventSectionTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#1C1C1E',
-  },
-  eventCount: {
+  eventSectionSub: {
     fontSize: 12,
-    color: '#8E8E93',
-    fontWeight: '600',
+    fontWeight: '700',
+    color: '#A8A29E',
+    marginBottom: 2,
+  },
+  eventSectionTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#1C1917',
+  },
+  eventCountBadge: {
+    backgroundColor: 'rgba(255, 107, 71, 0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 14,
+  },
+  eventCountBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FF6B47',
   },
   eventList: {
+    gap: 10,
+  },
+  emptyContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 1.2,
+    borderColor: '#E8E0D0',
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyEmoji: {
+    fontSize: 32,
+    marginBottom: 8,
   },
   emptyText: {
-    fontSize: 13,
-    color: '#AEAEB2',
-    textAlign: 'center',
-    marginTop: 20,
-    fontStyle: 'italic',
+    fontSize: 14,
+    color: '#A8A29E',
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  emptyAddBtn: {
+    backgroundColor: '#FAF8F3',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E8E0D0',
+  },
+  emptyAddBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FF6B47',
   },
   eventCard: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 10,
+    borderRadius: 18,
+    padding: 14,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
+    borderWidth: 1.2,
+    borderColor: '#E8E0D0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
   },
   categoryIndicator: {
     width: 4,
-    height: '100%',
+    height: 38,
     borderRadius: 2,
     marginRight: 12,
   },
@@ -999,65 +1292,69 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   eventTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1C1C1E',
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#1C1917',
     marginBottom: 4,
   },
   eventMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
   },
   eventMetaText: {
-    fontSize: 11,
-    color: '#8E8E93',
-    marginRight: 10,
+    fontSize: 12,
+    color: '#78716C',
+    fontWeight: '500',
   },
   creatorTag: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  creatorAvatar: {
-    fontSize: 12,
-    marginRight: 2,
-  },
   creatorName: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   categoryBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    marginRight: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 12,
   },
   categoryBadgeText: {
     fontSize: 11,
-    fontWeight: '700',
-  },
-  deleteButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA',
+    fontWeight: '800',
   },
   cardBtnGroup: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
+    marginLeft: 8,
   },
   editButton: {
     width: 32,
     height: 32,
-    borderRadius: 8,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F0F7FF',
-    marginRight: 6,
+    backgroundColor: '#FAF8F3',
+    borderWidth: 1,
+    borderColor: '#E8E0D0',
   },
+  deleteButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FAF8F3',
+    borderWidth: 1,
+    borderColor: '#E8E0D0',
+  },
+
+  // 6. 모달 스타일
   modalOverlay: commonStyles.modalOverlay,
   modalView: commonStyles.modalBottomSheet,
   modalHeaderRow: commonStyles.modalHeaderRow,
@@ -1066,31 +1363,37 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#F5F0E8',
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalScrollContent: {
-    paddingBottom: 12,
+    paddingBottom: 16,
   },
   formGroup: {
     marginBottom: 16,
   },
   label: {
     fontSize: 13,
-    fontWeight: '700',
-    color: '#1C1C1E',
+    fontWeight: '800',
+    color: '#1C1917',
     marginBottom: 8,
   },
+  subLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#78716C',
+    marginBottom: 4,
+  },
   textInput: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
+    backgroundColor: '#FAF8F3',
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#E5E5EA',
+    borderColor: '#E8E0D0',
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 14,
-    color: '#1C1C1E',
+    color: '#1C1917',
   },
   categoryContainer: {
     flexDirection: 'row',
@@ -1101,23 +1404,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#EBEBEB',
-    borderRadius: 10,
+    borderColor: '#E8E0D0',
+    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 9,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FAF8F3',
   },
   categoryButtonText: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#1C1C1E',
+    fontWeight: '700',
+    color: '#1C1917',
   },
   customCategoryInputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F0F8FF',
+    backgroundColor: '#FAF8F3',
     borderWidth: 1,
-    borderColor: '#BAE0FF',
+    borderColor: '#FF6B47',
     borderRadius: 12,
     paddingHorizontal: 12,
     marginTop: 10,
@@ -1126,18 +1429,18 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 11,
     fontSize: 13,
-    color: '#1C1C1E',
+    color: '#1C1917',
   },
   modalActionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 8,
+    marginTop: 10,
     paddingTop: 8,
   },
   rangeToggleRow: {
     flexDirection: 'row',
-    backgroundColor: '#F1F2F4',
-    borderRadius: 10,
+    backgroundColor: '#F5F0E8',
+    borderRadius: 12,
     padding: 3,
     marginBottom: 12,
   },
@@ -1145,37 +1448,37 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 8,
     alignItems: 'center',
-    borderRadius: 8,
+    borderRadius: 10,
   },
   rangeTabActive: {
     backgroundColor: '#FFFFFF',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.05,
     shadowRadius: 2,
-    elevation: 2,
+    elevation: 1,
   },
   rangeTabText: {
     fontSize: 13,
-    fontWeight: '600',
-    color: '#8E8E93',
+    fontWeight: '700',
+    color: '#A8A29E',
   },
   rangeTabTextActive: {
-    color: '#1C1C1E',
-    fontWeight: '700',
+    color: '#1C1917',
+    fontWeight: '800',
   },
   singleDateBox: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 8,
+    backgroundColor: '#FAF8F3',
+    borderRadius: 12,
     padding: 12,
     marginBottom: 14,
     borderWidth: 1,
-    borderColor: '#EBEBEB',
+    borderColor: '#E8E0D0',
   },
   singleDateText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#1C1C1E',
+    fontWeight: '700',
+    color: '#1C1917',
   },
   rangeInputContainer: {
     marginBottom: 14,
@@ -1188,16 +1491,10 @@ const styles = StyleSheet.create({
   dateInputHalf: {
     flex: 1,
   },
-  subLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#8E8E93',
-    marginBottom: 4,
-  },
   dateSeparator: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#8E8E93',
+    color: '#A8A29E',
     marginHorizontal: 8,
     marginTop: 16,
   },
@@ -1209,11 +1506,14 @@ const styles = StyleSheet.create({
   },
   quickLabel: {
     fontSize: 12,
-    color: '#8E8E93',
+    color: '#78716C',
     marginRight: 6,
+    fontWeight: '700',
   },
   quickChip: {
-    backgroundColor: '#F1F2F4',
+    backgroundColor: '#FAF8F3',
+    borderWidth: 1,
+    borderColor: '#E8E0D0',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
@@ -1222,33 +1522,40 @@ const styles = StyleSheet.create({
   },
   quickChipText: {
     fontSize: 12,
-    color: '#4A90E2',
-    fontWeight: '600',
+    color: '#FF6B47',
+    fontWeight: '700',
   },
   cancelButton: {
     flex: 1,
-    backgroundColor: '#F1F2F4',
+    backgroundColor: '#FAF8F3',
+    borderWidth: 1,
+    borderColor: '#E8E0D0',
     padding: 14,
-    borderRadius: 12,
+    borderRadius: 16,
     alignItems: 'center',
     marginRight: 8,
   },
   cancelButtonText: {
     fontSize: 14,
-    color: '#8E8E93',
+    color: '#78716C',
     fontWeight: '700',
   },
   confirmButton: {
     flex: 2,
-    backgroundColor: '#FF7E82',
+    backgroundColor: '#FF6B47',
     padding: 14,
-    borderRadius: 12,
+    borderRadius: 16,
     alignItems: 'center',
     marginLeft: 8,
+    shadowColor: '#FF6B47',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
   },
   confirmButtonText: {
     fontSize: 14,
     color: '#FFFFFF',
-    fontWeight: '700',
+    fontWeight: '800',
   },
 });

@@ -27,6 +27,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "test": "jest",
+    "check:syntax": "node scripts/check-syntax.js",
+    "verify": "npm run check:syntax && npm run docs:sync",
     "docs:sync": "node scripts/sync-readme.js"
   },
   "jest": {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -13,84 +13,93 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  Award,
-  Check,
-  MessageSquare,
-  ShoppingBag,
-  Trophy,
-  Lock,
   Plus,
   X,
-  Ticket,
-  CheckCircle,
+  Check,
   CheckCircle2,
-  TrendingUp,
-  TrendingDown,
-  Coins,
-  Pencil,
-  Trash2,
-  Target,
-  BookOpen,
+  Trophy,
+  Award,
   Sparkles,
-  ShoppingCart,
-  Crown,
   ChevronRight,
-  PartyPopper,
-  Utensils,
-  Compass,
-  Tv,
-  Coffee,
-  History,
+  BookOpen,
+  Camera,
+  RotateCcw,
+  Trash2,
 } from 'lucide-react-native';
-import FamilyStorybookModal from './FamilyStorybookModal';
-import { colors, typography, commonStyles } from '../theme';
-import ShoppingListScreen from './ShoppingListScreen';
 import UserAvatar from './UserAvatar';
 
-const DEFAULT_COOP_GOALS = [
-  { id: 'g1', title: '주말 패밀리 맛집 외식 데이', targetPoints: 3000, category: 'dinner', desc: '온 가족이 다 함께 먹고 싶은 메뉴 자유 외식' },
-  { id: 'g2', title: '가족 1박 2일 글램핑/여행', targetPoints: 5000, category: 'travel', desc: '자연 속에서 힐링하는 가족 힐링 캠핑' },
-  { id: 'g3', title: '거실 홈시네마 & 팝콘 파티', targetPoints: 1500, category: 'cinema', desc: '보고 싶었던 최신 영화와 맛있는 스낵 파티' },
-  { id: 'g4', title: '가족 보드게임 & 디저트 카페 나들이', targetPoints: 2000, category: 'cafe', desc: '달콤한 디저트와 함께 즐기는 보드게임 시간' },
-];
-
-export const renderGoalCategorySvg = (category, size = 20, color = '#FF7E82') => {
-  switch (category) {
-    case 'storybook':
-    case 'book':
-      return <BookOpen size={size} color={color} />;
-    case 'dinner':
-      return <Utensils size={size} color={color} />;
-    case 'travel':
-      return <Compass size={size} color={color} />;
-    case 'cinema':
-      return <Tv size={size} color={color} />;
-    case 'cafe':
-      return <Coffee size={size} color={color} />;
-    default:
-      return <Target size={size} color={color} />;
+// 한국형 생활 행동 기반 아이콘 & 카테고리 스마트 매퍼
+export const getChoreIconMeta = (category, title = '') => {
+  const safe = (title || '').toLowerCase();
+  // 1. 쓰레기 / 분리수거
+  if (safe.includes('분리수거') || safe.includes('쓰레기') || safe.includes('음식물') || safe.includes('재활용')) {
+    return { icon: '🗑️', category: '분리수거', iconBg: '#C7D2FE', tagColor: '#1E40AF' };
   }
+  // 2. 식사 / 설거지
+  if (safe.includes('설거지') || safe.includes('식기') || safe.includes('그릇')) {
+    return { icon: '🍽️', category: '설거지', iconBg: '#F5F0E8', tagColor: '#78716C' };
+  }
+  if (safe.includes('식탁') || safe.includes('요리') || safe.includes('밥') || safe.includes('저녁') || safe.includes('아침') || safe.includes('점심')) {
+    return { icon: '🍳', category: '식사/요리', iconBg: '#FDE68A', tagColor: '#78350F' };
+  }
+  // 3. 청소 / 정리
+  if (safe.includes('청소기') || safe.includes('청소') || safe.includes('물걸레') || safe.includes('걸레') || safe.includes('정리') || safe.includes('환기')) {
+    return { icon: '🧹', category: '청소/정리', iconBg: '#DDD6FE', tagColor: '#5B21B6' };
+  }
+  // 4. 세탁 / 빨래
+  if (safe.includes('빨래') || safe.includes('세탁') || safe.includes('건조기') || safe.includes('이불') || safe.includes('옷')) {
+    return { icon: '🧺', category: '세탁/빨래', iconBg: '#FED7AA', tagColor: '#9A3412' };
+  }
+  // 5. 반려동물
+  if (safe.includes('산책') || safe.includes('브루노') || safe.includes('강아지') || safe.includes('고양이') || safe.includes('배변')) {
+    return { icon: '🐕', category: '반려동물', iconBg: '#A7F3D0', tagColor: '#064E3B' };
+  }
+  // 6. 식물 / 화분
+  if (safe.includes('화분') || safe.includes('식물') || safe.includes('물 주기') || safe.includes('물주기')) {
+    return { icon: '🌿', category: '식물관리', iconBg: '#BBF7D0', tagColor: '#166534' };
+  }
+  // 7. 욕실
+  if (safe.includes('욕실') || safe.includes('화장실') || safe.includes('세면대') || safe.includes('변기')) {
+    return { icon: '🚿', category: '욕실청소', iconBg: '#BFDBFE', tagColor: '#1E40AF' };
+  }
+  // 8. 심부름 / 장보기
+  if (safe.includes('마트') || safe.includes('장보기') || safe.includes('심부름') || safe.includes('택배') || safe.includes('우유') || safe.includes('사오기')) {
+    return { icon: '🛒', category: '심부름', iconBg: '#FBCFE8', tagColor: '#9D174D' };
+  }
+
+  const meta = {
+    야외: { icon: '🌿', category: '야외', iconBg: '#A7F3D0', tagColor: '#064E3B' },
+    거실: { icon: '🛋️', category: '거실', iconBg: '#DDD6FE', tagColor: '#5B21B6' },
+    기타: { icon: '📋', category: '기타', iconBg: '#F5F0E8', tagColor: '#78716C' },
+    침실: { icon: '🛏️', category: '침실', iconBg: '#FBCFE8', tagColor: '#9D174D' },
+    욕실: { icon: '🚿', category: '욕실', iconBg: '#BFDBFE', tagColor: '#1E40AF' },
+    주방: { icon: '🍳', category: '주방', iconBg: '#FDE68A', tagColor: '#78350F' },
+  }[category];
+
+  return meta || { icon: '✅', category: category || '할 일', iconBg: '#E8E0D0', tagColor: '#1C1917' };
 };
 
+export const renderGoalCategorySvg = () => null;
+
 export default function SmallTalkScreen({
-  smallTalkState,
+  smallTalkState = {},
   currentUser,
   currentUserProfile,
-  points,
+  points = 0,
   pointHistory = [],
   onAddResponse,
   onRedeemReward,
   onDeductPoints,
-  familyMembers,
-  rewardsList,
+  familyMembers = [],
+  rewardsList = [],
   onAddReward,
   onUpdateReward,
   onDeleteReward,
-  userCoupons,
+  userCoupons = [],
   onUseCoupon,
   coopGoal,
   onUpdateCoopGoal,
-  messages,
+  messages = [],
   onSendOrderNotice,
   shoppingItems = [],
   onAddItem,
@@ -99,3214 +108,2281 @@ export default function SmallTalkScreen({
   onClearCompleted,
   onToggleRepeat,
 }) {
-  const [activeSubTab, setActiveSubTab] = useState('smalltalk'); // 'smalltalk', 'shopping', 'rewards'
-  const [answer, setAnswer] = useState('');
-  const [modalVisible, setModalVisible] = useState(false);
-  const [walletModalVisible, setWalletModalVisible] = useState(false);
-  const [historyModalVisible, setHistoryModalVisible] = useState(false);
-  const [historyFilter, setHistoryFilter] = useState('all'); // 'all', 'earn', 'spend'
-  const [editingRewardId, setEditingRewardId] = useState(null);
+  // Figma 2대 서브탭: 'chores' (✅ 집안일) | 'games' (🎮 게임)
+  const [activeTab, setActiveTab] = useState('chores');
 
-  // Co-op Goal & Storybook States
-  const [storybookVisible, setStorybookVisible] = useState(false);
-  const [goalModalVisible, setGoalModalVisible] = useState(false);
-  const [customGoalTitle, setCustomGoalTitle] = useState('');
-  const [customGoalPoints, setCustomGoalPoints] = useState('2000');
-  const [goalPresets, setGoalPresets] = useState(DEFAULT_COOP_GOALS);
-  const [editingPresetId, setEditingPresetId] = useState(null);
-  const [editPresetTitle, setEditPresetTitle] = useState('');
-  const [editPresetPoints, setEditPresetPoints] = useState('3000');
-  const [editPresetCategory, setEditPresetCategory] = useState('dinner');
-  const [achievedGoals, setAchievedGoals] = useState([]);
-  const [achievedGoalsModalVisible, setAchievedGoalsModalVisible] = useState(false);
-  const [goalCelebrationModalVisible, setGoalCelebrationModalVisible] = useState(false);
-  const [lastAchievedGoal, setLastAchievedGoal] = useState(null);
+  // 대화 답변 작성 모달 상태 (로그인 사용자 전용)
+  const [answerModalVisible, setAnswerModalVisible] = useState(false);
+  const [answerText, setAnswerText] = useState('');
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const stored = await AsyncStorage.getItem('FAMLINK_ACHIEVED_GOALS');
-        if (stored) {
-          setAchievedGoals(JSON.parse(stored));
-        }
-      } catch (e) {
-        console.log('Error loading achieved goals', e);
-      }
+  // 다른 가족 멤버 답변 열람 모달 상태 (Read-Only)
+  const [viewingMemberAnswer, setViewingMemberAnswer] = useState(null); // { member, text }
 
-      try {
-        const storedPresets = await AsyncStorage.getItem('FAMLINK_COOP_GOAL_PRESETS');
-        if (storedPresets) {
-          const parsed = JSON.parse(storedPresets);
-          const cleanPresets = parsed.filter(p => p.category !== 'storybook' && p.id !== 'g0');
-          setGoalPresets(cleanPresets.length > 0 ? cleanPresets : DEFAULT_COOP_GOALS);
-        }
-      } catch (e) {
-        console.log('Error loading goal presets', e);
-      }
-    })();
-  }, []);
+  // 집안일 추가 모달 상태
+  const [addChoreModalVisible, setAddChoreModalVisible] = useState(false);
+  const [newChoreTitle, setNewChoreTitle] = useState('');
+  const [newChorePoints, setNewChorePoints] = useState('20');
+  const [newChoreAssignee, setNewChoreAssignee] = useState('가족 전체');
+  const [newChoreRepeatType, setNewChoreRepeatType] = useState('daily'); // 'none' (오늘만) | 'daily' (매일 반복)
 
-  const handleStartEditPreset = (preset) => {
-    setEditingPresetId(preset.id);
-    setEditPresetTitle(preset.title);
-    setEditPresetPoints(String(preset.targetPoints));
-    setEditPresetCategory(preset.category || 'dinner');
-  };
+  // 실시간 스마트 카테고리 프리뷰 (제목 키워드 자동 분석)
+  const previewIconMeta = useMemo(() => getChoreIconMeta(null, newChoreTitle), [newChoreTitle]);
 
-  const handleSaveEditPreset = async (presetId) => {
-    if (!editPresetTitle.trim()) {
-      Alert.alert('알림', '목표 이름을 입력해주세요.');
-      return;
+  // 로컬 집안일 상태
+  const [fallbackChores, setFallbackChores] = useState([]);
+
+  // 게임 실행 모달 상태 (가족 퀴즈, 짝 맞추기, 사진 챌린지)
+  const [quizModalVisible, setQuizModalVisible] = useState(false);
+  const [matchModalVisible, setMatchModalVisible] = useState(false);
+  const [photoModalVisible, setPhotoModalVisible] = useState(false);
+
+  // 1. 가족 멤버 구성 (기본 4인: 엄마, 아빠, 지수, 민준)
+  const membersList = useMemo(() => {
+    if (familyMembers && familyMembers.length > 0) {
+      return familyMembers;
     }
-    const pts = parseInt(editPresetPoints, 10);
-    if (isNaN(pts) || pts <= 0) {
-      Alert.alert('알림', '올바른 목표 포인트를 입력해주세요.');
-      return;
-    }
+    return [
+      { id: 'm1', name: '엄마', role: '엄마', avatar: '👩', color: '#FFA500' },
+      { id: 'm2', name: '아빠', role: '아빠', avatar: '👨', color: '#87CEEB' },
+      { id: 'm3', name: '지수', role: '지수', avatar: '👧', color: '#DDA0DD' },
+      { id: 'm4', name: '민준', role: '민준', avatar: '👦', color: '#90EE90' },
+    ];
+  }, [familyMembers]);
 
-    const updated = goalPresets.map(p => {
-      if (p.id === presetId) {
-        return {
-          ...p,
-          title: editPresetTitle.trim(),
-          targetPoints: pts,
-          category: editPresetCategory,
-        };
-      }
-      return p;
-    });
+  // 2. 오늘의 대화 주제 및 응답 계산 (FamLink 기존 스몰톡 기능 100% 연동)
+  const { topic = '', responses = {} } = smallTalkState || {};
+  const topicTitle = useMemo(() => {
+    if (!topic) return '오늘 가장 많이 웃었던 일은 무엇인가요? 😂';
+    if (typeof topic === 'string') return topic;
+    return topic.text || topic.title || '오늘 하루 가장 기억에 남는 순간은?';
+  }, [topic]);
 
-    setGoalPresets(updated);
-    setEditingPresetId(null);
-    try {
-      await AsyncStorage.setItem('FAMLINK_COOP_GOAL_PRESETS', JSON.stringify(updated));
-    } catch (e) {
-      console.log('Error saving goal presets', e);
-    }
-
-    if (coopGoal && (coopGoal.id === presetId || coopGoal.title === editPresetTitle.trim())) {
-      if (onUpdateCoopGoal) {
-        onUpdateCoopGoal({
-          id: presetId,
-          title: editPresetTitle.trim(),
-          targetPoints: pts,
-          category: editPresetCategory,
-          desc: '가족이 함께 모으는 버킷리스트',
-        });
-      }
-    }
-  };
-
-  const handleDeletePreset = (preset) => {
-    Alert.alert(
-      '목표 삭제',
-      `'${preset.title}' 목표를 목록에서 삭제하시겠습니까?`,
-      [
-        { text: '취소', style: 'cancel' },
-        {
-          text: '삭제',
-          style: 'destructive',
-          onPress: async () => {
-            const updated = goalPresets.filter(p => p.id !== preset.id);
-            setGoalPresets(updated);
-            try {
-              await AsyncStorage.setItem('FAMLINK_COOP_GOAL_PRESETS', JSON.stringify(updated));
-            } catch (e) {
-              console.log('Error deleting goal preset', e);
-            }
-
-            if (coopGoal && (coopGoal.id === preset.id || coopGoal.title === preset.title)) {
-              const fallback = updated[0] || DEFAULT_COOP_GOALS[0];
-              if (onUpdateCoopGoal && fallback) {
-                onUpdateCoopGoal(fallback);
-              }
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const handleAddCustomGoal = async () => {
-    if (!customGoalTitle.trim()) {
-      Alert.alert('알림', '목표 이름을 입력해주세요.');
-      return;
-    }
-    const pts = parseInt(customGoalPoints, 10);
-    if (isNaN(pts) || pts <= 0) {
-      Alert.alert('알림', '올바른 목표 포인트를 입력해주세요.');
-      return;
-    }
-
-    const newPreset = {
-      id: `custom-${Date.now()}`,
-      title: customGoalTitle.trim(),
-      targetPoints: pts,
-      category: 'custom',
-      desc: '가족이 직접 정한 특별한 버킷리스트',
-    };
-
-    const updatedPresets = [...goalPresets, newPreset];
-    setGoalPresets(updatedPresets);
-    try {
-      await AsyncStorage.setItem('FAMLINK_COOP_GOAL_PRESETS', JSON.stringify(updatedPresets));
-    } catch (e) {
-      console.log('Error adding goal preset', e);
-    }
-
-    if (onUpdateCoopGoal) {
-      onUpdateCoopGoal(newPreset);
-    }
-
-    setCustomGoalTitle('');
-    setGoalModalVisible(false);
-    Alert.alert('목표 생성 완료', `'${newPreset.title}' 목표가 설정되었습니다!`);
-  };
-
-  const handleClaimCoopGoal = async (targetGoal, targetPts) => {
-    if (targetGoal.category === 'storybook' || targetGoal.id === 'g0') {
-      setStorybookVisible(true);
-      return;
-    }
-
-    Alert.alert(
-      '가족 버킷리스트 달성!',
-      `우리 가족이 함께 모은 ${targetPts.toLocaleString()} P를 사용하여 '${targetGoal.title}' 목표를 달성하시겠습니까?\n\n달성 시 가족 단톡방에 축하 공지가 발송됩니다!`,
-      [
-        { text: '취소', style: 'cancel' },
-        {
-          text: '달성 & 파티 열기',
-          onPress: async () => {
-            if (onDeductPoints) {
-              await onDeductPoints(targetPts, `[버킷리스트 달성] ${targetGoal.title}`);
-            }
-
-            if (onSendOrderNotice) {
-              await onSendOrderNotice(
-                `🎉 [가족 버킷리스트 달성!] 우리 가족이 함께 ${targetPts.toLocaleString()} P를 모아 '${targetGoal.title}' 버킷리스트를 달성했습니다! 온 가족 모두 축하해 주세요! 🥳🍕`
-              );
-            }
-
-            const newAchieved = {
-              id: `achieved-${Date.now()}`,
-              title: targetGoal.title,
-              category: targetGoal.category || 'general',
-              targetPoints: targetPts,
-              achievedAt: new Date().toISOString(),
-            };
-
-            const updatedHistory = [newAchieved, ...achievedGoals];
-            setAchievedGoals(updatedHistory);
-            try {
-              await AsyncStorage.setItem('FAMLINK_ACHIEVED_GOALS', JSON.stringify(updatedHistory));
-            } catch (e) {
-              console.log('Error saving achieved goal history', e);
-            }
-
-            setLastAchievedGoal(newAchieved);
-            setGoalCelebrationModalVisible(true);
-          },
-        },
-      ]
-    );
-  };
-
-  // Custom Coupon Form States
-  const [couponTitle, setCouponTitle] = useState('');
-  const [couponCost, setCouponCost] = useState('100');
-  const [couponDesc, setCouponDesc] = useState('');
-  const [couponProvider, setCouponProvider] = useState('');
-
-  // Coupon Wallet Tab State ('available', 'used', 'expired')
-  const [walletTab, setWalletTab] = useState('available');
-
-  const DEFAULT_MEMBERS = {
-    mom: { name: '엄마', avatar: '👩‍🦰', color: '#FF7E82' },
-    dad: { name: '아빠', avatar: '👨‍💼', color: '#4A90E2' },
-    son: { name: '아들', avatar: '👦', color: '#2ECC71' },
-    daughter: { name: '딸', avatar: '👧', color: '#F39C12' },
-  };
-
-  const getMemberInfo = (roleKey) => {
-    if (familyMembers && Array.isArray(familyMembers)) {
-      const match = familyMembers.find(m => m && typeof m === 'object' && m.role === roleKey);
-      if (match) {
-        return { name: match.name, avatar: match.avatar, color: match.color };
-      }
-    }
-    return DEFAULT_MEMBERS[roleKey] || { name: roleKey, avatar: '👦', color: '#8E8E93' };
-  };
-
-  const { topic, responses, pointsAwarded } = smallTalkState;
+  const topicCategory = useMemo(() => {
+    if (typeof topic === 'object' && topic?.category) return topic.category;
+    return '오늘의 스몰톡 질문';
+  }, [topic]);
 
   const myId = currentUserProfile?.id;
-  const myRole = currentUserProfile?.role || currentUser;
-  const hasAnswered = Boolean(
-    responses && (
-      (myId ? Boolean(responses[myId]) : false) ||
-      (!myId && (
-        (myRole && Boolean(responses[myRole])) ||
-        Boolean(responses[currentUser])
-      ))
-    )
-  );
+  const myName = currentUserProfile?.name || (typeof currentUser === 'string' ? currentUser : '');
+  const myRole = currentUserProfile?.role;
 
-  // Calculate unique answered count
-  let answeredCount = 0;
-  if (responses) {
-    if (familyMembers && Array.isArray(familyMembers) && familyMembers.length > 0) {
-      answeredCount = familyMembers.filter(m => {
-        if (m && typeof m === 'object' && m.id) {
-          return Boolean(responses[m.id]);
-        }
-        const roleK = m?.role || m;
-        return Boolean(responses[roleK]);
-      }).length;
-    } else {
-      answeredCount = Object.keys(responses).length;
+  // 멤버별 스몰톡 답변 조회 (고유 ID 우선, 이름 차선 - 역할 role 기반 공유 절대 방지)
+  const getMemberResponse = (member) => {
+    if (!member || !responses) return '';
+    if (member.id && responses[member.id]) {
+      return responses[member.id];
     }
-  }
-
-  const totalCount = familyMembers && Array.isArray(familyMembers) && familyMembers.length > 0
-    ? familyMembers.length
-    : 4;
-  const isMissionComplete = totalCount > 0 && answeredCount >= totalCount;
-
-  const handleSubmit = () => {
-    if (!answer.trim()) {
-      Alert.alert('알림', '한 마디 답변을 적어주세요!');
-      return;
+    if (member.name && responses[member.name]) {
+      return responses[member.name];
     }
-
-    onAddResponse(currentUser, answer);
-    setAnswer('');
+    return '';
   };
 
-  const handleRedeem = (reward) => {
-    if (points < reward.cost) {
-      Alert.alert('포인트 부족', '포인트가 부족하여 쿠폰을 교환할 수 없습니다. 스몰톡 미션을 완료해보세요!');
-      return;
-    }
+  // 내 답변 조회 (ID 우선, Name 차선 - 타 가족과 역할이 같아도 오염 방지)
+  const myAnswer = useMemo(() => {
+    if (!responses) return '';
+    if (myId && responses[myId]) return responses[myId];
+    if (myName && responses[myName]) return responses[myName];
+    return '';
+  }, [responses, myId, myName]);
+  const hasAnswered = Boolean(myAnswer);
 
-    Alert.alert(
-      '쿠폰 교환',
-      `[${reward.title}]을(를) ${reward.cost} 포인트로 교환하시겠습니까?`,
-      [
-        { text: '취소', style: 'cancel' },
-        {
-          text: '교환하기',
-          onPress: async () => {
-            const success = await onRedeemReward(reward);
-            if (success !== false) {
-              Alert.alert('교환 완료 🎉', `[${reward.title}] 쿠폰이 발급되었습니다! 내 쿠폰함에서 확인하세요.`);
-            }
-          }
-        }
-      ]
-    );
-  };
-
-  const handleOpenAddModal = () => {
-    setEditingRewardId(null);
-    setCouponTitle('');
-    setCouponCost('100');
-    setCouponDesc('');
-    setCouponProvider(currentUserProfile?.name || '');
-    setModalVisible(true);
-  };
-
-  const handleStartEditReward = (reward) => {
-    setEditingRewardId(reward.id);
-    setCouponTitle(reward.title);
-    setCouponCost(String(reward.cost));
-    setCouponDesc(reward.description || reward.desc || '');
-    setCouponProvider(reward.provider || '');
-    setModalVisible(true);
-  };
-
-  const handleDeleteRewardClick = (reward) => {
-    Alert.alert(
-      '쿠폰 삭제',
-      `'${reward.title}' 쿠폰을 상점에서 삭제하시겠습니까?\n\n(이미 가족이 발급받아 보유 중인 쿠폰은 안전하게 유지됩니다.)`,
-      [
-        { text: '취소', style: 'cancel' },
-        {
-          text: '삭제',
-          style: 'destructive',
-          onPress: () => {
-            if (onDeleteReward) onDeleteReward(reward.id);
-            Alert.alert('삭제 완료', `'${reward.title}' 쿠폰이 상점에서 삭제되었습니다.`);
-          }
-        }
-      ]
-    );
-  };
-
-  const canManageReward = (reward) => {
-    const myName = currentUserProfile?.name;
-    const myRole = currentUserProfile?.role || currentUser;
-    if (reward.provider && (reward.provider === myName || reward.provider === myRole)) {
-      return true;
+  // 현재 로그인한 본인 여부 확인 (고유 ID 엄격 비교 -> 이름 비교 -> ID/이름 둘 다 없을 때만 예외적 역할 비교)
+  const isCurrentMember = (member) => {
+    if (!member) return false;
+    // 1. 고유 ID 엄격 비교 (Supabase UUID 및 mock 고유 ID)
+    if (myId && member.id) {
+      return member.id === myId;
     }
-    if (myRole === 'mom' || myRole === 'dad') {
-      return true;
+    // 2. 실명/이름 비교
+    if (myName && member.name) {
+      return member.name === myName;
     }
-    if (reward.provider === '아들' && (myRole === 'son' || myRole === '아들')) {
-      return true;
-    }
-    if (reward.provider === '딸' && (myRole === 'daughter' || myRole === '딸')) {
-      return true;
-    }
-    if (reward.provider === '엄마' && (myRole === 'mom' || myRole === '엄마')) {
-      return true;
-    }
-    if (reward.provider === '아빠' && (myRole === 'dad' || myRole === '아빠')) {
-      return true;
+    // 3. ID와 이름이 모두 누락된 순수 목(mock) 환경일 때만 예외적 역할 비교
+    if (!myId && !member.id && !myName && !member.name && myRole && member.role) {
+      return member.role === myRole;
     }
     return false;
   };
 
-  const handleSubmitRewardForm = () => {
-    if (!couponTitle.trim()) {
-      Alert.alert('알림', '쿠폰 명칭을 입력해주세요.');
-      return;
-    }
-    const costNum = parseInt(couponCost, 10);
-    if (isNaN(costNum) || costNum <= 0) {
-      Alert.alert('알림', '올바른 포인트를 입력해주세요.');
-      return;
-    }
+  const answeredCount = useMemo(() => {
+    if (!responses) return 0;
+    return membersList.filter(m => {
+      const isMe = isCurrentMember(m);
+      const ans = isMe ? myAnswer : getMemberResponse(m);
+      return Boolean(ans);
+    }).length;
+  }, [responses, membersList, myAnswer]);
+  const totalMemberCount = membersList.length;
 
-    const rewardPayload = {
-      title: couponTitle.trim(),
-      cost: costNum,
-      desc: couponDesc.trim() || '가족 소통을 위한 보상 쿠폰입니다.',
-      provider: couponProvider.trim() || (currentUserProfile?.name || '가족 전체'),
-    };
+  const currentUserMember = useMemo(() => {
+    return membersList.find(m => isCurrentMember(m)) || membersList[0];
+  }, [membersList, myId, myName]);
 
-    if (editingRewardId) {
-      if (onUpdateReward) onUpdateReward(editingRewardId, rewardPayload);
-      Alert.alert('수정 완료', `'${couponTitle.trim()}' 쿠폰 정보가 수정되었습니다.`);
+  // 빠른 인라인 답변 텍스트 상태
+  const [quickAnswerText, setQuickAnswerText] = useState('');
+
+  // 3. 집안일 목록 구성 (DB shoppingItems 실시간 양방향 동기화)
+  const choresList = useMemo(() => {
+    const source = (shoppingItems !== undefined && shoppingItems !== null) ? shoppingItems : fallbackChores;
+    return source.map((item, idx) => {
+      const iconMeta = getChoreIconMeta(item.category, item.title);
+      return {
+        id: item.id,
+        rawItem: item,
+        title: item.title,
+        category: iconMeta.category || item.category || '할 일',
+        assignee: item.assignee || '가족 전체',
+        points: item.points || 20,
+        repeat_type: item.repeat_type || 'none',
+        is_completed: Boolean(item.is_completed),
+        icon: iconMeta.icon,
+        iconBg: iconMeta.iconBg,
+        tagColor: iconMeta.tagColor,
+      };
+    });
+  }, [shoppingItems, fallbackChores]);
+
+  const activeChores = useMemo(() => choresList.filter(c => !c.is_completed), [choresList]);
+  const completedChoresList = useMemo(() => choresList.filter(c => c.is_completed), [choresList]);
+  const totalChoresCount = choresList.length;
+  const completedChoresCount = completedChoresList.length;
+  const remainingChoresCount = activeChores.length;
+  const todayEarnedScore = completedChoresList.reduce((sum, c) => sum + (c.points || 20), 0);
+
+  // 집안일 완료 토글 (홈 화면 퀘스트 보드와 양방향 100% 실시간 연동)
+  const handleToggleChoreItem = (chore) => {
+    if (onToggleItem) {
+      onToggleItem(chore.rawItem || chore, !chore.is_completed);
     } else {
-      if (onAddReward) onAddReward(rewardPayload);
-      Alert.alert('등록 완료', `'${couponTitle.trim()}' 쿠폰이 새로 등록되었습니다.`);
+      setFallbackChores(prev =>
+        prev.map(c => (c.id === chore.id ? { ...c, is_completed: !c.is_completed } : c))
+      );
     }
-
-    setEditingRewardId(null);
-    setCouponTitle('');
-    setCouponCost('100');
-    setCouponDesc('');
-    setCouponProvider('');
-    setModalVisible(false);
   };
 
-  const handleUseCouponClick = (coupon) => {
+  // 집안일 개별 삭제 핸들러 (할 일 및 완료 항목 공통)
+  const handleDeleteChoreItem = (chore) => {
+    const isDaily = chore.repeat_type === 'daily';
+    const msg = isDaily
+      ? `'${chore.title}' [매일 루틴] 항목을 완전히 삭제하시겠습니까?\n내일부터도 목록에 나타나지 않습니다.`
+      : `'${chore.title}' 항목을 삭제하시겠습니까?`;
+
     Alert.alert(
-      '쿠폰 사용 확인',
-      `'${coupon.title}' 쿠폰을 ${coupon.provider || '가족'}님에게 사용하시겠습니까?\n\n사용 완료 시 가족 단체 대화방에 사용 알림이 자동 전송됩니다.`,
+      '집안일 삭제 🗑️',
+      msg,
       [
         { text: '취소', style: 'cancel' },
         {
-          text: '사용하기',
+          text: '삭제',
+          style: 'destructive',
           onPress: () => {
-            if (onUseCoupon) onUseCoupon(coupon);
-            Alert.alert('사용 완료 🎟️', `'${coupon.title}' 쿠폰이 사용 처리되었으며, 가족 단체 대화방에 알림이 전송되었습니다!`);
-          }
-        }
+            if (onDeleteItem) {
+              onDeleteItem(chore.id);
+            }
+            setFallbackChores(prev => prev.filter(c => c.id !== chore.id));
+          },
+        },
       ]
     );
   };
 
-  // Point Ledger Summary Calculations
-  const totalEarned = (pointHistory || [])
-    .filter(item => item.type === 'earn')
-    .reduce((sum, item) => sum + (item.amount || 0), 0);
-  const totalSpent = (pointHistory || [])
-    .filter(item => item.type === 'spend')
-    .reduce((sum, item) => sum + (item.amount || 0), 0);
-  const filteredHistory = (pointHistory || []).filter(item => {
-    if (historyFilter === 'earn') return item.type === 'earn';
-    if (historyFilter === 'spend') return item.type === 'spend';
-    return true;
-  });
-
-  const getTodayString = (dateObj = new Date()) => {
-    const y = dateObj.getFullYear();
-    const m = String(dateObj.getMonth() + 1).padStart(2, '0');
-    const d = String(dateObj.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  };
-
-  const getDDayDays = (expireDateStr) => {
-    if (!expireDateStr || !/^\d{4}-\d{2}-\d{2}$/.test(expireDateStr)) return null;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const [y, m, d] = expireDateStr.split('-').map(Number);
-    const expDate = new Date(y, m - 1, d);
-    expDate.setHours(23, 59, 59, 999);
-    const diffTime = expDate - today;
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  };
-
-  const todayStr = getTodayString();
-  const availableCoupons = [];
-  const usedCoupons = [];
-  const expiredCoupons = [];
-
-  (userCoupons || []).forEach(c => {
-    if (c.status === 'used') {
-      usedCoupons.push(c);
-    } else if (c.expire_date && c.expire_date < todayStr) {
-      expiredCoupons.push(c);
-    } else {
-      availableCoupons.push(c);
+  // 완료된 집안일 일괄 비우기 핸들러 (1회성 완료 항목만 비우고, 매일 루틴은 보존)
+  const handleClearCompleted = () => {
+    const oneTimeCompleted = completedChoresList.filter(c => !c.repeat_type || c.repeat_type === 'none');
+    if (oneTimeCompleted.length === 0) {
+      Alert.alert(
+        '알림 💡',
+        '삭제할 1회성 완료 항목이 없습니다.\n매일 반복 루틴(🔄)은 일일 루틴 유지를 위해 목록에 안전하게 보존됩니다.'
+      );
+      return;
     }
-  });
 
-  // Stack available coupons by title & provider
-  const stackedAvailableCoupons = [];
-  const stackMap = {};
+    Alert.alert(
+      '완료 목록 비우기 🧹',
+      `완료된 1회성 집안일 ${oneTimeCompleted.length}개를 목록에서 비우시겠습니까?\n(매일 반복 루틴은 유지됩니다)`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '비우기',
+          style: 'destructive',
+          onPress: () => {
+            if (onClearCompleted) {
+              onClearCompleted();
+            }
+            setFallbackChores(prev => prev.filter(c => !c.is_completed || c.repeat_type === 'daily'));
+          },
+        },
+      ]
+    );
+  };
 
-  availableCoupons.forEach(coupon => {
-    const key = `${coupon.title}_${coupon.provider || '가족'}`;
-    if (!stackMap[key]) {
-      stackMap[key] = {
-        title: coupon.title,
-        provider: coupon.provider || '가족',
-        cost: coupon.cost,
-        expire_date: coupon.expire_date,
-        items: [coupon],
-      };
-      stackedAvailableCoupons.push(stackMap[key]);
+  // 집안일 추가 제출 (홈 화면 및 DB 실시간 동기화)
+  const handleCreateChore = () => {
+    const trimmedTitle = newChoreTitle.trim();
+    if (!trimmedTitle) {
+      Alert.alert('알림', '집안일 이름을 입력해주세요.');
+      return;
+    }
+    const pts = parseInt(newChorePoints, 10) || 20;
+    const iconMeta = getChoreIconMeta(null, trimmedTitle);
+
+    if (onAddItem) {
+      onAddItem({
+        title: trimmedTitle,
+        assignee: newChoreAssignee,
+        category: iconMeta.category,
+        points: pts,
+        repeat_type: newChoreRepeatType,
+      });
     } else {
-      stackMap[key].items.push(coupon);
-      if (coupon.expire_date && (!stackMap[key].expire_date || coupon.expire_date < stackMap[key].expire_date)) {
-        stackMap[key].expire_date = coupon.expire_date;
+      const newChore = {
+        id: `chore-${Date.now()}`,
+        title: trimmedTitle,
+        category: iconMeta.category,
+        assignee: newChoreAssignee,
+        points: pts,
+        repeat_type: newChoreRepeatType,
+        is_completed: false,
+      };
+      setFallbackChores(prev => [newChore, ...prev]);
+    }
+
+    setNewChoreTitle('');
+    setNewChorePoints('20');
+    setNewChoreRepeatType('daily');
+    setAddChoreModalVisible(false);
+    const repeatLabel = newChoreRepeatType === 'daily' ? '매일 루틴' : '오늘만';
+    Alert.alert('등록 완료 🎉', `'${trimmedTitle}' [${repeatLabel}] 집안일이 추가되었습니다!`);
+  };
+
+  // 내 대화 답변 모달 열기 (로그인한 사용자 전용)
+  const handleOpenAnswerModal = () => {
+    setAnswerText(myAnswer || '');
+    setAnswerModalVisible(true);
+  };
+
+  // 가족 멤버 항목 탭: 본인이면 작성/수정, 타인이면 답변 열람 모달 팝업
+  const handlePressMemberCard = (member) => {
+    const isMe = isCurrentMember(member);
+    if (isMe) {
+      handleOpenAnswerModal();
+    } else {
+      const memberResponse = getMemberResponse(member);
+      if (memberResponse) {
+        setViewingMemberAnswer({
+          member,
+          text: memberResponse,
+        });
+      } else {
+        Alert.alert(
+          '답변 대기 중 🕊️',
+          `${member.name || member.role} 님은 아직 오늘의 대화 답변을 작성하지 않았습니다.`
+        );
       }
     }
-  });
+  };
 
-  const activeShoppingCount = Array.isArray(shoppingItems)
-    ? shoppingItems.filter(i => !i.is_completed).length
-    : 0;
+  // 대화 답변 저장 (모달) - 항상 현재 사용자 계정(ID 또는 이름)으로만 안전하게 저장
+  const handleSaveAnswer = () => {
+    if (!answerText.trim()) {
+      Alert.alert('알림', '따뜻한 답변을 작성해주세요!');
+      return;
+    }
+    const target = myId || myName || currentUser;
+    if (onAddResponse) {
+      onAddResponse(target, answerText.trim());
+    }
+    setAnswerModalVisible(false);
+    setAnswerText('');
+  };
+
+  // 빠른 인라인 답변 제출
+  const handleQuickAnswerSubmit = () => {
+    if (!quickAnswerText.trim()) {
+      Alert.alert('알림', '스몰톡 답변을 입력해주세요!');
+      return;
+    }
+    const target = myId || myName || currentUser;
+    if (onAddResponse) {
+      onAddResponse(target, quickAnswerText.trim());
+    }
+    setQuickAnswerText('');
+  };
+
+  // -------------------------------------------------------------
+  // 게임 1: 가족 퀴즈 로직
+  // -------------------------------------------------------------
+  const [quizIndex, setQuizIndex] = useState(0);
+  const [quizScore, setQuizScore] = useState(0);
+  const QUIZ_QUESTIONS = [
+    { q: '우리 가족 반려몽이 가장 좋아하는 간식은?', options: ['🍗 닭다리', '🥦 브로콜리', '🍰 케이크', '🥕 당근'], ans: 0 },
+    { q: '오늘 함께하는 미션 완료 시 받을 수 있는 보너스는?', options: ['50점', '100점', '200점', '500점'], ans: 2 },
+    { q: '온 가족이 모이는 저녁 시간은 언제일까요?', options: ['오후 6시', '오후 7시', '오후 8시', '오후 9시'], ans: 1 },
+  ];
+
+  const handleSelectQuizAnswer = (optionIdx) => {
+    const isCorrect = optionIdx === QUIZ_QUESTIONS[quizIndex].ans;
+    if (isCorrect) {
+      setQuizScore(prev => prev + 50);
+      Alert.alert('정답입니다! 🎉', '+50 포인트를 획득했습니다!');
+    } else {
+      Alert.alert('아쉬워요!', '다음 문제에 도전해보세요!');
+    }
+
+    if (quizIndex + 1 < QUIZ_QUESTIONS.length) {
+      setQuizIndex(prev => prev + 1);
+    } else {
+      Alert.alert('퀴즈 완료! 🏆', `총 ${quizScore + (isCorrect ? 50 : 0)}점을 획득했습니다!`, [
+        {
+          text: '확인',
+          onPress: () => {
+            setQuizModalVisible(false);
+            setQuizIndex(0);
+            setQuizScore(0);
+          },
+        },
+      ]);
+    }
+  };
+
+  // -------------------------------------------------------------
+  // 게임 2: 짝 맞추기 (Memory Card Match)
+  // -------------------------------------------------------------
+  const [cards, setCards] = useState([
+    { id: 1, icon: '🐶', isFlipped: false, isMatched: false },
+    { id: 2, icon: '🍕', isFlipped: false, isMatched: false },
+    { id: 3, icon: '🐶', isFlipped: false, isMatched: false },
+    { id: 4, icon: '🌟', isFlipped: false, isMatched: false },
+    { id: 5, icon: '🍕', isFlipped: false, isMatched: false },
+    { id: 6, icon: '🌟', isFlipped: false, isMatched: false },
+  ]);
+  const [selectedCards, setSelectedCards] = useState([]);
+
+  const handleFlipCard = (card) => {
+    if (card.isFlipped || card.isMatched || selectedCards.length >= 2) return;
+
+    const nextCards = cards.map(c => c.id === card.id ? { ...c, isFlipped: true } : c);
+    setCards(nextCards);
+
+    const newSelected = [...selectedCards, card];
+    setSelectedCards(newSelected);
+
+    if (newSelected.length === 2) {
+      const [first, second] = newSelected;
+      if (first.icon === second.icon) {
+        setTimeout(() => {
+          setCards(prev => prev.map(c => (c.id === first.id || c.id === second.id) ? { ...c, isMatched: true } : c));
+          setSelectedCards([]);
+        }, 500);
+      } else {
+        setTimeout(() => {
+          setCards(prev => prev.map(c => (c.id === first.id || c.id === second.id) ? { ...c, isFlipped: false } : c));
+          setSelectedCards([]);
+        }, 800);
+      }
+    }
+  };
 
   return (
     <View style={styles.container}>
-      {/* Sub-header Bar */}
-      <View style={styles.subHeaderBar}>
-        <View>
-          <Text style={styles.subHeaderTitle}>미션 & 혜택</Text>
-          <Text style={styles.subHeaderSub}>소통 · 장보기 · 포인트 보상</Text>
-        </View>
-
-        <View style={styles.subHeaderRight}>
-          <TouchableOpacity
-            style={styles.pointChip}
-            activeOpacity={0.8}
-            onPress={() => setHistoryModalVisible(true)}
-          >
-            <Trophy size={14} color="#F1C40F" style={{ marginRight: 4 }} />
-            <Text style={styles.pointChipText}>{points} P</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* 3-Segment Sub Tabs */}
-      <View style={styles.subTabBar}>
-        <TouchableOpacity
-          style={[styles.subTabItem, activeSubTab === 'smalltalk' && styles.subTabItemActive]}
-          onPress={() => setActiveSubTab('smalltalk')}
-          activeOpacity={0.7}
-        >
-          <MessageSquare
-            size={15}
-            color={activeSubTab === 'smalltalk' ? '#FF7E82' : '#8E8E93'}
-            style={{ marginRight: 4 }}
-          />
-          <Text style={[styles.subTabText, activeSubTab === 'smalltalk' && styles.subTabTextActive]}>
-            스몰톡
-          </Text>
-          {!hasAnswered && <View style={styles.subTabBadgeDot} />}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.subTabItem, activeSubTab === 'shopping' && styles.subTabItemActive]}
-          onPress={() => setActiveSubTab('shopping')}
-          activeOpacity={0.7}
-        >
-          <ShoppingCart
-            size={15}
-            color={activeSubTab === 'shopping' ? '#FF7E82' : '#8E8E93'}
-            style={{ marginRight: 4 }}
-          />
-          <Text style={[styles.subTabText, activeSubTab === 'shopping' && styles.subTabTextActive]}>
-            장보기/심부름
-          </Text>
-          {activeShoppingCount > 0 && (
-            <View style={styles.subTabCountBadge}>
-              <Text style={styles.subTabCountBadgeText}>{activeShoppingCount}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.subTabItem, activeSubTab === 'rewards' && styles.subTabItemActive]}
-          onPress={() => setActiveSubTab('rewards')}
-          activeOpacity={0.7}
-        >
-          <ShoppingBag
-            size={15}
-            color={activeSubTab === 'rewards' ? '#FF7E82' : '#8E8E93'}
-            style={{ marginRight: 4 }}
-          />
-          <Text style={[styles.subTabText, activeSubTab === 'rewards' && styles.subTabTextActive]}>
-            포인트 & 혜택
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* TAB 1: SMALL TALK (소통 미션) */}
-      {activeSubTab === 'smalltalk' && (
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          {/* Daily Topic Box */}
-          <View style={styles.topicCard}>
-            <View style={styles.topicHeader}>
-              <Award size={18} color="#FF7E82" style={{ marginRight: 6 }} />
-              <Text style={styles.topicTag}>오늘의 소통 미션 (답변당 +5P / 전원 +30P)</Text>
-            </View>
-            <Text style={styles.topicTitle}>"{topic}"</Text>
-
-            {isMissionComplete && (
-              <View style={styles.completedBadge}>
-                <Trophy size={14} color="#196F3D" style={{ marginRight: 6 }} />
-                <Text style={styles.completedBadgeText}>가족 전원 미션 완료! 보너스 30P 획득 🎉</Text>
-              </View>
-            )}
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ========================================================= */}
+        {/* 1. 상단 헤더 & 포인트 배지 (Figma 14:1676)                */}
+        {/* ========================================================= */}
+        <View style={styles.headerRow}>
+          <View style={styles.headerLeftCol}>
+            <Text style={styles.categorySubText}>우리 가족 일상</Text>
+            <Text style={styles.headerMainTitle}>오늘 함께</Text>
           </View>
 
-          {/* Answer Submission Card (Prioritized at Top if Unanswered so user never has to scroll past 10 cards) */}
-          {!hasAnswered && (
-            <View style={styles.actionCard}>
-              <Text style={styles.actionTitle}>오늘 미션 참여하기 ✍️</Text>
-              <Text style={styles.actionDesc}>나의 답변을 적으면 즉시 +5P, 가족 전원 완료 시 +30P 보너스를 받아요!</Text>
+          <View style={styles.pointsBadgePill}>
+            <Text style={styles.pointsBadgeText}>⭐ {points.toLocaleString()} pts</Text>
+          </View>
+        </View>
 
-              <TextInput
-                style={styles.textInput}
-                placeholder="오늘의 주제에 대해 가볍게 답해보세요."
-                placeholderTextColor="#AEAEB2"
-                value={answer}
-                onChangeText={setAnswer}
-              />
-
-              <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-                <MessageSquare size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-                <Text style={styles.submitButtonText}>답변 등록</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* 10-Member Quick Status Rail (Horizontal at a glance) */}
-          <View style={styles.quickRailCard}>
-            <View style={styles.quickRailHeader}>
-              <Text style={styles.quickRailTitle}>
-                가족 참여 현황 ({answeredCount} / {totalCount}명)
-              </Text>
-              {isMissionComplete && (
-                <View style={styles.quickRailDoneBadge}>
-                  <Check size={11} color="#059669" />
-                  <Text style={styles.quickRailDoneText}>전원 완료 🎉</Text>
+        {/* ========================================================= */}
+        {/* 2. 오늘의 대화 주제 카드 (Figma 14:1689)                  */}
+        {/* ========================================================= */}
+        <View style={styles.sectionPad}>
+          <View style={styles.dailyTalkCard}>
+            {/* 카드 상단: 태그, 참여율 뱃지, 주제 */}
+            <View style={styles.dailyTalkHeader}>
+              <View style={styles.dailyTalkHeaderLeft}>
+                <View style={styles.dailyTalkTagRow}>
+                  <Text style={styles.dailyTalkTag}>오늘의 대화 주제</Text>
+                  <View style={styles.participationBadge}>
+                    <Text style={styles.participationBadgeText}>
+                      {answeredCount}/{totalMemberCount}명 응답
+                    </Text>
+                  </View>
                 </View>
-              )}
+
+                <View style={styles.dailyTalkTopicRow}>
+                  <Text style={styles.dailyTalkTopicText}>{topicTitle}</Text>
+                </View>
+
+                <Text style={styles.dailyTalkSubText}>{topicCategory}</Text>
+              </View>
+
+              {/* 원형 참여율 게이지 인디케이터 */}
+              <View style={styles.gaugeCircle}>
+                <Text style={styles.gaugeCircleText}>
+                  {answeredCount}/{totalMemberCount}
+                </Text>
+              </View>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickRailScroll}>
-              {(familyMembers && Array.isArray(familyMembers) ? familyMembers : Object.keys(DEFAULT_MEMBERS)).map((item) => {
-                const isDbProfile = typeof item === 'object' && ('id' in item || 'role' in item);
-                const roleKey = isDbProfile ? item.role : item;
-                const memberInfo = getMemberInfo(roleKey);
-                const responseText = isDbProfile
-                  ? (item.id ? responses?.[item.id] : responses?.[item.role])
-                  : responses?.[roleKey];
-                const isAnswered = !!responseText;
-                const memberName = isDbProfile ? item.name : memberInfo.name;
-                const memberAvatar = isDbProfile ? item.avatar : memberInfo.avatar;
+
+            {/* 인라인 바로 답변 작성 영역 (아직 답변하지 않은 경우) */}
+            {!hasAnswered ? (
+              <View style={styles.quickAnswerInputContainer}>
+                <TextInput
+                  style={styles.quickAnswerInput}
+                  placeholder="오늘의 스몰톡 답변 남기기... (+20 EXP, +5P)"
+                  placeholderTextColor="#A8A29E"
+                  value={quickAnswerText}
+                  onChangeText={setQuickAnswerText}
+                  onSubmitEditing={handleQuickAnswerSubmit}
+                />
+                <TouchableOpacity
+                  style={styles.quickAnswerSubmitBtn}
+                  onPress={handleQuickAnswerSubmit}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.quickAnswerSubmitBtnText}>등록</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.myAnswerConfirmedBanner}
+                onPress={handleOpenAnswerModal}
+                activeOpacity={0.8}
+              >
+                <View style={styles.myAnswerCheckIconBox}>
+                  <Check size={14} color="#059669" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.myAnswerConfirmedTitle}>내 스몰톡 답변 완료! 🎉</Text>
+                  <Text style={styles.myAnswerConfirmedText} numberOfLines={1}>"{myAnswer}"</Text>
+                </View>
+                <Text style={styles.myAnswerEditBtnText}>수정</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* 가족 멤버별 답변 리스트 (엄마, 아빠, 지수, 민준) */}
+            <View style={styles.membersAnswerList}>
+              {membersList.map((member, idx) => {
+                const ringColors = [
+                  'rgba(255, 179, 71, 0.25)',
+                  'rgba(135, 206, 235, 0.25)',
+                  'rgba(221, 160, 221, 0.25)',
+                  'rgba(144, 238, 144, 0.25)',
+                ];
+                const bgRing = ringColors[idx % ringColors.length];
+                const isMe = isCurrentMember(member);
+                const memberResponse = isMe ? myAnswer : getMemberResponse(member);
+                const hasAnswer = Boolean(memberResponse);
 
                 return (
-                  <View
-                    key={isDbProfile ? (item.id || item.role) : roleKey}
-                    style={[styles.quickChip, isAnswered && styles.quickChipAnswered]}
+                  <TouchableOpacity
+                    key={member.id || idx}
+                    style={[styles.memberAnswerCard, isMe && styles.myMemberAnswerCard]}
+                    onPress={() => handlePressMemberCard(member)}
+                    activeOpacity={0.8}
                   >
-                    <Text style={styles.quickChipAvatar}>{memberAvatar}</Text>
-                    <Text style={[styles.quickChipName, isAnswered && styles.quickChipNameAnswered]}>
-                      {memberName}
-                    </Text>
-                    {isAnswered ? (
-                      <Check size={11} color="#059669" style={{ marginLeft: 3 }} />
-                    ) : (
-                      <View style={styles.quickChipWaitingDot} />
-                    )}
-                  </View>
+                    <View style={[styles.memberAvatarRing, { backgroundColor: bgRing }]}>
+                      <UserAvatar avatar={member.avatar} size={24} />
+                    </View>
+
+                    <View style={styles.memberAnswerInfoCol}>
+                      <View style={styles.memberAnswerHeaderRow}>
+                        <View style={styles.memberAnswerNameRow}>
+                          <Text style={styles.memberAnswerName}>{member.name || member.role}</Text>
+                          {isMe && (
+                            <View style={styles.mySelfBadge}>
+                              <Text style={styles.mySelfBadgeText}>나</Text>
+                            </View>
+                          )}
+                        </View>
+
+                        <View style={styles.memberStatusActionRow}>
+                          {hasAnswer ? (
+                            <View style={styles.answeredBadge}>
+                              <Check size={10} color="#059669" />
+                              <Text style={styles.answeredBadgeText}>답변 완료</Text>
+                            </View>
+                          ) : (
+                            <Text style={styles.waitingBadgeText}>대기 중</Text>
+                          )}
+
+                          {isMe ? (
+                            <View style={styles.myActionPill}>
+                              <Text style={styles.myActionPillText}>{hasAnswer ? '수정' : '작성'}</Text>
+                            </View>
+                          ) : (
+                            <Text style={[styles.chevronArrowInline, !hasAnswer && { opacity: 0.35 }]}>›</Text>
+                          )}
+                        </View>
+                      </View>
+
+                      <Text
+                        style={[styles.memberAnswerSnippet, hasAnswer && styles.memberAnswerSnippetDone]}
+                        numberOfLines={2}
+                      >
+                        {hasAnswer
+                          ? memberResponse
+                          : (isMe ? '탭하여 내 답변 남기기… ✍️' : '아직 답변 전이에요 💬')}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
                 );
               })}
-            </ScrollView>
-          </View>
-
-          {/* Answered State Confirmation Banner */}
-          {hasAnswered && (
-            <View style={styles.actionCardDone}>
-              <Check size={24} color="#2ECC71" style={{ marginBottom: 6 }} />
-              <Text style={styles.doneTitle}>오늘의 답변을 성공적으로 남겼습니다!</Text>
-              <Text style={styles.doneDesc}>다른 가족들도 모두 답변하면 미션 포인트가 적립됩니다.</Text>
-              <Text style={styles.myAnswerText}>
-                내 답변: "{(myId && responses?.[myId]) || responses?.[currentUser] || (myRole && responses?.[myRole]) || ''}"
-              </Text>
             </View>
-          )}
 
-          {/* Detailed Responses List */}
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>가족 답변 상세 ({answeredCount}/{totalCount})</Text>
-
-            {(familyMembers && Array.isArray(familyMembers) ? familyMembers : Object.keys(DEFAULT_MEMBERS)).map((item) => {
-              const isDbProfile = typeof item === 'object' && ('id' in item || 'role' in item);
-              const roleKey = isDbProfile ? item.role : item;
-              const memberInfo = getMemberInfo(roleKey);
-              const responseText = isDbProfile
-                ? (item.id ? responses?.[item.id] : responses?.[item.role])
-                : responses?.[roleKey];
-              const isAnswered = !!responseText;
-
-              const memberName = isDbProfile ? item.name : memberInfo.name;
-              const memberAvatar = isDbProfile ? item.avatar : memberInfo.avatar;
-              const memberColor = isDbProfile ? item.color : memberInfo.color;
-
-              return (
-                <View key={isDbProfile ? (item.id || item.role) : roleKey} style={styles.memberRow}>
-                  <UserAvatar
-                    avatar={memberAvatar}
-                    size={36}
-                    borderColor={memberColor + '40'}
-                    style={{ marginRight: 10 }}
-                  />
-
-                  <View style={styles.memberInfo}>
-                    <View style={styles.memberNameRow}>
-                      <Text style={[styles.memberName, { color: memberColor }]}>{memberName}</Text>
-                      {isAnswered ? (
-                        <View style={styles.checkBadge}>
-                          <Check size={10} color="#FFFFFF" />
-                          <Text style={styles.checkText}>답변 완료</Text>
-                        </View>
-                      ) : (
-                        <Text style={styles.waitingText}>답변 대기 중</Text>
-                      )}
-                    </View>
-
-                    {isAnswered ? (
-                      <Text style={styles.responseText}>{responseText}</Text>
-                    ) : (
-                      <Text style={styles.emptyResponseText}>아직 오늘 답변을 등록하지 않았습니다.</Text>
-                    )}
-                  </View>
-                </View>
-              );
-            })}
+            {/* 카드 하단 200점 보너스 배너 */}
+            <View style={styles.dailyTalkBonusBanner}>
+              <Text style={styles.dailyTalkBonusText}>모두 참여하면 가족 +200점 🎁</Text>
+            </View>
           </View>
-        </ScrollView>
-      )}
-
-      {/* TAB 2: SHOPPING & CHORES (생활 미션) */}
-      {activeSubTab === 'shopping' && (
-        <View style={{ flex: 1 }}>
-          <ShoppingListScreen
-            embedded={true}
-            shoppingItems={shoppingItems}
-            currentUserProfile={currentUserProfile}
-            familyMembers={familyMembers}
-            onAddItem={onAddItem}
-            onToggleItem={onToggleItem}
-            onDeleteItem={onDeleteItem}
-            onClearCompleted={onClearCompleted}
-            onToggleRepeat={onToggleRepeat}
-          />
         </View>
-      )}
 
-      {/* TAB 3: REWARDS & BOOK STUDIO (보상 & 출판 센터) */}
-      {activeSubTab === 'rewards' && (
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          {/* Points Banner (Clickable to open Point History) */}
-          <TouchableOpacity
-            style={styles.pointsBanner}
-            activeOpacity={0.85}
-            onPress={() => setHistoryModalVisible(true)}
-          >
-            <View style={styles.pointsInfo}>
-              <View style={styles.pointsLabelRow}>
-                <Text style={styles.pointsLabel}>우리 가족의 총 포인트</Text>
-                <View style={styles.historyBadgeBtn}>
-                  <Text style={styles.historyBadgeBtnText}>내역 보기 ›</Text>
-                </View>
-              </View>
-              <View style={styles.pointsRow}>
-                <Trophy size={24} color="#F1C40F" style={{ marginRight: 6 }} />
-                <Text style={styles.pointsValue}>{points}</Text>
-                <Text style={styles.pointsUnit}> P</Text>
-              </View>
-            </View>
-            <View style={styles.missionProgressBox}>
-              <Text style={styles.progressText}>오늘의 미션</Text>
-              <Text style={styles.progressValue}>{answeredCount} / {totalCount} 완료</Text>
-            </View>
-          </TouchableOpacity>
-
-          {/* Family Co-op Goal Funding Card */}
-          {(() => {
-            const currentGoal = coopGoal || DEFAULT_COOP_GOALS[0];
-            const targetPts = currentGoal.targetPoints || 2000;
-            const pct = Math.min(100, Math.round((points / targetPts) * 100));
-            const isFinished = points >= targetPts;
-            const diffPts = Math.max(0, targetPts - points);
-
-            return (
-              <View style={[styles.coopCard, isFinished && styles.coopCardFinished]}>
-                <View style={styles.coopHeaderRow}>
-                  <View style={styles.coopTagBadge}>
-                    <Target size={13} color="#FF7E82" style={{ marginRight: 4 }} />
-                    <Text style={styles.coopTagText}>공동 펀딩 버킷리스트</Text>
-                  </View>
-
-                  <View style={styles.coopHeaderBtnGroup}>
-                    {/* Hall of Fame / Achieved Goals Button */}
-                    <TouchableOpacity
-                      style={styles.coopHistoryBtn}
-                      onPress={() => setAchievedGoalsModalVisible(true)}
-                      activeOpacity={0.7}
-                    >
-                      <Trophy size={12} color="#D97706" style={{ marginRight: 3 }} />
-                      <Text style={styles.coopHistoryBtnText}>
-                        달성 ({achievedGoals.length})
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={styles.coopChangeBtn}
-                      onPress={() => setGoalModalVisible(true)}
-                      activeOpacity={0.7}
-                    >
-                      <Pencil size={12} color="#8E8E93" style={{ marginRight: 3 }} />
-                      <Text style={styles.coopChangeBtnText}>목표 변경</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-
-                <View style={styles.coopTitleRow}>
-                  <View style={[styles.coopGoalIconBox, isFinished && { backgroundColor: '#E8F8F0' }]}>
-                    {renderGoalCategorySvg(currentGoal.category, 22, isFinished ? '#2ECC71' : '#FF7E82')}
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.coopGoalTitle}>{currentGoal.title}</Text>
-                    <Text style={styles.coopGoalSub}>
-                      목표: {targetPts.toLocaleString()} P • 모은 포인트: {points.toLocaleString()} P
-                    </Text>
-                  </View>
-                  <View style={[styles.coopPercentBadge, isFinished && { backgroundColor: '#E8F8F0' }]}>
-                    <Text style={[styles.coopPercentText, isFinished && { color: '#2ECC71' }]}>{pct}%</Text>
-                  </View>
-                </View>
-
-                {/* Progress Bar */}
-                <View style={styles.coopProgressTrack}>
-                  <View
-                    style={[
-                      styles.coopProgressBar,
-                      { width: `${pct}%` },
-                      isFinished && { backgroundColor: '#2ECC71' },
-                    ]}
-                  />
-                </View>
-
-                {/* Status Note */}
-                <View style={styles.coopFooterRow}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                    {isFinished ? (
-                      <CheckCircle2 size={15} color="#27AE60" style={{ marginRight: 5 }} />
-                    ) : (
-                      <Sparkles size={14} color="#FF7E82" style={{ marginRight: 5 }} />
-                    )}
-                    <Text style={[styles.coopStatusText, isFinished && { color: '#27AE60', fontWeight: '800' }]}>
-                      {isFinished
-                        ? `100% 달성 완료! [${currentGoal.title}]을(를) 달성했어요!`
-                        : `목표까지 ${diffPts.toLocaleString()} P 남았어요! 가족과 함께 모아봐요 ✨`}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* 100% Reached: Claim & Party Action Button */}
-                {isFinished && (
-                  <TouchableOpacity
-                    style={styles.coopClaimBtn}
-                    onPress={() => handleClaimCoopGoal(currentGoal, targetPts)}
-                    activeOpacity={0.85}
-                  >
-                    <PartyPopper size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
-                    <Text style={styles.coopClaimBtnText}>
-                      버킷리스트 달성! 포인트 사용하고 파티 열기
-                    </Text>
-                    <ChevronRight size={18} color="#FFFFFF" style={{ marginLeft: 6 }} />
-                  </TouchableOpacity>
-                )}
-              </View>
-            );
-          })()}
-
-          {/* Reward Shop & Coupon Wallet Navigation */}
-          <View style={styles.shopCard}>
-            <View style={styles.shopHeader}>
-              <View style={styles.shopHeaderTitleRow}>
-                <ShoppingBag size={18} color="#FF7E82" style={{ marginRight: 6 }} />
-                <Text style={styles.shopTitle}>포인트 쿠폰 상점</Text>
-              </View>
-
-              <View style={styles.headerBtnGroup}>
-                {/* My Coupon Wallet Button */}
-                <TouchableOpacity style={styles.walletBtn} onPress={() => setWalletModalVisible(true)}>
-                  <Ticket size={14} color="#4A90E2" style={{ marginRight: 4 }} />
-                  <Text style={styles.walletBtnText}>내 쿠폰함 ({availableCoupons.length})</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.addRewardBtn} onPress={handleOpenAddModal}>
-                  <Plus size={14} color="#FF7E82" style={{ marginRight: 2 }} />
-                  <Text style={styles.addRewardBtnText}>쿠폰 등록</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-            <Text style={styles.shopDesc}>미션으로 모은 포인트로 가족 상호 간 쿠폰을 교환해 보세요.</Text>
-
-            {(!rewardsList || rewardsList.length === 0) ? (
-              <Text style={styles.emptyShopText}>아직 등록된 쿠폰이 없습니다. 첫 쿠폰을 등록해 보세요!</Text>
-            ) : (
-              rewardsList.map((reward) => {
-                const canAfford = points >= reward.cost;
-                const ownedCoupons = (userCoupons || []).filter(
-                  c => c.status === 'available' && (c.reward_id === reward.id || c.title === reward.title)
-                );
-                const ownedCount = ownedCoupons.length;
-
-                return (
-                  <View key={reward.id} style={styles.rewardItem}>
-                    <View style={styles.rewardDetails}>
-                      <View style={styles.rewardTitleRow}>
-                        <Text style={styles.rewardTitle}>{reward.title}</Text>
-                        {ownedCount > 0 && (
-                          <View style={styles.ownedCouponBadge}>
-                            <Text style={styles.ownedCouponBadgeText}>보유 {ownedCount}장</Text>
-                          </View>
-                        )}
-                      </View>
-                      <Text style={styles.rewardDesc}>{reward.description || reward.desc}</Text>
-                      <View style={styles.rewardProviderRow}>
-                        <Text style={styles.rewardProvider}>쿠폰 제공자: {reward.provider}</Text>
-                        {canManageReward(reward) && (
-                          <View style={styles.rewardManageButtons}>
-                            <TouchableOpacity
-                              style={styles.rewardManageBtn}
-                              onPress={() => handleStartEditReward(reward)}
-                              activeOpacity={0.7}
-                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                            >
-                              <Pencil size={11} color="#8E8E93" style={{ marginRight: 2 }} />
-                              <Text style={styles.rewardManageBtnText}>수정</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={styles.rewardManageBtn}
-                              onPress={() => handleDeleteRewardClick(reward)}
-                              activeOpacity={0.7}
-                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                            >
-                              <Trash2 size={11} color="#FF6B6B" style={{ marginRight: 2 }} />
-                              <Text style={[styles.rewardManageBtnText, { color: '#FF6B6B' }]}>삭제</Text>
-                            </TouchableOpacity>
-                          </View>
-                        )}
-                      </View>
-                    </View>
-
-                    <View style={styles.rewardActionRow}>
-                      {ownedCount > 0 && (
-                        <TouchableOpacity
-                          style={styles.useCouponDirectBtn}
-                          onPress={() => handleUseCouponClick(ownedCoupons[0])}
-                          activeOpacity={0.8}
-                        >
-                          <Text style={styles.useCouponDirectBtnText}>사용하기</Text>
-                        </TouchableOpacity>
-                      )}
-                      <TouchableOpacity
-                        style={[styles.redeemButton, !canAfford && styles.redeemDisabled]}
-                        onPress={() => handleRedeem(reward)}
-                        activeOpacity={0.8}
-                      >
-                        <Text style={styles.redeemButtonText}>교환 ({reward.cost}P)</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                );
-              })
-            )}
-          </View>
-
-          {/* ============================================================ */}
-          {/* 👑 우리 가족의 최종 목표: 실물 이야기책 출판 스튜디오 (Grand Finale) */}
-          {/* ============================================================ */}
-          <View style={styles.masterpieceCard}>
-            {/* Header Badge */}
-            <View style={styles.masterpieceHeaderRow}>
-              <View style={styles.masterpieceCrownBadge}>
-                <Crown size={13} color="#B45309" style={{ marginRight: 4 }} />
-                <Text style={styles.masterpieceCrownText}>우리 가족의 최종 프로젝트</Text>
-              </View>
-              <View style={styles.masterpieceSpecBadge}>
-                <Text style={styles.masterpieceSpecText}>6개월 목표: 2,500 P • A5 양장본</Text>
-              </View>
-            </View>
-
-            {/* Main Visual & Title */}
-            <View style={styles.masterpieceTitleRow}>
-              <View style={styles.masterpieceBookIconBox}>
-                <BookOpen size={26} color="#92400E" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.masterpieceTitle}>우리 가족 실물 이야기책 출판 📖</Text>
-                <Text style={styles.masterpieceSub}>
-                  가족의 6개월 일상과 문답이 모여 완성되는 영원한 기록
-                </Text>
-              </View>
-            </View>
-
-            {/* Narrative Description */}
-            <Text style={styles.masterpieceDesc}>
-              매일 스몰톡에서 나눈 속마음과 채팅방의 소중한 사진들을 엮어, 인쇄소에서 정식 발간되는 세상에 단 한 권뿐인 하드커버 양장본 책으로 간직해 보세요.
-            </Text>
-
-            {/* Archive Content Highlights */}
-            <View style={styles.masterpieceStatsRow}>
-              <View style={styles.masterpieceStatChip}>
-                <MessageSquare size={12} color="#92400E" style={{ marginRight: 4 }} />
-                <Text style={styles.masterpieceStatText}>
-                  스몰톡 문답 {Object.keys(responses || {}).length}개
-                </Text>
-              </View>
-              <View style={styles.masterpieceStatChip}>
-                <Sparkles size={12} color="#92400E" style={{ marginRight: 4 }} />
-                <Text style={styles.masterpieceStatText}>
-                  Gemini AI 가족 연대기
-                </Text>
-              </View>
-              <View style={styles.masterpieceStatChip}>
-                <CheckCircle size={12} color="#059669" style={{ marginRight: 4 }} />
-                <Text style={[styles.masterpieceStatText, { color: '#059669' }]}>
-                  언제든 제작/열람 가능
-                </Text>
-              </View>
-            </View>
-
-            {/* Grand Action Button */}
+        {/* ========================================================= */}
+        {/* 3. 2단 서브탭 스위처: [✅ 집안일] vs [🎮 게임] (Figma 14:1790) */}
+        {/* ========================================================= */}
+        <View style={styles.sectionPad}>
+          <View style={styles.subTabSegmentContainer}>
             <TouchableOpacity
-              style={styles.masterpieceEnterBtn}
-              onPress={() => setStorybookVisible(true)}
+              style={[styles.subTabSegmentBtn, activeTab === 'chores' && styles.subTabSegmentBtnActive]}
+              onPress={() => setActiveTab('chores')}
               activeOpacity={0.85}
             >
-              <View style={styles.masterpieceBtnMainRow}>
-                <BookOpen size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-                <Text style={styles.masterpieceEnterBtnTitle} numberOfLines={1}>
-                  이야기책 스튜디오 입장하기
-                </Text>
-                <ChevronRight size={16} color="#FDE68A" style={{ marginLeft: 4 }} />
-              </View>
-              <Text style={styles.masterpieceEnterBtnSub} numberOfLines={1}>
-                A5 양장본 미리보기 & 발주 (2,500 P)
+              <Text style={[styles.subTabSegmentText, activeTab === 'chores' && styles.subTabSegmentTextActive]}>
+                ✅ 집안일
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.subTabSegmentBtn, activeTab === 'games' && styles.subTabSegmentBtnActive]}
+              onPress={() => setActiveTab('games')}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.subTabSegmentText, activeTab === 'games' && styles.subTabSegmentTextActive]}>
+                🎮 게임
               </Text>
             </TouchableOpacity>
           </View>
-        </ScrollView>
-      )}
+        </View>
 
-      {/* Add Reward Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalOverlay}
-        >
-          <View style={styles.modalView}>
-            <View style={styles.modalHeaderRow}>
-              <Text style={styles.modalHeader}>{editingRewardId ? '보상 쿠폰 수정' : '새 보상 쿠폰 만들기'}</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <X size={20} color="#8E8E93" />
+        {/* ========================================================= */}
+        {/* 4. 서브탭 1: [✅ 집안일] 탭 콘텐츠 (Figma 14:1797)        */}
+        {/* ========================================================= */}
+        {activeTab === 'chores' && (
+          <View style={styles.tabContentContainer}>
+            {/* 상단 완료 진행 카드 (코랄 그라데이션 스타일) */}
+            <View style={styles.choresProgressBanner}>
+              <View style={styles.choresProgressLeft}>
+                <Text style={styles.choresProgressMainText}>
+                  {totalChoresCount === 0 ? '집안일 현황' : `${totalChoresCount}개 중 ${completedChoresCount}개 완료`}
+                </Text>
+                <Text style={styles.choresProgressSubText}>
+                  {totalChoresCount === 0 ? '새로운 집안일을 등록해보세요 🌱' : `${remainingChoresCount}개 남았어요`}
+                </Text>
+              </View>
+
+              <View style={styles.choresProgressRight}>
+                <Text style={styles.choresScorePoints}>⭐ {todayEarnedScore}</Text>
+                <Text style={styles.choresScoreSub}>오늘 획득한 점수</Text>
+              </View>
+            </View>
+
+            {/* ＋ 새 집안일 추가 버튼 */}
+            <TouchableOpacity
+              style={styles.addChoreDashedBtn}
+              onPress={() => setAddChoreModalVisible(true)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.addChoreDashedBtnText}>＋ 새 집안일 추가</Text>
+            </TouchableOpacity>
+
+            {/* 할 일 (N) 리스트 */}
+            <View style={styles.choresListSection}>
+              <Text style={styles.choresSectionHeading}>할 일 ({activeChores.length})</Text>
+
+              <View style={styles.choresCardsContainer}>
+                {activeChores.length > 0 ? (
+                  activeChores.map((chore) => (
+                    <TouchableOpacity
+                      key={chore.id}
+                      style={styles.choreItemCard}
+                      onPress={() => handleToggleChoreItem(chore)}
+                      onLongPress={() => handleDeleteChoreItem(chore)}
+                      activeOpacity={0.85}
+                    >
+                      {/* 카테고리 대표 이모지 */}
+                      <View style={[styles.choreIconBox, { backgroundColor: chore.iconBg }]}>
+                        <Text style={styles.choreIconText}>{chore.icon}</Text>
+                      </View>
+
+                      {/* 집안일 정보: 제목, 태그, 담당자 */}
+                      <View style={styles.choreDetailsCol}>
+                        <Text style={styles.choreTitleText} numberOfLines={1}>
+                          {chore.title}
+                        </Text>
+
+                        <View style={styles.choreMetaRow}>
+                          <View style={[styles.choreTagBadge, { backgroundColor: chore.iconBg }]}>
+                            <Text style={[styles.choreTagBadgeText, { color: chore.tagColor }]}>
+                              {chore.category}
+                            </Text>
+                          </View>
+                          {chore.repeat_type === 'daily' && (
+                            <View style={styles.choreRepeatBadge}>
+                              <Text style={styles.choreRepeatBadgeText}>🔄 매일</Text>
+                            </View>
+                          )}
+                          <Text style={styles.choreAssigneeText}>→ {chore.assignee}</Text>
+                        </View>
+                      </View>
+
+                      {/* 우측 포인트 및 완료 체크 버튼 */}
+                      <View style={styles.choreRightCol}>
+                        <Text style={styles.chorePointsText}>+{chore.points}</Text>
+                        <TouchableOpacity
+                          style={styles.choreCheckRoundBtn}
+                          onPress={() => handleToggleChoreItem(chore)}
+                          activeOpacity={0.7}
+                        >
+                          <Check size={14} color="#A8A29E" />
+                        </TouchableOpacity>
+                      </View>
+                    </TouchableOpacity>
+                  ))
+                ) : (
+                  <View style={styles.emptyChoresCard}>
+                    <Text style={styles.emptyChoresEmoji}>🌱</Text>
+                    <Text style={styles.emptyChoresTitle}>
+                      {completedChoresList.length > 0
+                        ? '오늘의 모든 집안일을 완료했어요! 🎉'
+                        : '아직 등록된 집안일이 없어요'}
+                    </Text>
+                    <Text style={styles.emptyChoresSub}>
+                      {completedChoresList.length > 0
+                        ? '가족과 함께 여유로운 시간을 보내보세요 ☕'
+                        : '위의 [＋ 새 집안일 추가] 버튼을 눌러 등록해보세요!'}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </View>
+
+            {/* 완료된 집안일 (N) 섹션 */}
+            {completedChoresList.length > 0 && (
+              <View style={styles.completedChoresSection}>
+                <View style={styles.completedHeaderRow}>
+                  <Text style={styles.completedSectionHeading}>
+                    ✓ 완료 ({completedChoresList.length})
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.clearCompletedBtn}
+                    onPress={handleClearCompleted}
+                    activeOpacity={0.7}
+                  >
+                    <Trash2 size={13} color="#FF6B47" style={{ marginRight: 4 }} />
+                    <Text style={styles.clearCompletedBtnText}>완료 비우기</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.choresCardsContainer}>
+                  {completedChoresList.map((chore) => (
+                    <View
+                      key={chore.id}
+                      style={styles.completedChoreCard}
+                    >
+                      <TouchableOpacity
+                        style={styles.completedCheckCircle}
+                        onPress={() => handleToggleChoreItem(chore)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.completedCheckMark}>✓</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={styles.choreDetailsCol}
+                        onPress={() => handleToggleChoreItem(chore)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.completedChoreTitle} numberOfLines={1}>
+                          {chore.title}
+                        </Text>
+                        <View style={styles.completedMetaRow}>
+                          <Text style={styles.completedChoreMeta}>
+                            {chore.assignee} · {chore.category}
+                          </Text>
+                          {chore.repeat_type === 'daily' && (
+                            <View style={styles.choreRepeatBadge}>
+                              <Text style={styles.choreRepeatBadgeText}>🔄 매일</Text>
+                            </View>
+                          )}
+                        </View>
+                      </TouchableOpacity>
+
+                      <View style={styles.completedRightActionsRow}>
+                        <Text style={styles.completedPointsText}>+{chore.points}</Text>
+                        <TouchableOpacity
+                          style={styles.choreDeleteTouchBtn}
+                          onPress={() => handleDeleteChoreItem(chore)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          activeOpacity={0.7}
+                        >
+                          <Trash2 size={15} color="#A8A29E" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* ========================================================= */}
+        {/* 5. 서브탭 2: [🎮 게임] 탭 콘텐츠 (Figma 14:2175)          */}
+        {/* ========================================================= */}
+        {activeTab === 'games' && (
+          <View style={styles.tabContentContainer}>
+            {/* 상단 안내 배너 */}
+            <View style={styles.gamesNoticeBanner}>
+              <Text style={styles.gamesNoticeTitle}>🎮 게임으로 가족 포인트를 모아요!</Text>
+              <Text style={styles.gamesNoticeSub}>
+                모든 게임은 짧고 재밌으며 온 가족이 즐길 수 있어요.
+              </Text>
+            </View>
+
+            {/* 3대 인터랙티브 게임 카드 목록 */}
+            <View style={styles.gamesCardsList}>
+              {/* 게임 1: 가족 퀴즈 */}
+              <TouchableOpacity
+                style={styles.gameActionCard}
+                onPress={() => setQuizModalVisible(true)}
+                activeOpacity={0.85}
+              >
+                <View style={[styles.gameLargeIconBox, { backgroundColor: '#FDE68A' }]}>
+                  <Text style={styles.gameLargeIcon}>🧠</Text>
+                </View>
+
+                <View style={styles.gameInfoCol}>
+                  <View style={styles.gameTitleRow}>
+                    <Text style={styles.gameTitleText}>가족 퀴즈</Text>
+                    <View style={[styles.gameBadgePill, { backgroundColor: '#FDE68A' }]}>
+                      <Text style={[styles.gameBadgePillText, { color: '#78350F' }]}>지식</Text>
+                    </View>
+                  </View>
+
+                  <Text style={styles.gameDescText}>온 가족이 함께 즐기는 재미있는 문제</Text>
+                  <Text style={styles.gamePointsText}>최대 150점</Text>
+                </View>
+
+                <Text style={styles.gameChevron}>›</Text>
+              </TouchableOpacity>
+
+              {/* 게임 2: 짝 맞추기 */}
+              <TouchableOpacity
+                style={styles.gameActionCard}
+                onPress={() => setMatchModalVisible(true)}
+                activeOpacity={0.85}
+              >
+                <View style={[styles.gameLargeIconBox, { backgroundColor: '#DDD6FE' }]}>
+                  <Text style={styles.gameLargeIcon}>🃏</Text>
+                </View>
+
+                <View style={styles.gameInfoCol}>
+                  <View style={styles.gameTitleRow}>
+                    <Text style={styles.gameTitleText}>짝 맞추기</Text>
+                    <View style={[styles.gameBadgePill, { backgroundColor: '#DDD6FE' }]}>
+                      <Text style={[styles.gameBadgePillText, { color: '#5B21B6' }]}>두뇌</Text>
+                    </View>
+                  </View>
+
+                  <Text style={styles.gameDescText}>카드를 뒤집어 같은 그림을 찾아보세요</Text>
+                  <Text style={styles.gamePointsText}>최대 100점</Text>
+                </View>
+
+                <Text style={styles.gameChevron}>›</Text>
+              </TouchableOpacity>
+
+              {/* 게임 3: 사진 챌린지 */}
+              <TouchableOpacity
+                style={styles.gameActionCard}
+                onPress={() => setPhotoModalVisible(true)}
+                activeOpacity={0.85}
+              >
+                <View style={[styles.gameLargeIconBox, { backgroundColor: '#FBCFE8' }]}>
+                  <Text style={styles.gameLargeIcon}>📸</Text>
+                </View>
+
+                <View style={styles.gameInfoCol}>
+                  <View style={styles.gameTitleRow}>
+                    <Text style={styles.gameTitleText}>사진 챌린지</Text>
+                    <View style={[styles.gameBadgePill, { backgroundColor: '#FBCFE8' }]}>
+                      <Text style={[styles.gameBadgePillText, { color: '#9D174D' }]}>창의</Text>
+                    </View>
+                  </View>
+
+                  <Text style={styles.gameDescText}>집 안 곳곳을 사진으로 찍고 포인트 받기</Text>
+                  <Text style={styles.gamePointsText}>최대 60점</Text>
+                </View>
+
+                <Text style={styles.gameChevron}>›</Text>
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.modalLabel}>쿠폰 명칭</Text>
+            {/* 일일 보너스 배너 */}
+            <View style={styles.dailyBonusBanner}>
+              <Text style={styles.dailyBonusIcon}>🌟</Text>
+              <View style={styles.dailyBonusInfo}>
+                <Text style={styles.dailyBonusTitle}>일일 보너스</Text>
+                <Text style={styles.dailyBonusSub}>
+                  오늘 3가지 게임을 모두 완료하면 추가 50점을 드려요!
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        <View style={{ height: 60 }} />
+      </ScrollView>
+
+      {/* ========================================================= */}
+      {/* 모달 1: 대화 주제 답변 작성 모달                          */}
+      {/* ========================================================= */}
+      <Modal visible={answerModalVisible} transparent animationType="fade">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalBackdrop}
+        >
+          <View style={styles.modalCard}>
+            <View style={styles.modalTopRow}>
+              <Text style={styles.modalMainTitle}>내 스몰톡 답변 남기기</Text>
+              <TouchableOpacity onPress={() => setAnswerModalVisible(false)}>
+                <X size={20} color="#78716C" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalTopicTitle}>{topicTitle}</Text>
+
             <TextInput
-              style={styles.modalInput}
-              placeholder="예: 설거지 1회 대행권, 등 안마 15분"
-              placeholderTextColor="#AEAEB2"
-              value={couponTitle}
-              onChangeText={setCouponTitle}
+              style={styles.modalTextInput}
+              placeholder="가족에게 전할 따뜻한 마음을 입력해보세요..."
+              placeholderTextColor="#A8A29E"
+              multiline
+              value={answerText}
+              onChangeText={setAnswerText}
+              autoFocus
             />
 
-            <Text style={styles.modalLabel}>필요 포인트</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="예: 100"
-              placeholderTextColor="#AEAEB2"
-              keyboardType="number-pad"
-              value={couponCost}
-              onChangeText={text => setCouponCost(text.replace(/[^0-9]/g, ''))}
-            />
+            <View style={styles.modalButtonRow}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setAnswerModalVisible(false)}
+              >
+                <Text style={styles.modalCancelBtnText}>취소</Text>
+              </TouchableOpacity>
 
-            <Text style={styles.modalLabel}>쿠폰 상세 설명</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="쿠폰 사용법이나 세부 규칙을 적어주세요."
-              placeholderTextColor="#AEAEB2"
-              value={couponDesc}
-              onChangeText={setCouponDesc}
-            />
-
-            <Text style={styles.modalLabel}>쿠폰 제공자</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="예: 아빠, 엄마, 아들, 가족 전체"
-              placeholderTextColor="#AEAEB2"
-              value={couponProvider}
-              onChangeText={setCouponProvider}
-            />
-
-            <TouchableOpacity style={styles.modalConfirmBtn} onPress={handleSubmitRewardForm}>
-              <Text style={styles.modalConfirmBtnText}>{editingRewardId ? '수정 완료' : '쿠폰 등록하기'}</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalSubmitBtn}
+                onPress={handleSaveAnswer}
+              >
+                <Text style={styles.modalSubmitBtnText}>답변 등록 (+20 EXP)</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* My Coupon Wallet Modal */}
+      {/* ========================================================= */}
+      {/* 모달 1-2: 다른 가족 멤버 답변 열람 모달 (Read-Only)      */}
+      {/* ========================================================= */}
       <Modal
-        animationType="slide"
-        transparent={true}
-        visible={walletModalVisible}
-        onRequestClose={() => setWalletModalVisible(false)}
+        visible={Boolean(viewingMemberAnswer)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setViewingMemberAnswer(null)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalView}>
-            <View style={styles.modalHeaderRow}>
-              <View style={styles.modalHeaderTitleRow}>
-                <Ticket size={22} color="#4A90E2" style={{ marginRight: 6 }} />
-                <Text style={styles.modalHeader}>내 쿠폰 보관함</Text>
-              </View>
-              <TouchableOpacity onPress={() => setWalletModalVisible(false)}>
-                <X size={20} color="#8E8E93" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Wallet Tabs (사용 가능 / 사용 완료 / 만료됨) */}
-            <View style={styles.walletTabRow}>
-              <TouchableOpacity
-                style={[styles.walletTabItem, walletTab === 'available' && styles.walletTabItemActive]}
-                onPress={() => setWalletTab('available')}
-              >
-                <Text style={[styles.walletTabText, walletTab === 'available' && styles.walletTabTextActive]}>
-                  사용 가능 ({availableCoupons.length})
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.walletTabItem, walletTab === 'used' && styles.walletTabItemActive]}
-                onPress={() => setWalletTab('used')}
-              >
-                <Text style={[styles.walletTabText, walletTab === 'used' && styles.walletTabTextActive]}>
-                  사용 완료 ({usedCoupons.length})
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.walletTabItem, walletTab === 'expired' && styles.walletTabItemActive]}
-                onPress={() => setWalletTab('expired')}
-              >
-                <Text style={[styles.walletTabText, walletTab === 'expired' && styles.walletTabTextActive]}>
-                  만료됨 ({expiredCoupons.length})
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.walletScrollContent}>
-              {/* TAB 1: Available Coupons (Stacked) */}
-              {walletTab === 'available' && (
-                stackedAvailableCoupons.length === 0 ? (
-                  <Text style={styles.emptyWalletText}>보유 중인 사용 가능 쿠폰이 없습니다. 포인트 상점에서 교환해보세요!</Text>
-                ) : (
-                  stackedAvailableCoupons.map((stack, idx) => {
-                    const dDay = getDDayDays(stack.expire_date);
-                    return (
-                      <View key={`stack-${idx}`} style={styles.walletItem}>
-                        <View style={styles.walletItemInfo}>
-                          <View style={styles.couponTitleRow}>
-                            <Text style={styles.walletItemTitle}>{stack.title}</Text>
-                            {stack.items.length > 1 && (
-                              <View style={styles.stackBadge}>
-                                <Text style={styles.stackBadgeText}>× {stack.items.length}장</Text>
-                              </View>
-                            )}
-                          </View>
-                          <View style={styles.couponMetaRow}>
-                            <Text style={styles.walletItemProvider}>제공자: {stack.provider}</Text>
-                            {dDay !== null && (
-                              <Text style={styles.expireBadgeText}>
-                                ⏳ D-{dDay}일 (까지 {stack.expire_date})
-                              </Text>
-                            )}
-                          </View>
-                        </View>
-                        <TouchableOpacity
-                          style={styles.useCouponBtn}
-                          onPress={() => handleUseCouponClick(stack.items[0])}
-                        >
-                          <Text style={styles.useCouponBtnText}>사용하기</Text>
-                        </TouchableOpacity>
-                      </View>
-                    );
-                  })
-                )
-              )}
-
-              {/* TAB 2: Used Coupons */}
-              {walletTab === 'used' && (
-                usedCoupons.length === 0 ? (
-                  <Text style={styles.emptyWalletText}>사용 완료된 쿠폰 내역이 없습니다.</Text>
-                ) : (
-                  usedCoupons.map((coupon) => (
-                    <View key={coupon.id} style={styles.walletItemDone}>
-                      <View style={styles.walletItemInfo}>
-                        <Text style={styles.walletItemTitleDone}>{coupon.title}</Text>
-                        <Text style={styles.walletItemProvider}>제공자: {coupon.provider || '가족'}</Text>
-                      </View>
-                      <View style={styles.usedBadge}>
-                        <CheckCircle size={14} color="#2ECC71" style={{ marginRight: 2 }} />
-                        <Text style={styles.usedBadgeText}>사용됨</Text>
-                      </View>
-                    </View>
-                  ))
-                )
-              )}
-
-              {/* TAB 3: Expired Coupons */}
-              {walletTab === 'expired' && (
-                expiredCoupons.length === 0 ? (
-                  <Text style={styles.emptyWalletText}>만료된 쿠폰이 없습니다.</Text>
-                ) : (
-                  expiredCoupons.map((coupon) => (
-                    <View key={coupon.id} style={styles.walletItemExpired}>
-                      <View style={styles.walletItemInfo}>
-                        <Text style={styles.walletItemTitleExpired}>{coupon.title}</Text>
-                        <Text style={styles.walletItemProvider}>제공자: {coupon.provider || '가족'} (만료일: {coupon.expire_date})</Text>
-                      </View>
-                      <View style={styles.expiredBadge}>
-                        <Text style={styles.expiredBadgeText}>만료됨</Text>
-                      </View>
-                    </View>
-                  ))
-                )
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* 3. Point History / Ledger Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={historyModalVisible}
-        onRequestClose={() => setHistoryModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalView, { maxHeight: '85%' }]}>
-            <View style={styles.modalHeaderRow}>
-              <View style={styles.modalHeaderTitleRow}>
-                <Coins size={22} color="#F1C40F" style={{ marginRight: 8 }} />
-                <Text style={styles.modalHeader}>포인트 적립 / 사용 내역</Text>
-              </View>
-              <TouchableOpacity onPress={() => setHistoryModalVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <X size={20} color="#8E8E93" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Point Summary Cards */}
-            <View style={styles.historySummaryContainer}>
-              <View style={styles.historySummaryCard}>
-                <Text style={styles.historySummaryLabel}>현재 잔여</Text>
-                <Text style={[styles.historySummaryValue, { color: '#F1C40F' }]}>{points} P</Text>
-              </View>
-              <View style={styles.historySummaryCard}>
-                <Text style={styles.historySummaryLabel}>총 적립 (+)</Text>
-                <Text style={[styles.historySummaryValue, { color: '#2ECC71' }]}>+{totalEarned} P</Text>
-              </View>
-              <View style={styles.historySummaryCard}>
-                <Text style={styles.historySummaryLabel}>총 사용 (-)</Text>
-                <Text style={[styles.historySummaryValue, { color: '#FF6B6B' }]}>-{totalSpent} P</Text>
-              </View>
-            </View>
-
-            {/* Filter Tabs */}
-            <View style={styles.historyTabRow}>
-              <TouchableOpacity
-                style={[styles.historyTabItem, historyFilter === 'all' && styles.historyTabItemActive]}
-                onPress={() => setHistoryFilter('all')}
-              >
-                <Text style={[styles.historyTabText, historyFilter === 'all' && styles.historyTabTextActive]}>
-                  전체 ({pointHistory.length})
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.historyTabItem, historyFilter === 'earn' && styles.historyTabItemActive]}
-                onPress={() => setHistoryFilter('earn')}
-              >
-                <Text style={[styles.historyTabText, historyFilter === 'earn' && styles.historyTabTextActive]}>
-                  적립 (+)
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.historyTabItem, historyFilter === 'spend' && styles.historyTabItemActive]}
-                onPress={() => setHistoryFilter('spend')}
-              >
-                <Text style={[styles.historyTabText, historyFilter === 'spend' && styles.historyTabTextActive]}>
-                  사용 (-)
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Transaction List */}
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.historyScrollContent}>
-              {filteredHistory.length === 0 ? (
-                <View style={styles.emptyHistoryBox}>
-                  <Text style={styles.emptyHistoryText}>해당하는 포인트 내역이 없습니다.</Text>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            {/* 상단 프로필 및 닫기 버튼 */}
+            <View style={styles.modalTopRow}>
+              <View style={styles.viewerHeaderInfo}>
+                <View style={[styles.memberAvatarRing, { backgroundColor: 'rgba(255, 107, 71, 0.15)', marginRight: 10 }]}>
+                  <UserAvatar avatar={viewingMemberAnswer?.member?.avatar} size={24} />
                 </View>
-              ) : (
-                filteredHistory.map((item) => {
-                  const isEarn = item.type === 'earn';
-                  return (
-                    <View key={item.id} style={styles.historyItemCard}>
-                      <View style={[styles.historyItemIconBox, { backgroundColor: isEarn ? '#E8F8F0' : '#FFF0F0' }]}>
-                        {isEarn ? (
-                          <TrendingUp size={18} color="#2ECC71" />
-                        ) : (
-                          <TrendingDown size={18} color="#FF6B6B" />
-                        )}
-                      </View>
-                      <View style={styles.historyItemInfo}>
-                        <Text style={styles.historyItemTitle} numberOfLines={1}>{item.title}</Text>
-                        <View style={styles.historyItemSubRow}>
-                          <Text style={styles.historyItemDate}>{item.date}</Text>
-                          {item.balance !== undefined && (
-                            <Text style={styles.historyItemBalance}>잔액 {item.balance}P</Text>
-                          )}
-                        </View>
-                      </View>
-                      <View style={styles.historyItemAmountBox}>
-                        <Text style={[styles.historyItemAmountText, { color: isEarn ? '#2ECC71' : '#FF6B6B' }]}>
-                          {isEarn ? `+${item.amount}` : `-${item.amount}`} P
-                        </Text>
-                      </View>
-                    </View>
-                  );
-                })
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Co-op Goal Setting Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={goalModalVisible}
-        onRequestClose={() => setGoalModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalView}>
-            <View style={styles.modalHeaderRow}>
-              <View style={styles.modalHeaderTitleRow}>
-                <Target size={22} color="#FF7E82" style={{ marginRight: 6 }} />
-                <Text style={styles.modalHeader}>가족 공동 펀딩 목표 설정</Text>
-              </View>
-              <TouchableOpacity onPress={() => setGoalModalVisible(false)}>
-                <X size={20} color="#8E8E93" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
-              <Text style={styles.goalSectionTitle}>추천 버킷리스트 목표 선택</Text>
-              {goalPresets.map((preset) => {
-                const isSelected = (coopGoal?.id === preset.id) || (coopGoal?.title === preset.title);
-                const isEditing = editingPresetId === preset.id;
-
-                if (isEditing) {
-                  return (
-                    <View key={preset.id} style={styles.presetEditCard}>
-                      <Text style={styles.presetEditHeaderTitle}>버킷리스트 목표 수정</Text>
-                      <TextInput
-                        style={styles.presetEditInput}
-                        value={editPresetTitle}
-                        onChangeText={setEditPresetTitle}
-                        placeholder="목표 이름"
-                        placeholderTextColor="#AEAEB2"
-                      />
-                      <TextInput
-                        style={styles.presetEditInput}
-                        value={editPresetPoints}
-                        onChangeText={(t) => setEditPresetPoints(t.replace(/[^0-9]/g, ''))}
-                        placeholder="목표 포인트"
-                        placeholderTextColor="#AEAEB2"
-                        keyboardType="number-pad"
-                      />
-
-                      <View style={styles.categoryPickerRow}>
-                        {[
-                          { key: 'dinner', label: '외식' },
-                          { key: 'travel', label: '여행' },
-                          { key: 'cinema', label: '영화' },
-                          { key: 'cafe', label: '카페' },
-                          { key: 'custom', label: '맞춤' },
-                        ].map(opt => {
-                          const isCatActive = editPresetCategory === opt.key;
-                          return (
-                            <TouchableOpacity
-                              key={opt.key}
-                              style={[styles.categoryChip, isCatActive && styles.categoryChipActive]}
-                              onPress={() => setEditPresetCategory(opt.key)}
-                            >
-                              {renderGoalCategorySvg(opt.key, 12, isCatActive ? '#FFFFFF' : '#8E8E93')}
-                              <Text style={[styles.categoryChipText, isCatActive && styles.categoryChipTextActive]}>
-                                {opt.label}
-                              </Text>
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-
-                      <View style={styles.presetEditActionsRow}>
-                        <TouchableOpacity
-                          style={styles.presetEditCancelBtn}
-                          onPress={() => setEditingPresetId(null)}
-                        >
-                          <X size={13} color="#8E8E93" style={{ marginRight: 4 }} />
-                          <Text style={styles.presetEditCancelBtnText}>취소</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.presetEditSaveBtn}
-                          onPress={() => handleSaveEditPreset(preset.id)}
-                        >
-                          <Check size={13} color="#FFFFFF" style={{ marginRight: 4 }} />
-                          <Text style={styles.presetEditSaveBtnText}>저장</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  );
-                }
-
-                return (
-                  <TouchableOpacity
-                    key={preset.id}
-                    style={[styles.goalPresetCard, isSelected && styles.goalPresetCardActive]}
-                    onPress={() => {
-                      if (onUpdateCoopGoal) {
-                        onUpdateCoopGoal({
-                          id: preset.id,
-                          title: preset.title,
-                          targetPoints: preset.targetPoints,
-                          category: preset.category,
-                          desc: preset.desc || '가족이 함께 모으는 버킷리스트',
-                        });
-                      }
-                      setGoalModalVisible(false);
-                      Alert.alert('목표 설정 완료', `'${preset.title}'(으)로 공동 목표가 변경되었습니다!`);
-                    }}
-                  >
-                    <View style={[styles.goalPresetIconBox, isSelected && { backgroundColor: '#FFEBEF' }]}>
-                      {renderGoalCategorySvg(preset.category, 20, isSelected ? '#FF7E82' : '#8E8E93')}
-                    </View>
-                    <View style={{ flex: 1, marginRight: 8 }}>
-                      <Text style={[styles.goalPresetTitle, isSelected && { color: '#FF7E82', fontWeight: '800' }]}>
-                        {preset.title}
-                      </Text>
-                      <Text style={styles.goalPresetDesc}>{preset.desc || '가족이 함께 모으는 버킷리스트'}</Text>
-                    </View>
-                    <View style={styles.presetRightControls}>
-                      <View style={styles.goalPresetPointsBadge}>
-                        <Text style={styles.goalPresetPointsText}>{preset.targetPoints.toLocaleString()} P</Text>
-                      </View>
-                      <View style={styles.presetActionBtnRow}>
-                        <TouchableOpacity
-                          style={styles.presetSmallActionBtn}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            handleStartEditPreset(preset);
-                          }}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        >
-                          <Pencil size={12} color="#4A90E2" />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.presetSmallActionBtn}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            handleDeletePreset(preset);
-                          }}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        >
-                          <Trash2 size={12} color="#FF3B30" />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-
-              <View style={styles.customGoalDivider} />
-              <Text style={styles.goalSectionTitle}>직접 목표 만들기</Text>
-              <TextInput
-                style={styles.modalInput}
-                placeholder="가족 공동 목표 이름 (예: 제주도 여행)"
-                placeholderTextColor="#AEAEB2"
-                value={customGoalTitle}
-                onChangeText={setCustomGoalTitle}
-              />
-              <TextInput
-                style={styles.modalInput}
-                placeholder="목표 포인트 (예: 2500)"
-                placeholderTextColor="#AEAEB2"
-                keyboardType="number-pad"
-                value={customGoalPoints}
-                onChangeText={(t) => setCustomGoalPoints(t.replace(/[^0-9]/g, ''))}
-              />
-
-              <TouchableOpacity
-                style={styles.modalConfirmBtn}
-                onPress={handleAddCustomGoal}
-              >
-                <Text style={styles.modalConfirmBtnText}>직접 입력한 목표로 설정</Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Achieved Goals History Modal (Hall of Fame) */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={achievedGoalsModalVisible}
-        onRequestClose={() => setAchievedGoalsModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalView}>
-            <View style={styles.modalHeaderRow}>
-              <View style={styles.modalHeaderTitleRow}>
-                <Trophy size={20} color="#D97706" style={{ marginRight: 6 }} />
-                <Text style={styles.modalHeader}>우리가 이룬 버킷리스트</Text>
-              </View>
-              <TouchableOpacity onPress={() => setAchievedGoalsModalVisible(false)}>
-                <X size={20} color="#8E8E93" />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.historyDesc}>
-              가족이 함께 힘을 모아 달성한 소중한 추억들입니다.
-            </Text>
-
-            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 380, width: '100%' }}>
-              {achievedGoals.length === 0 ? (
-                <View style={styles.emptyHistoryContainer}>
-                  <Trophy size={36} color="#D1D1D6" style={{ marginBottom: 10 }} />
-                  <Text style={styles.emptyHistoryTitle}>아직 달성한 버킷리스트가 없습니다</Text>
-                  <Text style={styles.emptyHistorySub}>
-                    미션을 완수하고 포인트를 모아 첫 버킷리스트를 달성해 보세요!
+                <View>
+                  <Text style={styles.modalMainTitle}>
+                    {viewingMemberAnswer?.member?.name || viewingMemberAnswer?.member?.role} 님의 답변
+                  </Text>
+                  <Text style={styles.modalSubHeaderRole}>
+                    오늘의 가족 스몰톡 이야기 💬
                   </Text>
                 </View>
-              ) : (
-                achievedGoals.map((item, idx) => (
-                  <View key={item.id || idx} style={styles.achievedItemCard}>
-                    <View style={styles.achievedItemIconBox}>
-                      {renderGoalCategorySvg(item.category, 20, '#FF7E82')}
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.achievedItemTitle}>{item.title}</Text>
-                      <Text style={styles.achievedItemDate}>
-                        달성일: {new Date(item.achievedAt).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}
-                      </Text>
-                    </View>
-                    <View style={styles.achievedItemBadge}>
-                      <Text style={styles.achievedItemBadgeText}>
-                        {item.targetPoints?.toLocaleString()} P
-                      </Text>
-                    </View>
-                  </View>
-                ))
-              )}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Co-op Goal Achieved Celebration Modal */}
-      <Modal
-        animationType="fade"
-        transparent={true}
-        visible={goalCelebrationModalVisible}
-        onRequestClose={() => setGoalCelebrationModalVisible(false)}
-      >
-        <View style={styles.celebrationOverlay}>
-          <View style={styles.celebrationCard}>
-            <View style={styles.celebrationIconCircle}>
-              <PartyPopper size={36} color="#FF7E82" />
+              </View>
+              <TouchableOpacity
+                onPress={() => setViewingMemberAnswer(null)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <X size={20} color="#78716C" />
+              </TouchableOpacity>
             </View>
 
-            <Text style={styles.celebrationTitle}>가족 버킷리스트 달성 완료!</Text>
-            <Text style={styles.celebrationSubText}>
-              우리 가족이 힘을 합쳐 목표를 멋지게 달성했습니다!
-            </Text>
+            {/* 오늘의 질문 */}
+            <View style={styles.viewerTopicBox}>
+              <Text style={styles.viewerTopicLabel}>오늘의 대화 질문</Text>
+              <Text style={styles.viewerTopicTitle}>{topicTitle}</Text>
+            </View>
 
-            <View style={styles.celebrationGoalCard}>
-              <View style={styles.celebrationGoalIconBox}>
-                {renderGoalCategorySvg(lastAchievedGoal?.category, 24, '#FF7E82')}
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.celebrationGoalTitle}>{lastAchievedGoal?.title}</Text>
-                <Text style={styles.celebrationGoalPoints}>
-                  사용 포인트: {lastAchievedGoal?.targetPoints?.toLocaleString()} P
+            {/* 답변 본문 */}
+            <View style={styles.viewerContentBox}>
+              <Text style={styles.viewerQuoteMark}>“</Text>
+              <ScrollView style={styles.viewerScrollContent} showsVerticalScrollIndicator={false}>
+                <Text style={styles.viewerAnswerText}>
+                  {viewingMemberAnswer?.text}
                 </Text>
-              </View>
-              <CheckCircle2 size={20} color="#2ECC71" />
+              </ScrollView>
+              <Text style={[styles.viewerQuoteMark, { textAlign: 'right' }]}>”</Text>
             </View>
 
-            <Text style={styles.celebrationNoticeDesc}>
-              가족 단톡방에 축하 공지가 발송되었으며, 달성 내역에 영구 보관되었습니다.
-            </Text>
-
+            {/* 닫기 / 공감 버튼 */}
             <TouchableOpacity
-              style={styles.celebrationNextBtn}
-              onPress={() => {
-                setGoalCelebrationModalVisible(false);
-                setGoalModalVisible(true);
-              }}
+              style={styles.viewerConfirmBtn}
+              onPress={() => setViewingMemberAnswer(null)}
               activeOpacity={0.85}
             >
-              <Target size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.celebrationNextBtnText}>다음 버킷리스트 정하러 가기</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.celebrationCloseBtn}
-              onPress={() => setGoalCelebrationModalVisible(false)}
-            >
-              <Text style={styles.celebrationCloseBtnText}>닫기</Text>
+              <Text style={styles.viewerConfirmBtnText}>공감했어요 ❤️</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      {/* AI Family Storybook Modal */}
-      <FamilyStorybookModal
-        visible={storybookVisible}
-        onClose={() => setStorybookVisible(false)}
-        smallTalkState={smallTalkState}
-        familyMembers={familyMembers}
-        messages={messages}
-        currentUserProfile={currentUserProfile}
-        onSendOrderNotice={onSendOrderNotice}
-        points={points}
-        onDeductPoints={onDeductPoints}
-      />
+      {/* ========================================================= */}
+      {/* 모달 2: 새 집안일 추가 모달                                */}
+      {/* ========================================================= */}
+      <Modal visible={addChoreModalVisible} transparent animationType="fade">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalBackdrop}
+        >
+          <View style={styles.modalCard}>
+            <View style={styles.modalTopRow}>
+              <Text style={styles.modalMainTitle}>새 집안일 등록</Text>
+              <TouchableOpacity onPress={() => setAddChoreModalVisible(false)}>
+                <X size={20} color="#78716C" />
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              style={styles.modalInputSingle}
+              placeholder="집안일 제목 (예: 분리수거하기)"
+              placeholderTextColor="#A8A29E"
+              value={newChoreTitle}
+              onChangeText={setNewChoreTitle}
+            />
+
+            <View style={styles.modalFieldRow}>
+              <Text style={styles.modalFieldLabel}>보상 포인트 (P):</Text>
+              <TextInput
+                style={styles.modalNumberInput}
+                keyboardType="numeric"
+                value={newChorePoints}
+                onChangeText={setNewChorePoints}
+              />
+            </View>
+
+            {/* 자동 스마트 카테고리 실시간 프리뷰 */}
+            <View style={styles.modalFieldCol}>
+              <Text style={styles.modalFieldLabel}>자동 분류 태그:</Text>
+              <View style={styles.autoCategoryPreviewRow}>
+                <View style={[styles.autoCategoryPill, { backgroundColor: previewIconMeta.iconBg }]}>
+                  <Text style={styles.autoCategoryEmoji}>{previewIconMeta.icon}</Text>
+                  <Text style={[styles.autoCategoryLabel, { color: previewIconMeta.tagColor }]}>
+                    {previewIconMeta.category}
+                  </Text>
+                </View>
+                <Text style={styles.autoCategoryHint}>✨ 제목 키워드로 자동 지정돼요</Text>
+              </View>
+            </View>
+
+            <View style={styles.modalFieldCol}>
+              <Text style={styles.modalFieldLabel}>담당 가족:</Text>
+              <View style={styles.categoryChipsRow}>
+                {['가족 전체', ...membersList.map(m => m.name || m.role)].filter((v, i, a) => a.indexOf(v) === i).map(mem => (
+                  <TouchableOpacity
+                    key={mem}
+                    style={[styles.categoryChip, newChoreAssignee === mem && styles.categoryChipActive]}
+                    onPress={() => setNewChoreAssignee(mem)}
+                  >
+                    <Text style={[styles.categoryChipText, newChoreAssignee === mem && styles.categoryChipTextActive]}>
+                      {mem}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* 반복 주기 설정 (오늘만 vs 매일 반복) */}
+            <View style={styles.modalFieldCol}>
+              <Text style={styles.modalFieldLabel}>반복 설정:</Text>
+              <View style={styles.repeatToggleRow}>
+                <TouchableOpacity
+                  style={[styles.repeatTabBtn, newChoreRepeatType === 'none' && styles.repeatTabBtnActive]}
+                  onPress={() => setNewChoreRepeatType('none')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.repeatTabText, newChoreRepeatType === 'none' && styles.repeatTabTextActive]}>
+                    📌 오늘만 (1회성)
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.repeatTabBtn, newChoreRepeatType === 'daily' && styles.repeatTabBtnActive]}
+                  onPress={() => setNewChoreRepeatType('daily')}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.repeatTabText, newChoreRepeatType === 'daily' && styles.repeatTabTextActive]}>
+                    🔄 매일 반복 (루틴)
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.repeatHintText}>
+                {newChoreRepeatType === 'daily'
+                  ? '✨ 매일 자정(00:00)이 지나면 새로운 오늘 할 일로 자동 갱신돼요'
+                  : '✨ 오늘 완료하면 끝나는 일회성 할 일이에요'}
+              </Text>
+            </View>
+
+            <View style={styles.modalButtonRow}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setAddChoreModalVisible(false)}
+              >
+                <Text style={styles.modalCancelBtnText}>취소</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.modalSubmitBtn}
+                onPress={handleCreateChore}
+              >
+                <Text style={styles.modalSubmitBtnText}>등록하기</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ========================================================= */}
+      {/* 모달 3: 가족 퀴즈 게임 모달                                */}
+      {/* ========================================================= */}
+      <Modal visible={quizModalVisible} transparent animationType="slide">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.gameModalCard}>
+            <View style={styles.modalTopRow}>
+              <Text style={styles.modalMainTitle}>🧠 가족 퀴즈 (Q{quizIndex + 1}/3)</Text>
+              <TouchableOpacity onPress={() => setQuizModalVisible(false)}>
+                <X size={20} color="#78716C" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.quizQuestionText}>{QUIZ_QUESTIONS[quizIndex]?.q}</Text>
+
+            <View style={styles.quizOptionsCol}>
+              {QUIZ_QUESTIONS[quizIndex]?.options.map((opt, oIdx) => (
+                <TouchableOpacity
+                  key={oIdx}
+                  style={styles.quizOptionBtn}
+                  onPress={() => handleSelectQuizAnswer(oIdx)}
+                >
+                  <Text style={styles.quizOptionText}>{opt}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ========================================================= */}
+      {/* 모달 4: 짝 맞추기 게임 모달                                */}
+      {/* ========================================================= */}
+      <Modal visible={matchModalVisible} transparent animationType="slide">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.gameModalCard}>
+            <View style={styles.modalTopRow}>
+              <Text style={styles.modalMainTitle}>🃏 짝 맞추기 게임</Text>
+              <TouchableOpacity onPress={() => setMatchModalVisible(false)}>
+                <X size={20} color="#78716C" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.gameModalSubtitle}>같은 이모지 카드 2장을 뒤집어 맞춰보세요!</Text>
+
+            <View style={styles.cardsGrid}>
+              {cards.map(card => (
+                <TouchableOpacity
+                  key={card.id}
+                  style={[styles.memoryCardBox, card.isFlipped && styles.memoryCardFlipped]}
+                  onPress={() => handleFlipCard(card)}
+                >
+                  <Text style={styles.memoryCardText}>
+                    {card.isFlipped || card.isMatched ? card.icon : '❓'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ========================================================= */}
+      {/* 모달 5: 사진 챌린지 모달                                   */}
+      {/* ========================================================= */}
+      <Modal visible={photoModalVisible} transparent animationType="slide">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.gameModalCard}>
+            <View style={styles.modalTopRow}>
+              <Text style={styles.modalMainTitle}>📸 사진 챌린지</Text>
+              <TouchableOpacity onPress={() => setPhotoModalVisible(false)}>
+                <X size={20} color="#78716C" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.gameModalSubtitle}>
+              오늘의 미션: "가장 아늑한 우리 집 공간을 찍어주세요!"
+            </Text>
+
+            <TouchableOpacity
+              style={styles.photoUploadArea}
+              onPress={() => {
+                Alert.alert('미션 완료! 🎉', '+60 포인트가 가족 적립되었습니다!');
+                setPhotoModalVisible(false);
+              }}
+            >
+              <Camera size={44} color="#FF6B47" style={{ marginBottom: 8 }} />
+              <Text style={styles.photoUploadText}>사진 촬영 및 업로드</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: commonStyles.screenContainer,
-  subHeaderBar: commonStyles.subHeaderBar,
-  subHeaderTitle: commonStyles.subHeaderTitle,
-  subHeaderSub: commonStyles.subHeaderSub,
-  subHeaderRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  pointChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF9E6',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#FDE68A',
-  },
-  pointChipText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#B45309',
-  },
-  subTabBar: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingTop: 6,
-    paddingBottom: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F2',
-    gap: 8,
-  },
-  subTabItem: {
+  container: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 9,
-    borderRadius: 10,
-    backgroundColor: '#F8F9FA',
-    borderWidth: 1,
-    borderColor: '#ECEFF1',
-    position: 'relative',
+    backgroundColor: '#FAF8F3', // Figma node 1:700 배경색
   },
-  subTabItemActive: {
-    backgroundColor: '#FFF2F3',
-    borderColor: '#FF7E82',
-  },
-  subTabText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#8E8E93',
-  },
-  subTabTextActive: {
-    color: '#FF7E82',
-    fontWeight: '700',
-  },
-  subTabBadgeDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#FF7E82',
-    marginLeft: 4,
-  },
-  subTabCountBadge: {
-    backgroundColor: '#FF7E82',
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 10,
-    marginLeft: 4,
-  },
-  subTabCountBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#FFFFFF',
+  scroll: {
+    flex: 1,
   },
   scrollContent: {
-    padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 30,
   },
-  pointsBanner: {
+
+  // 1. 헤더 섹션
+  headerRow: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    alignItems: 'center',
     justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
-  },
-  pointsInfo: {
-    flex: 1,
-  },
-  pointsLabelRow: {
-    flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
+  },
+  headerLeftCol: {
+    justifyContent: 'center',
+  },
+  categorySubText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#A8A29E',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
     marginBottom: 4,
   },
-  pointsLabel: {
-    fontSize: 11,
-    color: '#8E8E93',
-    fontWeight: '600',
-  },
-  historyBadgeBtn: {
-    backgroundColor: '#F1F2F4',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    marginLeft: 6,
-  },
-  historyBadgeBtnText: {
-    fontSize: 10,
-    color: '#4A90E2',
-    fontWeight: '700',
-  },
-  pointsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  pointsValue: {
-    fontSize: 24,
+  headerMainTitle: {
+    fontSize: 30,
     fontWeight: '900',
-    color: '#1C1C1E',
+    color: '#1C1917',
+    letterSpacing: -0.5,
   },
-  pointsUnit: {
-    fontSize: 14,
-    color: '#F1C40F',
-    fontWeight: '700',
-  },
-  missionProgressBox: {
-    backgroundColor: '#FFF2F3',
-    borderRadius: 10,
-    paddingHorizontal: 12,
+  pointsBadgePill: {
+    backgroundColor: '#FDE68A',
+    paddingHorizontal: 16,
     paddingVertical: 8,
-    alignItems: 'center',
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
   },
-  progressText: {
-    fontSize: 10,
-    color: '#FF7E82',
-    fontWeight: '700',
-    marginBottom: 2,
+  pointsBadgeText: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#78350F',
   },
-  progressValue: {
-    fontSize: 13,
-    color: '#FF7E82',
-    fontWeight: '800',
+
+  sectionPad: {
+    paddingHorizontal: 20,
+    marginTop: 12,
   },
-  topicCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+
+  // 2. 오늘의 대화 주제 카드 (Figma 14:1689)
+  dailyTalkCard: {
+    backgroundColor: '#FAF5FF', // 소프트 라벤더
+    borderRadius: 24,
+    borderWidth: 1.2,
+    borderColor: '#C4B5FD',
     padding: 18,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  topicHeader: {
+  dailyTalkHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  topicTag: {
-    fontSize: 12,
-    color: '#FF7E82',
-    fontWeight: '700',
-  },
-  topicTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#1C1C1E',
-    lineHeight: 25,
-    marginBottom: 10,
-  },
-  completedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#D4EFDF',
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    marginTop: 4,
-  },
-  completedBadgeText: {
-    fontSize: 12,
-    color: '#196F3D',
-    fontWeight: '700',
-  },
-  sectionCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#1C1C1E',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(196, 181, 253, 0.35)',
+    paddingBottom: 14,
     marginBottom: 14,
   },
-  memberRow: {
-    flexDirection: 'row',
-    marginBottom: 16,
-    alignItems: 'flex-start',
+  dailyTalkHeaderLeft: {
+    flex: 1,
+    paddingRight: 10,
   },
-  avatarBox: {
+  dailyTalkTagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  dailyTalkTag: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#7C3AED',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  participationBadge: {
+    backgroundColor: '#EDE9FE',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+  },
+  participationBadgeText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#6D28D9',
+  },
+  dailyTalkTopicRow: {
+    marginBottom: 4,
+  },
+  dailyTalkTopicText: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#1C1917',
+    lineHeight: 22,
+  },
+  dailyTalkSubText: {
+    fontSize: 12,
+    color: '#8B5CF6',
+    fontWeight: '600',
+  },
+  gaugeCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 3,
+    borderColor: '#C4B5FD',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gaugeCircleText: {
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#7C3AED',
+  },
+
+  // 인라인 바로 답변 입력창
+  quickAnswerInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1.2,
+    borderColor: '#E8E0D0',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginBottom: 14,
+    gap: 8,
+  },
+  quickAnswerInput: {
+    flex: 1,
+    fontSize: 13,
+    color: '#1C1917',
+    paddingVertical: 6,
+  },
+  quickAnswerSubmitBtn: {
+    backgroundColor: '#8B5CF6',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickAnswerSubmitBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+
+  // 내 답변 완료 배너
+  myAnswerConfirmedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1.2,
+    borderColor: '#BBF7D0',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 14,
+    gap: 10,
+  },
+  myAnswerCheckIconBox: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  myAnswerConfirmedTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#15803D',
+    marginBottom: 2,
+  },
+  myAnswerConfirmedText: {
+    fontSize: 13,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  myAnswerEditBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#059669',
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+  },
+
+  // 가족 답변 카드 리스트
+  membersAnswerList: {
+    gap: 10,
+  },
+  memberAnswerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1.2,
+    borderColor: '#E8E0D0',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  myMemberAnswerCard: {
+    backgroundColor: '#FFFDF9',
+    borderColor: '#FDBA74',
+  },
+  memberAvatarRing: {
     width: 38,
     height: 38,
     borderRadius: 19,
-    justifyContent: 'center',
+    borderWidth: 1.2,
+    borderColor: '#E8E0D0',
     alignItems: 'center',
+    justifyContent: 'center',
     marginRight: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
   },
-  avatarText: {
-    fontSize: 18,
-  },
-  memberInfo: {
+  memberAnswerInfoCol: {
     flex: 1,
   },
-  memberNameRow: {
+  memberAnswerHeaderRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 4,
   },
-  memberName: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  checkBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#2ECC71',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  checkText: {
-    color: '#FFFFFF',
-    fontSize: 9,
-    fontWeight: '700',
-    marginLeft: 2,
-  },
-  waitingText: {
-    fontSize: 10,
-    color: '#AEAEB2',
-    fontWeight: '600',
-  },
-  responseText: {
-    fontSize: 13,
-    color: '#1C1C1E',
-    lineHeight: 18,
-  },
-  emptyResponseText: {
-    fontSize: 12,
-    color: '#AEAEB2',
-    fontStyle: 'italic',
-  },
-  quickRailCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
-  },
-  quickRailHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  quickRailTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#1C1C1E',
-  },
-  quickRailDoneBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ECFDF5',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#A7F3D0',
-  },
-  quickRailDoneText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#059669',
-    marginLeft: 3,
-  },
-  quickRailScroll: {
-    flexDirection: 'row',
-  },
-  quickChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    borderRadius: 12,
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
-  },
-  quickChipAnswered: {
-    backgroundColor: '#F0FDF4',
-    borderColor: '#BBF7D0',
-  },
-  quickChipAvatar: {
-    fontSize: 14,
-    marginRight: 4,
-  },
-  quickChipName: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#8E8E93',
-  },
-  quickChipNameAnswered: {
-    color: '#166534',
-    fontWeight: '800',
-  },
-  quickChipWaitingDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#CBD5E1',
-    marginLeft: 5,
-  },
-  actionCard: {
-    backgroundColor: '#FFF2F3',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#FFE5E7',
-  },
-  actionTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#FF7E82',
-    marginBottom: 4,
-  },
-  actionDesc: {
-    fontSize: 12,
-    color: '#8E8E93',
-    marginBottom: 12,
-  },
-  textInput: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 13,
-    color: '#1C1C1E',
-    borderWidth: 1,
-    borderColor: '#FFE5E7',
-    marginBottom: 10,
-  },
-  submitButton: {
-    flexDirection: 'row',
-    backgroundColor: '#FF7E82',
-    borderRadius: 12,
-    paddingVertical: 13,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  submitButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  actionCardDone: {
-    backgroundColor: '#E8F8F5',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 16,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#D1F2EB',
-  },
-  doneTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#16A085',
-    marginBottom: 2,
-  },
-  doneDesc: {
-    fontSize: 11,
-    color: '#7F8C8D',
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  myAnswerText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#16A085',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  shopCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
-  },
-  shopHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    rowGap: 10,
-    columnGap: 12,
-    marginBottom: 8,
-  },
-  shopHeaderTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  shopTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#1C1C1E',
-  },
-  headerBtnGroup: {
+  memberAnswerNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  walletBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#EBF5FB',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-    borderWidth: 0.5,
-    borderColor: '#AED6F1',
-  },
-  walletBtnText: {
-    fontSize: 12,
-    color: '#4A90E2',
-    fontWeight: '700',
-  },
-  addRewardBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF2F3',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-    borderWidth: 0.5,
-    borderColor: '#FFA2A5',
-  },
-  addRewardBtnText: {
-    fontSize: 12,
-    color: '#FF7E82',
-    fontWeight: '700',
-  },
-  shopDesc: {
-    fontSize: 11,
-    color: '#8E8E93',
-    marginBottom: 16,
-  },
-  rewardItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
-    paddingVertical: 12,
-  },
-  rewardDetails: {
-    flex: 1,
-    marginRight: 10,
-  },
-  rewardTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 2,
-  },
-  rewardTitle: {
+  memberAnswerName: {
     fontSize: 13,
-    fontWeight: '700',
-    color: '#1C1C1E',
+    fontWeight: '900',
+    color: '#1C1917',
   },
-  ownedCouponBadge: {
-    backgroundColor: '#E8F8F0',
+  mySelfBadge: {
+    backgroundColor: '#FF6B47',
+    paddingHorizontal: 5,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+  },
+  mySelfBadgeText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#FFFFFF',
+  },
+  memberStatusActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  chevronArrowInline: {
+    fontSize: 16,
+    color: '#C4B5A0',
+    fontWeight: '700',
+    marginLeft: 2,
+    lineHeight: 18,
+  },
+  myActionPill: {
+    backgroundColor: 'rgba(255, 107, 71, 0.1)',
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 8,
+  },
+  myActionPillText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#FF6B47',
+  },
+  answeredBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#DCFCE7',
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 6,
-    marginLeft: 6,
+    borderRadius: 8,
+    gap: 3,
   },
-  ownedCouponBadgeText: {
+  answeredBadgeText: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#2ECC71',
+    color: '#15803D',
   },
-  rewardDesc: {
+  waitingBadgeText: {
     fontSize: 11,
-    color: '#8E8E93',
-    marginBottom: 2,
+    fontWeight: '600',
+    color: '#A8A29E',
   },
-  rewardProviderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    marginTop: 2,
-  },
-  rewardProvider: {
-    fontSize: 11,
-    color: '#AEAEB2',
+  memberAnswerSnippet: {
+    fontSize: 12,
+    color: '#A8A29E',
     fontWeight: '500',
   },
-  rewardManageButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginLeft: 8,
+  memberAnswerSnippetDone: {
+    color: '#44403C',
+    fontWeight: '600',
   },
-  rewardManageBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F1F2F4',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    marginLeft: 4,
-  },
-  rewardManageBtnText: {
-    fontSize: 10,
-    color: '#8E8E93',
-    fontWeight: '700',
-  },
-  rewardActionRow: {
-    flexDirection: 'row',
+  dailyTalkBonusBanner: {
+    marginTop: 14,
+    backgroundColor: '#EDE9FE',
+    borderWidth: 1.2,
+    borderColor: '#C4B5FD',
+    borderStyle: 'dashed',
+    borderRadius: 16,
+    paddingVertical: 12,
     alignItems: 'center',
   },
-  useCouponDirectBtn: {
-    backgroundColor: '#4A90E2',
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 10,
-    marginRight: 6,
+  dailyTalkBonusText: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#6D28D9',
   },
-  useCouponDirectBtnText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
+
+  // 3. 서브탭 스위처: [✅ 집안일] vs [🎮 게임]
+  subTabSegmentContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#F5F0E8',
+    borderRadius: 16,
+    padding: 5,
   },
-  redeemButton: {
-    backgroundColor: '#FF7E82',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
+  subTabSegmentBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
+    borderRadius: 14,
   },
-  redeemDisabled: {
-    backgroundColor: '#C7C7CC',
-  },
-  redeemButtonText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  emptyShopText: {
-    fontSize: 12,
-    color: '#AEAEB2',
-    textAlign: 'center',
-    paddingVertical: 20,
-    fontStyle: 'italic',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalView: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    maxHeight: '80%',
-  },
-  modalHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  modalHeaderTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  modalHeader: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#1C1C1E',
-  },
-  modalLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#8E8E93',
-    marginBottom: 6,
-    marginTop: 10,
-  },
-  modalInput: {
-    backgroundColor: '#F1F2F4',
-    borderRadius: 10,
-    padding: 10,
-    fontSize: 14,
-    color: '#1C1C1E',
-    marginBottom: 4,
-  },
-  modalConfirmBtn: {
-    backgroundColor: '#FF7E82',
-    padding: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  modalConfirmBtnText: {
-    fontSize: 14,
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  walletScrollContent: {
-    paddingVertical: 6,
-  },
-  walletSectionTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#1C1C1E',
-    marginBottom: 10,
-  },
-  walletSectionTitleDone: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#8E8E93',
-    marginTop: 16,
-    marginBottom: 10,
-  },
-  emptyWalletText: {
-    fontSize: 12,
-    color: '#AEAEB2',
-    textAlign: 'center',
-    paddingVertical: 20,
-    fontStyle: 'italic',
-  },
-  walletItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
-  },
-  walletItemDone: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F2F2F7',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 8,
-    opacity: 0.6,
-  },
-  walletItemInfo: {
-    flex: 1,
-  },
-  walletItemTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1C1C1E',
-    marginBottom: 2,
-  },
-  walletItemTitleDone: {
-    fontSize: 13,
-    color: '#8E8E93',
-    textDecorationLine: 'line-through',
-    marginBottom: 2,
-  },
-  walletItemProvider: {
-    fontSize: 11,
-    color: '#8E8E93',
-  },
-  useCouponBtn: {
-    backgroundColor: '#4A90E2',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
-  },
-  useCouponBtnText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  usedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  usedBadgeText: {
-    fontSize: 11,
-    color: '#2ECC71',
-    fontWeight: '700',
-  },
-  walletTabRow: {
-    flexDirection: 'row',
-    backgroundColor: '#F1F2F4',
-    borderRadius: 10,
-    padding: 3,
-    marginVertical: 12,
-  },
-  walletTabItem: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-    borderRadius: 8,
-  },
-  walletTabItemActive: {
+  subTabSegmentBtnActive: {
     backgroundColor: '#FFFFFF',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
     elevation: 2,
   },
-  walletTabText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#8E8E93',
-  },
-  walletTabTextActive: {
-    color: '#1C1C1E',
-    fontWeight: '700',
-  },
-  couponTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  stackBadge: {
-    backgroundColor: '#E6F4FE',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    marginLeft: 6,
-  },
-  stackBadgeText: {
-    fontSize: 11,
+  subTabSegmentText: {
+    fontSize: 16,
     fontWeight: '800',
-    color: '#4A90E2',
+    color: '#A8A29E',
   },
-  couponMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
+  subTabSegmentTextActive: {
+    color: '#FF6B47',
+    fontWeight: '900',
   },
-  expireBadgeText: {
-    fontSize: 11,
-    color: '#FF7E82',
-    fontWeight: '600',
-    marginLeft: 8,
+
+  // 4. 서브탭 1: 집안일 탭
+  tabContentContainer: {
+    paddingHorizontal: 20,
+    marginTop: 16,
   },
-  walletItemExpired: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 8,
-    opacity: 0.5,
-  },
-  walletItemTitleExpired: {
-    fontSize: 13,
-    color: '#8E8E93',
-    textDecorationLine: 'line-through',
-    marginBottom: 2,
-  },
-  expiredBadge: {
-    backgroundColor: '#EBEBEB',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  expiredBadgeText: {
-    fontSize: 11,
-    color: '#8E8E93',
-    fontWeight: '600',
-  },
-  // Point History Modal Styles
-  historySummaryContainer: {
+  choresProgressBanner: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#EFEFEF',
-  },
-  historySummaryCard: {
-    flex: 1,
     alignItems: 'center',
+    backgroundColor: '#FF6B47',
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#FF6B47',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  historySummaryLabel: {
-    fontSize: 11,
-    color: '#8E8E93',
-    fontWeight: '600',
+  choresProgressLeft: {
+    justifyContent: 'center',
+  },
+  choresProgressMainText: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#FFFFFF',
     marginBottom: 4,
   },
-  historySummaryValue: {
-    fontSize: 14,
-    fontWeight: '800',
+  choresProgressSubText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.85)',
   },
-  historyTabRow: {
-    flexDirection: 'row',
-    backgroundColor: '#F1F2F4',
-    borderRadius: 10,
-    padding: 3,
+  choresProgressRight: {
+    alignItems: 'flex-end',
+  },
+  choresScorePoints: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    marginBottom: 2,
+  },
+  choresScoreSub: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontWeight: '500',
+  },
+
+  // 새 집안일 추가 대시 버튼
+  addChoreDashedBtn: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.2,
+    borderColor: '#E8E0D0',
+    borderStyle: 'dashed',
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  addChoreDashedBtnText: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#78716C',
+  },
+
+  choresListSection: {
+    marginBottom: 20,
+  },
+  choresSectionHeading: {
+    fontSize: 17,
+    fontWeight: '900',
+    color: '#1C1917',
     marginBottom: 12,
   },
-  historyTabItem: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-    borderRadius: 8,
+  choresCardsContainer: {
+    gap: 12,
   },
-  historyTabItemActive: {
+  emptyChoresCard: {
     backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  historyTabText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#8E8E93',
-  },
-  historyTabTextActive: {
-    color: '#1C1C1E',
-    fontWeight: '700',
-  },
-  historyScrollContent: {
-    paddingVertical: 4,
-  },
-  emptyHistoryBox: {
-    paddingVertical: 36,
+    borderWidth: 1.2,
+    borderColor: '#E8E0D0',
+    borderRadius: 18,
+    paddingVertical: 28,
+    paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
   },
-  emptyHistoryText: {
+  emptyChoresEmoji: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  emptyChoresTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#1C1917',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  emptyChoresSub: {
     fontSize: 13,
-    color: '#AEAEB2',
-    fontStyle: 'italic',
+    color: '#78716C',
+    textAlign: 'center',
   },
-  historyItemCard: {
+  choreItemCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#F0F0F2',
+    borderRadius: 18,
+    borderWidth: 1.2,
+    borderColor: '#E8E0D0',
+    padding: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
   },
-  historyItemIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+  choreIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
-  historyItemInfo: {
+  choreIconText: {
+    fontSize: 24,
+  },
+  choreDetailsCol: {
     flex: 1,
   },
-  historyItemTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#1C1C1E',
-    marginBottom: 3,
+  choreTitleText: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#1C1917',
+    marginBottom: 4,
   },
-  historyItemSubRow: {
+  choreMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
   },
-  historyItemDate: {
+  choreTagBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+  },
+  choreTagBadgeText: {
     fontSize: 11,
-    color: '#8E8E93',
-    marginRight: 8,
-  },
-  historyItemBalance: {
-    fontSize: 11,
-    color: '#AEAEB2',
-    fontWeight: '500',
-  },
-  historyItemAmountBox: {
-    alignItems: 'flex-end',
-    marginLeft: 8,
-  },
-  historyItemAmountText: {
-    fontSize: 14,
     fontWeight: '800',
   },
-  // Co-op Goal Card Styles
-  coopCard: {
-    backgroundColor: '#FFFFFF',
+  choreRepeatBadge: {
+    backgroundColor: 'rgba(255, 107, 71, 0.12)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  choreRepeatBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#FF6B47',
+  },
+  choreAssigneeText: {
+    fontSize: 12,
+    color: '#78716C',
+    fontWeight: '600',
+  },
+  choreRightCol: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
+  chorePointsText: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#FF6B47',
+  },
+  choreCheckRoundBtn: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#F5F0E8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // 완료된 집안일
+  completedChoresSection: {
+    marginTop: 10,
+  },
+  completedHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  completedSectionHeading: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#A8A29E',
+  },
+  clearCompletedBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 107, 71, 0.08)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+  },
+  clearCompletedBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FF6B47',
+  },
+  completedChoreCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F0E8',
     borderRadius: 16,
+    padding: 14,
+    opacity: 0.85,
+  },
+  completedRightActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginLeft: 8,
+  },
+  choreDeleteTouchBtn: {
+    padding: 4,
+  },
+  completedCheckCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#E8E0D0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  completedCheckMark: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#78716C',
+  },
+  completedChoreTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#78716C',
+    textDecorationLine: 'line-through',
+    marginBottom: 2,
+  },
+  completedMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  completedChoreMeta: {
+    fontSize: 12,
+    color: '#A8A29E',
+  },
+  completedPointsText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#A8A29E',
+  },
+
+  // 5. 서브탭 2: 게임 탭
+  gamesNoticeBanner: {
+    backgroundColor: 'rgba(255, 107, 71, 0.08)',
+    borderWidth: 1.2,
+    borderColor: 'rgba(255, 107, 71, 0.25)',
+    borderRadius: 18,
     padding: 16,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#F0F0F2',
+    marginBottom: 16,
+  },
+  gamesNoticeTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#FF6B47',
+    marginBottom: 4,
+  },
+  gamesNoticeSub: {
+    fontSize: 13,
+    color: '#78716C',
+    lineHeight: 18,
+  },
+  gamesCardsList: {
+    gap: 14,
+    marginBottom: 18,
+  },
+  gameActionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 1.2,
+    borderColor: '#E8E0D0',
+    padding: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  coopCardFinished: {
-    borderColor: '#A7F3D0',
-    borderWidth: 1.5,
-    backgroundColor: '#FAFFFC',
-    shadowColor: '#10B981',
-    shadowOpacity: 0.15,
-  },
-  coopHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12,
-  },
-  coopTagBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF0F1',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    flexShrink: 0,
-  },
-  coopTagText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#FF7E82',
-  },
-  coopHeaderBtnGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flexShrink: 0,
-    flexWrap: 'wrap',
-  },
-  coopHistoryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: '#FEF3C7',
-    borderRadius: 6,
-    borderWidth: 0.5,
-    borderColor: '#FDE68A',
-  },
-  coopHistoryBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#D97706',
-  },
-  coopChangeBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: '#F2F2F7',
-    borderRadius: 6,
-  },
-  coopChangeBtnText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#6C757D',
-  },
-  coopTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  coopGoalIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: '#FFF0F1',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  coopGoalIcon: {
-    fontSize: 26,
-    marginRight: 10,
-  },
-  coopGoalTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#1C1C1E',
-  },
-  coopGoalSub: {
-    fontSize: 11,
-    color: '#8E8E93',
-    marginTop: 2,
-  },
-  coopPercentBadge: {
-    backgroundColor: '#FFF0F1',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  coopPercentText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#FF7E82',
-  },
-  coopProgressTrack: {
-    height: 10,
-    backgroundColor: '#F2F2F7',
-    borderRadius: 5,
-    overflow: 'hidden',
-    marginBottom: 12,
-  },
-  coopProgressBar: {
-    height: '100%',
-    backgroundColor: '#FF7E82',
-    borderRadius: 5,
-  },
-  coopFooterRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  coopStatusText: {
-    fontSize: 12,
-    color: '#666',
-    flex: 1,
-    minWidth: 180,
-  },
-  coopClaimBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#10B981',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    marginTop: 12,
-    shadowColor: '#10B981',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
     shadowRadius: 6,
-    elevation: 4,
-  },
-  coopClaimBtnText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
-  coopStudioBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FF7E82',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 8,
-    shadowColor: '#FF7E82',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
     elevation: 2,
   },
-  coopStudioBtnComplete: {
-    backgroundColor: '#2ECC71',
-    shadowColor: '#2ECC71',
-  },
-  coopStudioBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  // Masterpiece Storybook Card Styles
-  masterpieceCard: {
-    backgroundColor: '#FFFDF9',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 32,
-    borderWidth: 1.5,
-    borderColor: '#FDE68A',
-    shadowColor: '#D97706',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  masterpieceHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  gameLargeIconBox: {
+    width: 60,
+    height: 60,
+    borderRadius: 18,
     alignItems: 'center',
-    marginBottom: 12,
+    justifyContent: 'center',
+    marginRight: 14,
   },
-  masterpieceCrownBadge: {
+  gameLargeIcon: {
+    fontSize: 32,
+  },
+  gameInfoCol: {
+    flex: 1,
+  },
+  gameTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#FCD34D',
+    gap: 8,
+    marginBottom: 4,
   },
-  masterpieceCrownText: {
+  gameTitleText: {
+    fontSize: 17,
+    fontWeight: '900',
+    color: '#1C1917',
+  },
+  gameBadgePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+  },
+  gameBadgePillText: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#92400E',
   },
-  masterpieceSpecBadge: {
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
+  gameDescText: {
+    fontSize: 13,
+    color: '#78716C',
+    marginBottom: 6,
+    lineHeight: 18,
   },
-  masterpieceSpecText: {
-    fontSize: 10,
+  gamePointsText: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#FF6B47',
+  },
+  gameChevron: {
+    fontSize: 24,
+    color: '#D1D5DC',
     fontWeight: '700',
-    color: '#6B7280',
+    marginLeft: 6,
   },
-  masterpieceTitleRow: {
+  dailyBonusBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    backgroundColor: 'rgba(167, 243, 208, 0.25)',
+    borderWidth: 1.2,
+    borderColor: '#6EE7B7',
+    borderRadius: 18,
+    padding: 16,
+    gap: 14,
   },
-  masterpieceBookIconBox: {
-    width: 46,
-    height: 46,
-    borderRadius: 12,
-    backgroundColor: '#FEF3C7',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-    borderWidth: 1,
-    borderColor: '#FDE68A',
+  dailyBonusIcon: {
+    fontSize: 30,
   },
-  masterpieceTitle: {
+  dailyBonusInfo: {
+    flex: 1,
+  },
+  dailyBonusTitle: {
     fontSize: 15,
-    fontWeight: '800',
-    color: '#1C1C1E',
+    fontWeight: '900',
+    color: '#064E3B',
     marginBottom: 2,
   },
-  masterpieceSub: {
+  dailyBonusSub: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#B45309',
+    color: '#065F46',
+    lineHeight: 16,
   },
-  masterpieceDesc: {
-    fontSize: 12,
-    color: '#52525B',
-    lineHeight: 18,
-    marginBottom: 12,
+
+  // 모달 공통 스타일
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
   },
-  masterpieceStatsRow: {
+  modalCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 22,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  modalTopRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 14,
   },
-  masterpieceStatChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FDF6E2',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 0.5,
-    borderColor: '#FDE68A',
+  modalMainTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#1C1917',
   },
-  masterpieceStatText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#78350F',
-  },
-  masterpieceEnterBtn: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#92400E',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    shadowColor: '#92400E',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  masterpieceBtnMainRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 2,
-  },
-  masterpieceEnterBtnTitle: {
-    fontSize: 14,
+  modalTopicTitle: {
+    fontSize: 15,
     fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: -0.2,
+    color: '#7C3AED',
+    marginBottom: 12,
+    lineHeight: 20,
   },
-  masterpieceEnterBtnSub: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#FDE68A',
-    opacity: 0.9,
-  },
-  // Goal Modal Styles
-  goalSectionTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#1C1C1E',
-    marginBottom: 10,
-    marginTop: 4,
-  },
-  goalPresetCard: {
+  viewerHeaderInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#EEEEEE',
-    backgroundColor: '#FAFAFA',
-    marginBottom: 8,
+    flex: 1,
   },
-  goalPresetCardActive: {
-    borderColor: '#FF7E82',
-    backgroundColor: '#FFF5F5',
-  },
-  goalPresetIconBox: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    backgroundColor: '#F2F2F7',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  goalPresetIcon: {
-    fontSize: 24,
-    marginRight: 10,
-  },
-  goalPresetTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#2C3E50',
-  },
-  goalPresetDesc: {
-    fontSize: 11,
-    color: '#8E8E93',
+  modalSubHeaderRole: {
+    fontSize: 12,
+    color: '#78716C',
+    fontWeight: '600',
     marginTop: 2,
   },
-  goalPresetPointsBadge: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+  viewerTopicBox: {
+    backgroundColor: '#FAF8F3',
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: '#E8E0D0',
+    padding: 12,
+    marginBottom: 14,
   },
-  goalPresetPointsText: {
+  viewerTopicLabel: {
     fontSize: 11,
-    fontWeight: '700',
-    color: '#555',
+    fontWeight: '800',
+    color: '#FF6B47',
+    marginBottom: 4,
   },
-  presetRightControls: {
-    alignItems: 'flex-end',
+  viewerTopicTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1C1917',
+    lineHeight: 19,
+  },
+  viewerContentBox: {
+    backgroundColor: '#FFFDF8',
+    borderWidth: 1.2,
+    borderColor: '#FED7AA',
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 18,
+  },
+  viewerQuoteMark: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#FDBA74',
+    lineHeight: 22,
+  },
+  viewerScrollContent: {
+    maxHeight: 220,
+    marginVertical: 4,
+  },
+  viewerAnswerText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#292524',
+    lineHeight: 23,
+  },
+  viewerConfirmBtn: {
+    backgroundColor: '#FF6B47',
+    borderRadius: 14,
+    paddingVertical: 13,
+    alignItems: 'center',
     justifyContent: 'center',
   },
-  presetActionBtnRow: {
+  viewerConfirmBtnText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  modalTextInput: {
+    backgroundColor: '#FAF8F3',
+    borderWidth: 1,
+    borderColor: '#E8E0D0',
+    borderRadius: 14,
+    padding: 14,
+    minHeight: 100,
+    fontSize: 14,
+    color: '#1C1917',
+    textAlignVertical: 'top',
+    marginBottom: 16,
+  },
+  modalInputSingle: {
+    backgroundColor: '#FAF8F3',
+    borderWidth: 1,
+    borderColor: '#E8E0D0',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: '#1C1917',
+    marginBottom: 14,
+  },
+  modalFieldRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginTop: 5,
+    justifyContent: 'space-between',
+    marginBottom: 14,
   },
-  presetSmallActionBtn: {
-    padding: 4,
-    borderRadius: 6,
-    backgroundColor: '#F2F2F7',
-    alignItems: 'center',
-    justifyContent: 'center',
+  modalFieldCol: {
+    marginBottom: 14,
   },
-  presetEditCard: {
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: '#FF7E82',
-    backgroundColor: '#FFFDFD',
-    marginBottom: 10,
-  },
-  presetEditHeaderTitle: {
+  modalFieldLabel: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#1C1C1E',
-    marginBottom: 8,
+    color: '#1C1917',
+    marginBottom: 6,
   },
-  presetEditInput: {
-    backgroundColor: '#FFFFFF',
+  modalNumberInput: {
+    width: 80,
+    backgroundColor: '#FAF8F3',
     borderWidth: 1,
-    borderColor: '#E5E5EA',
-    borderRadius: 8,
+    borderColor: '#E8E0D0',
+    borderRadius: 12,
     paddingHorizontal: 10,
-    paddingVertical: 7,
-    fontSize: 13,
-    color: '#1C1C1E',
-    marginBottom: 8,
+    paddingVertical: 6,
+    textAlign: 'center',
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#FF6B47',
   },
-  categoryPickerRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 10,
-  },
-  categoryChip: {
+  autoCategoryPreviewRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F2F2F7',
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 8,
-    borderWidth: 0.5,
-    borderColor: '#E5E5EA',
+    gap: 8,
+    marginTop: 4,
+  },
+  autoCategoryPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    gap: 5,
+  },
+  autoCategoryEmoji: {
+    fontSize: 16,
+  },
+  autoCategoryLabel: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  autoCategoryHint: {
+    fontSize: 12,
+    color: '#A8A29E',
+    fontWeight: '500',
+  },
+  categoryChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  categoryChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: '#F5F0E8',
   },
   categoryChipActive: {
-    backgroundColor: '#FF7E82',
-    borderColor: '#FF7E82',
+    backgroundColor: '#FF6B47',
   },
   categoryChipText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#8E8E93',
-    marginLeft: 3,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#78716C',
   },
   categoryChipTextActive: {
     color: '#FFFFFF',
-    fontWeight: '700',
   },
-  presetEditActionsRow: {
+  repeatToggleRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 8,
+    backgroundColor: '#F5F0E8',
+    borderRadius: 12,
+    padding: 3,
+    marginTop: 4,
+    gap: 4,
   },
-  presetEditCancelBtn: {
-    flexDirection: 'row',
+  repeatTabBtn: {
+    flex: 1,
+    paddingVertical: 9,
     alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: '#F2F2F7',
+    borderRadius: 10,
   },
-  presetEditCancelBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#8E8E93',
+  repeatTabBtnActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  presetEditSaveBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: '#FF7E82',
-  },
-  presetEditSaveBtnText: {
-    fontSize: 12,
+  repeatTabText: {
+    fontSize: 13,
     fontWeight: '700',
+    color: '#78716C',
+  },
+  repeatTabTextActive: {
+    color: '#FF6B47',
+    fontWeight: '800',
+  },
+  repeatHintText: {
+    fontSize: 12,
+    color: '#A8A29E',
+    marginTop: 6,
+    fontWeight: '500',
+  },
+  modalButtonRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 14,
+    backgroundColor: '#F5F0E8',
+    alignItems: 'center',
+  },
+  modalCancelBtnText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#78716C',
+  },
+  modalSubmitBtn: {
+    flex: 2,
+    paddingVertical: 13,
+    borderRadius: 14,
+    backgroundColor: '#FF6B47',
+    alignItems: 'center',
+  },
+  modalSubmitBtnText: {
+    fontSize: 14,
+    fontWeight: '900',
     color: '#FFFFFF',
   },
-  customGoalDivider: {
-    height: 1,
-    backgroundColor: '#EBEBEB',
-    marginVertical: 14,
-  },
-  // Celebration Modal Styles
-  celebrationOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  celebrationCard: {
+
+  // 게임 공통 모달
+  gameModalCard: {
     width: '90%',
-    maxWidth: 380,
+    maxWidth: 420,
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
-    padding: 24,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 8,
+    padding: 22,
+    alignItems: 'stretch',
   },
-  celebrationIconCircle: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: '#FFF0F2',
-    justifyContent: 'center',
-    alignItems: 'center',
+  gameModalSubtitle: {
+    fontSize: 14,
+    color: '#78716C',
     marginBottom: 16,
+    lineHeight: 20,
   },
-  celebrationTitle: {
-    fontSize: 19,
+  quizQuestionText: {
+    fontSize: 17,
     fontWeight: '900',
-    color: '#1C1C1E',
-    marginBottom: 6,
-    textAlign: 'center',
-  },
-  celebrationSubText: {
-    fontSize: 13,
-    color: '#8E8E93',
-    textAlign: 'center',
+    color: '#1C1917',
     marginBottom: 18,
+    lineHeight: 24,
   },
-  celebrationGoalCard: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    padding: 14,
+  quizOptionsCol: {
+    gap: 10,
+  },
+  quizOptionBtn: {
+    backgroundColor: '#FAF8F3',
+    borderWidth: 1.2,
+    borderColor: '#E8E0D0',
     borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#EBEBEB',
-    marginBottom: 14,
-  },
-  celebrationGoalIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: '#FFF0F2',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  celebrationGoalTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#1C1C1E',
-    marginBottom: 2,
-  },
-  celebrationGoalPoints: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#FF7E82',
-  },
-  celebrationNoticeDesc: {
-    fontSize: 11,
-    color: '#AEAEB2',
-    textAlign: 'center',
-    lineHeight: 16,
-    marginBottom: 20,
-  },
-  celebrationNextBtn: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FF7E82',
-    paddingVertical: 13,
-    borderRadius: 12,
-    marginBottom: 8,
-    shadowColor: '#FF7E82',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
-    elevation: 3,
-  },
-  celebrationNextBtnText: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
-  celebrationCloseBtn: {
-    paddingVertical: 8,
+    paddingVertical: 14,
     paddingHorizontal: 16,
-  },
-  celebrationCloseBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#8E8E93',
-  },
-  // Achieved Goals History Styles
-  historyDesc: {
-    fontSize: 12,
-    color: '#8E8E93',
-    marginBottom: 16,
-    lineHeight: 18,
-  },
-  emptyHistoryContainer: {
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 36,
   },
-  emptyHistoryTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#8E8E93',
-    marginBottom: 4,
-  },
-  emptyHistorySub: {
-    fontSize: 11,
-    color: '#AEAEB2',
-    textAlign: 'center',
-  },
-  achievedItemCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#F0F0F2',
-  },
-  achievedItemIconBox: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    backgroundColor: '#FFF0F2',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  achievedItemTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#1C1C1E',
-    marginBottom: 2,
-  },
-  achievedItemDate: {
-    fontSize: 11,
-    color: '#8E8E93',
-  },
-  achievedItemBadge: {
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 0.5,
-    borderColor: '#FDE68A',
-  },
-  achievedItemBadgeText: {
-    fontSize: 11,
+  quizOptionText: {
+    fontSize: 15,
     fontWeight: '800',
-    color: '#D97706',
+    color: '#1C1917',
+  },
+  cardsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  memoryCardBox: {
+    width: '30%',
+    height: 80,
+    backgroundColor: '#F5F0E8',
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.2,
+    borderColor: '#E8E0D0',
+  },
+  memoryCardFlipped: {
+    backgroundColor: '#EDE9FE',
+    borderColor: '#C4B5FD',
+  },
+  memoryCardText: {
+    fontSize: 28,
+  },
+  photoUploadArea: {
+    backgroundColor: '#FFF5F2',
+    borderWidth: 1.5,
+    borderColor: '#FFB39F',
+    borderStyle: 'dashed',
+    borderRadius: 18,
+    paddingVertical: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoUploadText: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#FF6B47',
   },
 });

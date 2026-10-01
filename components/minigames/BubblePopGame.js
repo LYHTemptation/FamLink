@@ -11,9 +11,50 @@ import {
   Alert,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
-import { Trophy, Sparkles, X, Flame, RotateCcw, Check, Clock, Droplets, Zap } from 'lucide-react-native';
+import Svg, { Rect, Path, Circle } from 'react-native-svg';
+import {
+  Trophy,
+  Sparkles,
+  X,
+  Flame,
+  RotateCcw,
+  Check,
+  Clock,
+  Droplets,
+  Zap,
+  Hand,
+  Gift,
+  Play,
+} from 'lucide-react-native';
 
 const { width: INITIAL_WIDTH, height: INITIAL_HEIGHT } = Dimensions.get('window');
+
+// Custom Vector Soap Bar Icon
+function SoapBarIcon({ size = 24 }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x="2" y="6" width="20" height="13" rx="4" fill="#F472B6" stroke="#DB2777" strokeWidth="1.5" />
+      <Path d="M6 10 C8 9, 10 9, 12 10 C14 11, 16 11, 18 10" stroke="#FFF" strokeWidth="1.5" strokeLinecap="round" opacity="0.85" />
+      <Circle cx="17" cy="4" r="2" fill="#FBCFE8" stroke="#DB2777" strokeWidth="1" />
+      <Circle cx="21" cy="7" r="1.2" fill="#FBCFE8" />
+    </Svg>
+  );
+}
+
+// Vector Icon inside bubbles
+function BubbleInnerIcon({ type, size = 24 }) {
+  switch (type) {
+    case 'golden':
+      return <Sparkles size={size} color="#F59E0B" fill="#FDE68A" />;
+    case 'timer':
+      return <Clock size={size} color="#10B981" />;
+    case 'soap':
+      return <SoapBarIcon size={size} />;
+    case 'normal':
+    default:
+      return <Droplets size={size} color="#60A5FA" fill="#BAE6FD" />;
+  }
+}
 
 const GAME_DURATION = 25; // 25 seconds
 const SPAWN_INTERVAL = 400; // ms
@@ -22,10 +63,10 @@ const MAX_TIME_BONUSES = 2; // Maximum times a player can get +3s per game
 
 // Bubble types configuration
 const BUBBLE_TYPES = [
-  { type: 'normal', emoji: '🫧', color: '#60A5FA', points: 10, size: 52, weight: 65 },
-  { type: 'golden', emoji: '✨', color: '#F59E0B', points: 30, size: 56, weight: 15 },
-  { type: 'timer', emoji: '⏱️', color: '#10B981', points: 15, size: 54, weight: 10, addTime: 3 },
-  { type: 'soap', emoji: '🧼', color: '#EC4899', points: 40, size: 64, weight: 10 },
+  { type: 'normal', color: '#60A5FA', points: 10, size: 52, weight: 65 },
+  { type: 'golden', color: '#F59E0B', points: 30, size: 56, weight: 15 },
+  { type: 'timer', color: '#10B981', points: 15, size: 54, weight: 10, addTime: 3 },
+  { type: 'soap', color: '#EC4899', points: 40, size: 64, weight: 10 },
 ];
 
 export default function BubblePopGame({
@@ -281,12 +322,12 @@ export default function BubblePopGame({
         const currentCount = timeBonusCountRef.current;
         setTimeBonusCount(currentCount);
         setTimeLeft(t => Math.min(GAME_DURATION, t + bubble.addTime));
-        triggerToast(`+${bubble.addTime}초 시간 보너스! (${currentCount}/${MAX_TIME_BONUSES}) ⏱️`, '#10B981', popX, popY);
+        triggerToast(`+${bubble.addTime}초 시간 보너스! (${currentCount}/${MAX_TIME_BONUSES})`, '#10B981', popX, popY);
       } else {
-        triggerToast(`+${addedScore} 팡! 🫧`, bubble.color, popX, popY);
+        triggerToast(`+${addedScore} 팡!`, bubble.color, popX, popY);
       }
     } else {
-      triggerToast(`+${addedScore} 팡! 🫧`, bubble.color, popX, popY);
+      triggerToast(`+${addedScore} 팡!`, bubble.color, popX, popY);
     }
   }, [petBounce, triggerToast]);
 
@@ -294,7 +335,7 @@ export default function BubblePopGame({
   const activateSparkleFever = useCallback(() => {
     setIsSparkleFever(true);
     isSparkleFeverRef.current = true;
-    triggerToast('✨ 버블 스파클 피버! 2배 점수! ✨', '#F59E0B');
+    triggerToast('버블 스파클 피버! 2배 점수!', '#F59E0B');
 
     Animated.loop(
       Animated.sequence([
@@ -442,15 +483,15 @@ export default function BubblePopGame({
   // Compute Grade & Rewards
   const getGameGrade = (finalScore, finalCleanliness) => {
     if (finalCleanliness >= 100 || finalScore >= 650) {
-      return { grade: 'S', color: '#FAAD14', title: '목욕의 달인 👑' };
+      return { grade: 'S', color: '#FAAD14', title: '목욕의 달인' };
     }
     if (finalCleanliness >= 75 || finalScore >= 450) {
-      return { grade: 'A', color: '#52C41A', title: '뽀송뽀송 몽이 🛁' };
+      return { grade: 'A', color: '#52C41A', title: '뽀송뽀송 몽이' };
     }
     if (finalCleanliness >= 50 || finalScore >= 250) {
-      return { grade: 'B', color: '#1890FF', title: '향기 솔솔 🧼' };
+      return { grade: 'B', color: '#1890FF', title: '향기 솔솔' };
     }
-    return { grade: 'C', color: '#8C8C8C', title: '비누칠 입문자 🌱' };
+    return { grade: 'C', color: '#8C8C8C', title: '비누칠 입문자' };
   };
 
   const handleClaimAndClose = () => {
@@ -556,7 +597,9 @@ export default function BubblePopGame({
             {/* Wooden Bathtub Rim */}
             <View style={styles.woodenTubBack}>
               <View style={styles.tubWaterBubbles}>
-                <Text style={{ fontSize: 20 }}>🫧 🫧 🫧</Text>
+                <Droplets size={16} color="#60A5FA" fill="#BAE6FD" />
+                <Droplets size={14} color="#38BDF8" fill="#CFFAFE" />
+                <Droplets size={18} color="#60A5FA" fill="#BAE6FD" />
               </View>
             </View>
 
@@ -573,13 +616,14 @@ export default function BubblePopGame({
               )}
               {/* Cute Soap Suds Foam on Petmong's Head */}
               <View style={styles.petFoamHat}>
-                <Text style={{ fontSize: 24 }}>🫧</Text>
+                <Sparkles size={20} color="#38BDF8" fill="#BAE6FD" />
               </View>
             </View>
 
             {/* Front Bathtub Board */}
             <View style={styles.woodenTubFront}>
-              <Text style={styles.tubLabelText}>{character?.name || '반려몽'}의 따뜻한 스파 🛁</Text>
+              <Droplets size={13} color="#38BDF8" fill="#38BDF8" style={{ marginRight: 4 }} />
+              <Text style={styles.tubLabelText}>{character?.name || '반려몽'}의 따뜻한 스파</Text>
             </View>
           </Animated.View>
         </View>
@@ -604,9 +648,7 @@ export default function BubblePopGame({
                 },
               ]}
             >
-              <Text style={[styles.bubbleEmoji, { fontSize: bubble.size * 0.48 }]}>
-                {bubble.emoji}
-              </Text>
+              <BubbleInnerIcon type={bubble.type} size={bubble.size * 0.46} />
             </View>
           ))}
         </View>
@@ -660,7 +702,8 @@ export default function BubblePopGame({
                   <Text style={styles.gameNoBadgeText}>제3탄 미니게임</Text>
                 </View>
                 <View style={styles.categoryBadge}>
-                  <Text style={styles.categoryBadgeText}>🧼 목욕하기</Text>
+                  <Droplets size={14} color="#0D9488" fill="#0D9488" style={{ marginRight: 3 }} />
+                  <Text style={styles.categoryBadgeText}>목욕하기</Text>
                 </View>
               </View>
 
@@ -672,22 +715,30 @@ export default function BubblePopGame({
               {/* Preview Box */}
               <View style={styles.readyPreviewBox}>
                 <View style={styles.readyBubbleItem}>
-                  <Text style={{ fontSize: 32 }}>🫧</Text>
+                  <View style={[styles.readyBubbleIconCircle, { backgroundColor: 'rgba(96, 165, 250, 0.15)' }]}>
+                    <Droplets size={24} color="#60A5FA" fill="#BAE6FD" />
+                  </View>
                   <Text style={styles.readyBubbleLabel}>일반 버블</Text>
                   <Text style={styles.readyBubblePoints}>+10 P</Text>
                 </View>
                 <View style={styles.readyBubbleItem}>
-                  <Text style={{ fontSize: 32 }}>✨</Text>
+                  <View style={[styles.readyBubbleIconCircle, { backgroundColor: 'rgba(245, 158, 11, 0.15)' }]}>
+                    <Sparkles size={24} color="#F59E0B" fill="#FDE68A" />
+                  </View>
                   <Text style={styles.readyBubbleLabel}>황금 버블</Text>
                   <Text style={styles.readyBubblePoints}>+30 P</Text>
                 </View>
                 <View style={styles.readyBubbleItem}>
-                  <Text style={{ fontSize: 32 }}>⏱️</Text>
+                  <View style={[styles.readyBubbleIconCircle, { backgroundColor: 'rgba(16, 185, 129, 0.15)' }]}>
+                    <Clock size={24} color="#10B981" />
+                  </View>
                   <Text style={styles.readyBubbleLabel}>시간 연장</Text>
                   <Text style={[styles.readyBubblePoints, { color: '#10B981' }]}>+3초 (최대 2회)</Text>
                 </View>
                 <View style={styles.readyBubbleItem}>
-                  <Text style={{ fontSize: 32 }}>🧼</Text>
+                  <View style={[styles.readyBubbleIconCircle, { backgroundColor: 'rgba(236, 72, 153, 0.15)' }]}>
+                    <SoapBarIcon size={24} />
+                  </View>
                   <Text style={styles.readyBubbleLabel}>슈퍼 비누</Text>
                   <Text style={[styles.readyBubblePoints, { color: '#EC4899' }]}>+40 P</Text>
                 </View>
@@ -696,25 +747,25 @@ export default function BubblePopGame({
               {/* Instructions */}
               <View style={styles.instructionsList}>
                 <View style={styles.instructionItem}>
-                  <Text style={styles.instructionEmoji}>👆</Text>
+                  <Hand size={18} color="#0D9488" style={{ marginRight: 8 }} />
                   <Text style={styles.instructionText}>
                     올라오는 거품을 연속 탭하거나 손가락으로 쓱- 슬라이스하여 터트립니다.
                   </Text>
                 </View>
                 <View style={styles.instructionItem}>
-                  <Text style={styles.instructionEmoji}>⏱️</Text>
+                  <Clock size={18} color="#10B981" style={{ marginRight: 8 }} />
                   <Text style={styles.instructionText}>
                     시계 버블 터치 시 +3초 시간 연장 (게임당 최대 2회 제한).
                   </Text>
                 </View>
                 <View style={styles.instructionItem}>
-                  <Text style={styles.instructionEmoji}>🔥</Text>
+                  <Flame size={18} color="#FF6B00" style={{ marginRight: 8 }} />
                   <Text style={styles.instructionText}>
                     8콤보 달성 시 2배 점수의 스파클 피버 모드가 시작됩니다!
                   </Text>
                 </View>
                 <View style={styles.instructionItem}>
-                  <Text style={styles.instructionEmoji}>🛁</Text>
+                  <Gift size={18} color="#0D9488" style={{ marginRight: 8 }} />
                   <Text style={styles.instructionText}>
                     청결도 100% 완충 + 대량 EXP 및 가족 포인트 보상 지급!
                   </Text>
@@ -727,7 +778,7 @@ export default function BubblePopGame({
                 onPress={startGame}
                 activeOpacity={0.85}
               >
-                <Sparkles size={20} color="#FFF" style={{ marginRight: 6 }} />
+                <Play size={18} color="#FFF" fill="#FFF" style={{ marginRight: 6 }} />
                 <Text style={styles.startButtonText}>목욕 시작하기 (START)</Text>
               </TouchableOpacity>
             </View>
@@ -769,20 +820,20 @@ export default function BubblePopGame({
 
               {/* Rewards Box */}
               <View style={styles.rewardBox}>
-                <Text style={styles.rewardBoxTitle}>🎉 목욕 완료 보상</Text>
+                <Text style={styles.rewardBoxTitle}>목욕 완료 보상</Text>
                 <View style={styles.rewardRow}>
                   <View style={styles.rewardPill}>
-                    <Text style={styles.rewardPillEmoji}>🧼</Text>
-                    <Text style={styles.rewardPillText}>청결도 100%</Text>
+                    <SoapBarIcon size={14} />
+                    <Text style={[styles.rewardPillText, { marginLeft: 4 }]}>청결도 100%</Text>
                   </View>
                   <View style={styles.rewardPill}>
-                    <Text style={styles.rewardPillEmoji}>✨</Text>
+                    <Sparkles size={14} color="#52C41A" style={{ marginRight: 4 }} />
                     <Text style={styles.rewardPillText}>
                       +{Math.max(12, Math.min(35, Math.round(score / 25) + Math.round(cleanliness / 10)))} EXP
                     </Text>
                   </View>
                   <View style={styles.rewardPill}>
-                    <Text style={styles.rewardPillEmoji}>🏆</Text>
+                    <Trophy size={14} color="#D48806" style={{ marginRight: 4 }} />
                     <Text style={styles.rewardPillText}>
                       +{Math.max(4, Math.min(15, Math.round(score / 55)))} P
                     </Text>
@@ -1147,11 +1198,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
+  readyBubbleIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
   readyBubbleLabel: {
     fontSize: 10,
     fontWeight: '700',
     color: '#475569',
-    marginTop: 4,
+    marginTop: 2,
   },
   readyBubblePoints: {
     fontSize: 10,

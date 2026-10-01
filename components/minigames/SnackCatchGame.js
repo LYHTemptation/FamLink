@@ -11,9 +11,76 @@ import {
   Alert,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
-import { Trophy, Sparkles, Heart, X, Flame, RotateCcw, Check, Clock } from 'lucide-react-native';
+import Svg, { Path, Circle, Rect } from 'react-native-svg';
+import {
+  Trophy,
+  Sparkles,
+  Heart,
+  X,
+  Flame,
+  RotateCcw,
+  Check,
+  Clock,
+  Apple,
+  Beef,
+  Cake,
+  Star,
+  Play,
+  PartyPopper,
+} from 'lucide-react-native';
 
 const { width: INITIAL_WIDTH, height: INITIAL_HEIGHT } = Dimensions.get('window');
+
+// Custom Vector Icons for items without standard library equivalents
+function ChiliPepperIcon({ size = 26 }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M18 4C16.5 4 15.5 5 15 6C13.5 4.5 11 4 9 5.5C6 7.5 5 12 6.5 16C7.5 18.5 9.5 20.5 12 21C13.5 21.3 15 20.8 16 19.5C18.5 16.5 19.5 11 18.5 7C19.5 6.5 20.5 5.5 20 4C19.5 3.5 18.5 3.5 18 4Z"
+        fill="#DC2626"
+        stroke="#991B1B"
+        strokeWidth="1.5"
+      />
+      <Path
+        d="M15 6C15.5 3.5 17 2 19 2"
+        stroke="#16A34A"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </Svg>
+  );
+}
+
+function BombIcon({ size = 26 }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Circle cx="11" cy="13" r="8" fill="#1E293B" stroke="#0F172A" strokeWidth="1.5" />
+      <Path d="M11 9A4 4 0 0 1 15 13" stroke="#64748B" strokeWidth="1.5" strokeLinecap="round" />
+      <Rect x="15" y="6" width="3" height="3" rx="0.5" fill="#475569" transform="rotate(25 15 6)" />
+      <Path d="M17 7C18.5 5.5 19 4 21 4" stroke="#D97706" strokeWidth="1.5" strokeLinecap="round" />
+      <Circle cx="21" cy="4" r="1.5" fill="#F59E0B" />
+    </Svg>
+  );
+}
+
+function SnackItemIcon({ type, size = 26 }) {
+  switch (type) {
+    case 'apple':
+      return <Apple size={size} color="#EF4444" fill="#FCA5A5" />;
+    case 'meat':
+      return <Beef size={size} color="#B45309" fill="#FCD34D" />;
+    case 'cake':
+      return <Cake size={size} color="#EC4899" fill="#FBCFE8" />;
+    case 'star':
+      return <Star size={size} color="#F59E0B" fill="#FDE68A" />;
+    case 'pepper':
+      return <ChiliPepperIcon size={size} />;
+    case 'bomb':
+      return <BombIcon size={size} />;
+    default:
+      return <Star size={size} color="#F59E0B" fill="#FDE68A" />;
+  }
+}
 
 // Game Configuration
 const GAME_DURATION = 30; // 30 seconds
@@ -23,14 +90,14 @@ const ITEM_SIZE = 44;
 const FLOOR_HEIGHT = 110; // Bottom stage floor height
 const SPAWN_INTERVAL = 550; // ms between items
 
-// Falling Items Table
+// Falling Items Table with Vector Icons & Color Palettes
 const ITEMS_TABLE = [
-  { type: 'apple', emoji: '🍎', name: '사과', score: 10, isHazard: false },
-  { type: 'meat', emoji: '🍖', name: '고기', score: 20, isHazard: false },
-  { type: 'cake', emoji: '🍰', name: '케이크', score: 30, isHazard: false },
-  { type: 'star', emoji: '⭐', name: '별사탕', score: 50, isHazard: false },
-  { type: 'pepper', emoji: '🌶️', name: '매운고추', score: -15, isHazard: true },
-  { type: 'bomb', emoji: '💣', name: '폭탄', score: -25, isHazard: true },
+  { type: 'apple', name: '사과', score: 10, isHazard: false, color: '#EF4444', bgColor: 'rgba(239, 68, 68, 0.15)' },
+  { type: 'meat', name: '고기', score: 20, isHazard: false, color: '#B45309', bgColor: 'rgba(180, 83, 9, 0.15)' },
+  { type: 'cake', name: '케이크', score: 30, isHazard: false, color: '#EC4899', bgColor: 'rgba(236, 72, 153, 0.15)' },
+  { type: 'star', name: '별사탕', score: 50, isHazard: false, color: '#F59E0B', bgColor: 'rgba(245, 158, 11, 0.15)' },
+  { type: 'pepper', name: '매운고추', score: -15, isHazard: true, color: '#DC2626', bgColor: 'rgba(220, 38, 38, 0.15)' },
+  { type: 'bomb', name: '폭탄', score: -25, isHazard: true, color: '#334155', bgColor: 'rgba(51, 65, 85, 0.2)' },
 ];
 
 export default function SnackCatchGame({
@@ -143,7 +210,7 @@ export default function SnackCatchGame({
   // -----------------------------------------------------------------
   const activateFeverMode = useCallback(() => {
     setIsFever(true);
-    triggerToast('🔥 FEVER TIME! 2배 점수! 🔥', '#FF6B00');
+    triggerToast('FEVER TIME! 2배 점수!', '#FF6B00');
 
     Animated.loop(
       Animated.sequence([
@@ -213,7 +280,7 @@ export default function SnackCatchGame({
       // Penalty & Stun
       setCombo(0);
       setScore(s => Math.max(0, s + item.score));
-      triggerToast(`${item.name}! ${item.score} 💥`, '#DC2626');
+      triggerToast(`${item.name}! ${item.score} (기절)`, '#DC2626');
       setIsStunned(true);
 
       if (stunTimerRef.current) clearTimeout(stunTimerRef.current);
@@ -235,7 +302,7 @@ export default function SnackCatchGame({
         return nextCombo;
       });
 
-      triggerToast(`+${pointsGained} 냠냠! 😋`, '#10B981');
+      triggerToast(`+${pointsGained} 냠냠!`, '#10B981');
     }
   }, [activateFeverMode, petBounce]);
 
@@ -407,10 +474,10 @@ export default function SnackCatchGame({
 
   // Compute Grade & Rewards
   const getGameGrade = (finalScore) => {
-    if (finalScore >= 750) return { grade: 'S', color: '#FAAD14', title: '간식 마스터 👑' };
-    if (finalScore >= 500) return { grade: 'A', color: '#52C41A', title: '폭풍 먹방 🌟' };
-    if (finalScore >= 300) return { grade: 'B', color: '#1890FF', title: '배부른 몽이 🍖' };
-    return { grade: 'C', color: '#8C8C8C', title: '초보 미식가 🌱' };
+    if (finalScore >= 750) return { grade: 'S', color: '#FAAD14', title: '간식 마스터' };
+    if (finalScore >= 500) return { grade: 'A', color: '#52C41A', title: '폭풍 먹방' };
+    if (finalScore >= 300) return { grade: 'B', color: '#1890FF', title: '배부른 몽이' };
+    return { grade: 'C', color: '#8C8C8C', title: '초보 미식가' };
   };
 
   const handleClaimAndClose = () => {
@@ -505,7 +572,9 @@ export default function SnackCatchGame({
                 },
               ]}
             >
-              <Text style={styles.fallingItemEmoji}>{item.emoji}</Text>
+              <View style={[styles.fallingItemBadge, { backgroundColor: item.bgColor, borderColor: item.color }]}>
+                <SnackItemIcon type={item.type} size={24} />
+              </View>
             </View>
           ))}
         </View>
@@ -532,7 +601,7 @@ export default function SnackCatchGame({
           <View style={styles.stageWoodFloor}>
             <View style={styles.stageWoodHighlight} />
             <Text style={styles.stageGuideText}>
-              👈 손가락으로 화면을 좌우로 쓱쓱 밀어 간식을 받아먹으세요! 👉
+              손가락으로 화면을 좌우로 쓱쓱 밀어 간식을 받아먹으세요!
             </Text>
           </View>
         </View>
@@ -568,7 +637,8 @@ export default function SnackCatchGame({
           {/* Stun Star Effect */}
           {isStunned && (
             <View style={styles.stunBadge}>
-              <Text style={styles.stunBadgeText}>💫 으악!</Text>
+              <Flame size={12} color="#FFF" style={{ marginRight: 3 }} />
+              <Text style={styles.stunBadgeText}>으악! 기절</Text>
             </View>
           )}
 
@@ -582,7 +652,18 @@ export default function SnackCatchGame({
         {gameState === 'ready' && (
           <View style={[styles.overlayCenter, { width: screenWidth, height: screenHeight }]}>
             <View style={styles.readyCard}>
-              <Text style={styles.readyHeaderEmoji}>🍖✨😋</Text>
+              <View style={styles.readyHeaderIconRow}>
+                <View style={[styles.readyMiniBadge, { backgroundColor: 'rgba(180, 83, 9, 0.15)' }]}>
+                  <Beef size={24} color="#B45309" fill="#FCD34D" />
+                </View>
+                <View style={[styles.readyMiniBadge, { backgroundColor: 'rgba(245, 158, 11, 0.15)' }]}>
+                  <Sparkles size={28} color="#F59E0B" fill="#FDE68A" />
+                </View>
+                <View style={[styles.readyMiniBadge, { backgroundColor: 'rgba(239, 68, 68, 0.15)' }]}>
+                  <Apple size={24} color="#EF4444" fill="#FCA5A5" />
+                </View>
+              </View>
+
               <Text style={styles.readyTitle}>와구와구 간식 캐치!</Text>
               <Text style={styles.readyDesc}>
                 하늘에서 떨어지는 맛있는 간식을{'\n'}
@@ -590,11 +671,27 @@ export default function SnackCatchGame({
               </Text>
 
               <View style={styles.rulePillBox}>
-                <Text style={styles.rulePillText}>🍎 🍖 🍰 간식 = +점수 & 콤보!</Text>
-                <Text style={styles.rulePillText}>💣 🌶️ 폭탄/고추 = -점수 & 기절!</Text>
-                <Text style={[styles.rulePillText, { color: '#FF7E82', fontWeight: '800' }]}>
-                  🔥 8콤보 달성 시 2배 FEVER TIME!
-                </Text>
+                <View style={styles.ruleRow}>
+                  <View style={styles.ruleItemIcons}>
+                    <Apple size={16} color="#EF4444" />
+                    <Beef size={16} color="#B45309" />
+                    <Cake size={16} color="#EC4899" />
+                  </View>
+                  <Text style={styles.rulePillText}>맛있는 간식 = +점수 & 콤보!</Text>
+                </View>
+                <View style={styles.ruleRow}>
+                  <View style={styles.ruleItemIcons}>
+                    <BombIcon size={16} />
+                    <ChiliPepperIcon size={16} />
+                  </View>
+                  <Text style={styles.rulePillText}>폭탄 / 고추 = -점수 & 기절!</Text>
+                </View>
+                <View style={styles.ruleRow}>
+                  <Flame size={16} color="#FF6B00" />
+                  <Text style={[styles.rulePillText, { color: '#FF7E82', fontWeight: '800' }]}>
+                    8콤보 달성 시 2배 FEVER TIME!
+                  </Text>
+                </View>
               </View>
 
               <TouchableOpacity
@@ -602,7 +699,8 @@ export default function SnackCatchGame({
                 onPress={startGame}
                 activeOpacity={0.85}
               >
-                <Text style={styles.startBtnText}>게임 시작하기 🚀</Text>
+                <Play size={18} color="#FFF" fill="#FFF" style={{ marginRight: 6 }} />
+                <Text style={styles.startBtnText}>게임 시작하기 (START)</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -614,7 +712,9 @@ export default function SnackCatchGame({
         {gameState === 'gameover' && (
           <View style={[styles.overlayCenter, { width: screenWidth, height: screenHeight }]}>
             <View style={styles.resultCard}>
-              <Text style={styles.resultHeaderEmoji}>🎉🎊</Text>
+              <View style={styles.resultHeaderIconBox}>
+                <PartyPopper size={36} color="#F59E0B" />
+              </View>
               <Text style={styles.resultTitle}>먹방 타임 종료!</Text>
 
               {/* Grade Badge */}
@@ -628,14 +728,14 @@ export default function SnackCatchGame({
               <View style={styles.resultScoreBox}>
                 <Text style={styles.resultScoreLabel}>최종 획득 점수</Text>
                 <Text style={styles.resultScoreVal}>{score} Pts</Text>
-                <Text style={styles.resultMaxCombo}>최고 콤보: {maxCombo} Combo 🔥</Text>
+                <Text style={styles.resultMaxCombo}>최고 콤보: {maxCombo} Combo</Text>
               </View>
 
               {/* Earned Rewards */}
               <View style={styles.rewardsBox}>
                 <View style={styles.rewardRow}>
                   <Heart size={16} color="#FF4D6D" fill="#FF4D6D" />
-                  <Text style={styles.rewardText}>포만감 100% 가득 참! 🍗</Text>
+                  <Text style={styles.rewardText}>포만감 100% 가득 참!</Text>
                 </View>
                 <View style={styles.rewardRow}>
                   <Sparkles size={16} color="#52C41A" />
@@ -783,8 +883,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  fallingItemEmoji: {
-    fontSize: 34,
+  fallingItemBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
   },
   bottomStageArea: {
     position: 'absolute',
@@ -900,9 +1010,21 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 8,
   },
-  readyHeaderEmoji: {
-    fontSize: 42,
-    marginBottom: 8,
+  readyHeaderIconRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
+  readyMiniBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.08)',
   },
   readyTitle: {
     fontSize: 20,
@@ -923,7 +1045,18 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 12,
     marginBottom: 20,
+    gap: 8,
+  },
+  ruleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
+  },
+  ruleItemIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   rulePillText: {
     fontSize: 12,
@@ -936,7 +1069,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF7E82',
     paddingVertical: 14,
     borderRadius: 16,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: '#FF7E82',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
@@ -961,9 +1096,14 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 8,
   },
-  resultHeaderEmoji: {
-    fontSize: 40,
-    marginBottom: 6,
+  resultHeaderIconBox: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
   },
   resultTitle: {
     fontSize: 20,

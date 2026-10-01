@@ -201,8 +201,10 @@ CREATE TABLE IF NOT EXISTS petmong_characters (
   personality TEXT NOT NULL,
   level INTEGER DEFAULT 1 NOT NULL,
   exp INTEGER DEFAULT 0 NOT NULL,
+  vitals JSONB DEFAULT '{"hunger":80,"happiness":85,"cleanliness":90,"energy":95}'::jsonb,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+ALTER TABLE petmong_characters ADD COLUMN IF NOT EXISTS vitals JSONB DEFAULT '{"hunger":80,"happiness":85,"cleanliness":90,"energy":95}'::jsonb;
 ALTER TABLE petmong_characters DISABLE ROW LEVEL SECURITY;
 
 -- 17. 반려몽 활동 및 상호작용 기록 (petmong_activities)
@@ -215,3 +217,15 @@ CREATE TABLE IF NOT EXISTS petmong_activities (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 ALTER TABLE petmong_activities DISABLE ROW LEVEL SECURITY;
+
+-- 18. 반려몽 비밀 귓속말 & 감성 편지 배달부 (petmong_whispers)
+CREATE TABLE IF NOT EXISTS petmong_whispers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id UUID REFERENCES families(id) ON DELETE CASCADE NOT NULL,
+  from_user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  to_user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  message TEXT NOT NULL,
+  is_read BOOLEAN DEFAULT false NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE petmong_whispers DISABLE ROW LEVEL SECURITY;
