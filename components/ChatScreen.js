@@ -730,12 +730,12 @@ export default function ChatScreen({
   if (selectedRoomId === null) {
     return (
       <View style={styles.container}>
-        {/* Chat Room List Header matching Figma Home/Together style */}
+        {/* Chat Room List Header: 콤팩트 상단 바 */}
         <View style={styles.roomListHeader}>
           <View style={styles.roomListHeaderTopRow}>
-            <View style={styles.roomListHeaderLeft}>
-              <Text style={styles.roomListHeaderCategory}>가족 대화 · REALTIME</Text>
-              <Text style={styles.roomListHeaderTitle}>채팅</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <MessageCircle size={16} color="#FF6B47" strokeWidth={2.4} style={{ marginRight: 6 }} />
+              <Text style={styles.roomListCountText}>대화방 {CHAT_ROOMS.length}개</Text>
             </View>
 
             <TouchableOpacity
@@ -743,7 +743,7 @@ export default function ChatScreen({
               onPress={() => setCreateModalVisible(true)}
               activeOpacity={0.85}
             >
-              <Plus size={16} color="#FFFFFF" strokeWidth={2.5} style={{ marginRight: 5 }} />
+              <Plus size={15} color="#FFFFFF" strokeWidth={2.5} style={{ marginRight: 5 }} />
               <Text style={styles.createRoomBtnText}>새 대화방</Text>
             </TouchableOpacity>
           </View>
@@ -1077,8 +1077,8 @@ const styles = StyleSheet.create({
   // 1. CHAT ROOM LIST HEADER (Figma style)
   roomListHeader: {
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 14,
+    paddingTop: 12,
+    paddingBottom: 10,
     backgroundColor: '#FAF8F3',
   },
   roomListHeaderTopRow: {
@@ -1086,22 +1086,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  roomListHeaderLeft: {
-    justifyContent: 'center',
-  },
-  roomListHeaderCategory: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#A8A29E',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    marginBottom: 4,
-  },
-  roomListHeaderTitle: {
-    fontSize: 30,
-    fontWeight: '900',
+  roomListCountText: {
+    fontSize: 13,
+    fontWeight: '800',
     color: '#1C1917',
-    letterSpacing: -0.5,
   },
   createRoomBtn: {
     backgroundColor: '#FF6B47',

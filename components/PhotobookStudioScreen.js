@@ -34,6 +34,14 @@ import {
   Gift,
   CheckCircle2,
   Info,
+  Eye,
+  Bookmark,
+  ChevronDown,
+  Layout,
+  Scroll,
+  Palette,
+  Type,
+  FileText,
 } from 'lucide-react-native';
 import { colors, typography, commonStyles } from '../theme';
 import UserAvatar from './UserAvatar';
@@ -94,8 +102,60 @@ export default function PhotobookStudioScreen({
 
   // 1. 볼륨 선택 (6개월 단위 누적 볼륨제: Vol. 1, Vol. 2, Vol. 3)
   const [selectedVolume, setSelectedVolume] = useState('vol-1');
+  const [volumePickerModalVisible, setVolumePickerModalVisible] = useState(false);
+  const currentVolObj = VOLUME_OPTIONS.find(v => v.id === selectedVolume) || VOLUME_OPTIONS[0];
+
   const [selectedThemeId, setSelectedThemeId] = useState('linen');
   const currentTheme = STUDIO_THEMES.find(t => t.id === selectedThemeId) || STUDIO_THEMES[0];
+  const [themePickerModalVisible, setThemePickerModalVisible] = useState(false);
+
+  // 폰트 & 크기 커스텀 상태
+  const [bookFontFamily, setBookFontFamily] = useState('serif'); // 'serif' | 'sans' | 'handwriting'
+  const [bookFontSize, setBookFontSize] = useState('medium'); // 'small' | 'medium' | 'large'
+  const [fontPickerModalVisible, setFontPickerModalVisible] = useState(false);
+  const [pagePickerModalVisible, setPagePickerModalVisible] = useState(false);
+  const [layoutPickerModalVisible, setLayoutPickerModalVisible] = useState(false);
+
+  // 폰트 스타일 & 스케일 계산
+  const fontStyle = useMemo(() => {
+    if (bookFontFamily === 'serif') {
+      return { fontFamily: Platform.select({ ios: 'Georgia', android: 'serif', default: 'serif' }) };
+    }
+    if (bookFontFamily === 'handwriting') {
+      return { fontFamily: Platform.select({ ios: 'Snell Roundhand', android: 'casual', default: 'cursive' }) };
+    }
+    return { fontFamily: Platform.select({ ios: 'System', android: 'sans-serif', default: 'sans-serif' }) };
+  }, [bookFontFamily]);
+
+  const fontScale = useMemo(() => {
+    if (bookFontSize === 'small') return 0.88;
+    if (bookFontSize === 'large') return 1.15;
+    return 1.0;
+  }, [bookFontSize]);
+
+  // 3대 포맷 체계 상태: { [`${sIdx}_${side}`]: 'photo' | 'smalltalk' | 'hybrid' }
+  const [pageFormats, setPageFormats] = useState({});
+
+  const getPageFormat = (sIdx, side) => {
+    const key = `${sIdx}_${side}`;
+    if (pageFormats[key]) return pageFormats[key];
+    const sDef = SPREAD_DEFINITIONS[sIdx] || SPREAD_DEFINITIONS[0];
+    if (sDef.category === 'interview') {
+      return side === 'left' ? 'smalltalk' : 'photo';
+    }
+    if (sDef.category === 'photos') {
+      return 'photo';
+    }
+    if (sDef.category === 'prologue' || sDef.category === 'epilogue' || sDef.category === 'stats') {
+      return side === 'left' ? 'smalltalk' : 'photo';
+    }
+    return 'photo';
+  };
+
+  const handleSetPageFormat = (newFormat) => {
+    const key = `${currentSpreadIndex}_${activeSingleSide}`;
+    setPageFormats(prev => ({ ...prev, [key]: newFormat }));
+  };
 
   // 2. 도서 기본 정보
   const [bookTitle, setBookTitle] = useState('우리 가족의 첫 번째 이야기 (Vol. 1)');
@@ -104,18 +164,32 @@ export default function PhotobookStudioScreen({
   const [tempTitle, setTempTitle] = useState(bookTitle);
   const [tempSubtitle, setTempSubtitle] = useState(bookSubtitle);
 
-  // 3. 뷰 모드: 'dual' (양면 전체) | 'single' (1페이지 집중)
-  const [viewMode, setViewMode] = useState('dual');
+  // 3. 뷰 모드: 15×15cm 정방형 스퀘어북에 맞춰 'single' (1:1 스퀘어 단면 집중) 기본 적용
+  const [viewMode, setViewMode] = useState('single');
   const [activeSingleSide, setActiveSingleSide] = useState('left'); // 'left' | 'right'
 
   // 4. 현재 작업 중인 펼침면 (스프레드 0~15, 총 16개 펼침면 = 32페이지)
   const [currentSpreadIndex, setCurrentSpreadIndex] = useState(0);
 
-  // 150×150mm 정방형 스퀘어북 비율에 맞춘 캔버스 높이 동적 계산 (양면 2:1 가로 와이드, 1페이지 1:1 정방형)
-  const availableHeight = windowHeight || Dimensions.get('window').height || 750;
-  const canvasHeight = viewMode === 'dual'
-    ? Math.max(220, Math.min(270, availableHeight - 460))
-    : Math.max(260, Math.min(330, availableHeight - 420));
+  // 레이아웃 모드 가로 페이징 스크롤 레퍼런스 및 이동 핸들러
+  const spreadScrollRef = useRef(null);
+
+  const handleGoToSpread = (idx) => {
+    const target = Math.max(0, Math.min(SPREAD_DEFINITIONS.length - 1, idx));
+    setCurrentSpreadIndex(target);
+    const winW = windowWidth || Dimensions.get('window').width;
+    spreadScrollRef.current?.scrollTo({ x: target * winW, animated: true });
+  };
+
+  // 5. 스튜디오 뷰 형식: 'layout' (15×15 1:1 정방형 조판 편집) | 'scroll' (32P 연속 피드 감상)
+  const [studioViewMode, setStudioViewMode] = useState('layout'); // 'layout' | 'scroll'
+
+  // 150×150mm 정방형 스퀘어북 비율에 맞춘 캔버스 규격 (1페이지 완벽 1:1 정방형, 양면 2:1 와이드)
+  const currentScreenWidth = windowWidth || Dimensions.get('window').width || SCREEN_WIDTH;
+  const currentScreenHeight = windowHeight || Dimensions.get('window').height || 750;
+  // 1:1 스퀘어 규격: 스마트폰 가로 폭을 최대로 활용하여 좌우 16px 대칭으로 꽉 찬 정방형 비율 확보
+  const squareCanvasSize = Math.min(currentScreenWidth - 32, Math.max(280, Math.min(380, currentScreenHeight - 370)));
+  const dualCanvasHeight = Math.max(180, Math.min(240, (currentScreenWidth - 32) * 0.52));
 
   // 4. 단톡방 사진 목록 추출
   const chatPhotos = useMemo(() => {
@@ -140,7 +214,6 @@ export default function PhotobookStudioScreen({
   // 5. 모달 제어 상태
   const [photoPickerVisible, setPhotoPickerVisible] = useState(false);
   const [activePhotoSlotIndex, setActivePhotoSlotIndex] = useState(0);
-  const [flipbookModalVisible, setFlipbookModalVisible] = useState(false);
   const [orderModalVisible, setOrderModalVisible] = useState(false);
   const [topicPickerModalVisible, setTopicPickerModalVisible] = useState(false);
   const [selectedTopicSlot, setSelectedTopicSlot] = useState(0);
@@ -164,17 +237,12 @@ export default function PhotobookStudioScreen({
   const addPrice = orderAddCopy ? 14000 : 0;
   const finalCashPrice = Math.max(0, basePrice - appliedPoints + addPrice);
 
-  // 6. 현재 스프레드 정보 계산
-  const currentSpread = SPREAD_DEFINITIONS[currentSpreadIndex] || SPREAD_DEFINITIONS[0];
-  const currentLayout = spreadLayouts[currentSpreadIndex] || 'single';
-
-  // 현재 스프레드에 할당된 사진들
-  const currentPhotos = useMemo(() => {
-    const custom = spreadPhotos[currentSpreadIndex];
+  // 임의의 스프레드 번호에 할당된 사진 목록 반환 헬퍼
+  const getSpreadPhotos = (sIdx) => {
+    const custom = spreadPhotos[sIdx];
     if (custom && custom.length > 0) return custom;
-    // 기본 자동 채우기: chatPhotos에서 슬라이스
     if (chatPhotos.length > 0) {
-      const startIdx = (currentSpreadIndex * 2) % chatPhotos.length;
+      const startIdx = (sIdx * 2) % chatPhotos.length;
       return [
         chatPhotos[startIdx]?.uri,
         chatPhotos[(startIdx + 1) % chatPhotos.length]?.uri,
@@ -183,7 +251,14 @@ export default function PhotobookStudioScreen({
       ].filter(Boolean);
     }
     return [];
-  }, [spreadPhotos, currentSpreadIndex, chatPhotos]);
+  };
+
+  // 6. 현재 스프레드 정보 계산
+  const currentSpread = SPREAD_DEFINITIONS[currentSpreadIndex] || SPREAD_DEFINITIONS[0];
+  const currentLayout = spreadLayouts[currentSpreadIndex] || 'single';
+
+  // 현재 스프레드에 할당된 사진들
+  const currentPhotos = useMemo(() => getSpreadPhotos(currentSpreadIndex), [spreadPhotos, currentSpreadIndex, chatPhotos]);
 
   // 활성 가족 멤버 목록
   const activeFamilyList = useMemo(() => {
@@ -230,11 +305,12 @@ export default function PhotobookStudioScreen({
     ],
   ], []);
 
-  // 현재 스프레드에 수록될 3개 스몰톡 문답 목록
-  const currentInterviewTopics = useMemo(() => {
-    const custom = customSpreadTopics[currentSpreadIndex];
+  // 임의의 스프레드 번호에 할당된 3개 인터뷰 질문 및 답변 세트 반환 헬퍼
+  const getSpreadInterviewTopics = (sIdx) => {
+    const custom = customSpreadTopics[sIdx];
     if (custom && custom.length > 0) return custom;
-    const mIdx = currentSpread.monthIndex !== undefined ? currentSpread.monthIndex : 0;
+    const sDef = SPREAD_DEFINITIONS[sIdx] || SPREAD_DEFINITIONS[0];
+    const mIdx = sDef.monthIndex !== undefined ? sDef.monthIndex : 0;
     const monthSet = MONTHLY_INTERVIEW_TOPICS[mIdx % MONTHLY_INTERVIEW_TOPICS.length];
     if (smallTalkState?.topic && mIdx === 0) {
       const topicStr = stripEmojis(typeof smallTalkState.topic === 'string' ? smallTalkState.topic : (smallTalkState.topic.text || smallTalkState.topic.title || ''));
@@ -247,11 +323,14 @@ export default function PhotobookStudioScreen({
       }
     }
     return monthSet;
-  }, [customSpreadTopics, currentSpreadIndex, currentSpread, smallTalkState, MONTHLY_INTERVIEW_TOPICS]);
+  };
 
-  // 7. 레이아웃 셔플 핸들러
+  // 현재 스프레드에 수록될 3개 스몰톡 문답 목록
+  const currentInterviewTopics = useMemo(() => getSpreadInterviewTopics(currentSpreadIndex), [customSpreadTopics, currentSpreadIndex, currentSpread, smallTalkState, MONTHLY_INTERVIEW_TOPICS]);
+
+  // 7. 레이아웃 셔플 핸들러 (15×15 스퀘어 4대 조판 템플릿)
   const handleShuffleLayout = () => {
-    const layouts = ['single', 'wide', 'split', 'grid'];
+    const layouts = ['single', 'wide', 'grid', 'polaroid'];
     const currentIdx = layouts.indexOf(currentLayout);
     const nextLayout = layouts[(currentIdx + 1) % layouts.length];
     setSpreadLayouts(prev => ({ ...prev, [currentSpreadIndex]: nextLayout }));
@@ -319,33 +398,40 @@ export default function PhotobookStudioScreen({
   };
 
   // =========================================================
-  // ◀ 좌측 페이지 렌더러 (Left Page Content)
+  // 📖 통합 페이지 렌더러 (3대 포맷 & 폰트/크기 완벽 반영)
   // =========================================================
-  const renderLeftPageContent = (isFull = false) => {
-    if (currentSpread.category === 'prologue') {
+  const renderPage = (sIdx, side, isFull = false) => {
+    const sDef = SPREAD_DEFINITIONS[sIdx] || SPREAD_DEFINITIONS[0];
+    const pageNum = side === 'left' ? sDef.leftPage : sDef.rightPage;
+    const format = getPageFormat(sIdx, side);
+    const sPhotos = getSpreadPhotos(sIdx);
+    const sTopics = getSpreadInterviewTopics(sIdx);
+    const sCaption = spreadCaptions[sIdx];
+    const isSplit = spreadLayouts[sIdx] === 'wide';
+
+    // 1. 특수 프롤로그 (P.1)
+    if (sDef.category === 'prologue' && side === 'left' && format === 'smalltalk') {
       return (
         <View style={styles.prologuePageContent}>
-          <Text style={[styles.chapterKicker, { color: currentTheme.accent }]}>PROLOGUE</Text>
+          <Text style={[styles.chapterKicker, { color: currentTheme.accent, ...fontStyle }]}>PROLOGUE</Text>
           <Text
-            style={[styles.bookMainHeading, { color: currentTheme.text }, isSmallScreen && { fontSize: 14, lineHeight: 18 }, isFull && { fontSize: 18, lineHeight: 24 }]}
+            style={[styles.bookMainHeading, { color: currentTheme.text, ...fontStyle, fontSize: Math.round((isFull ? 18 : 14) * fontScale), lineHeight: Math.round((isFull ? 24 : 18) * fontScale) }]}
             numberOfLines={2}
-            adjustsFontSizeToFit
           >
             {bookTitle}
           </Text>
           <Text
-            style={[styles.bookSubHeading, { color: currentTheme.accent }, isSmallScreen && { fontSize: 10, marginBottom: 6 }, isFull && { fontSize: 12, marginBottom: 8 }]}
+            style={[styles.bookSubHeading, { color: currentTheme.accent, ...fontStyle, fontSize: Math.round((isFull ? 12 : 10) * fontScale), marginBottom: 8 }]}
             numberOfLines={1}
-            adjustsFontSizeToFit
           >
             {bookSubtitle}
           </Text>
 
           <View style={styles.prologueParagraphBox}>
-            <Text style={[styles.prologueBodyText, { color: currentTheme.text }, isSmallScreen && { fontSize: 9.5, lineHeight: 14 }, isFull && { fontSize: 12, lineHeight: 18 }]}>
+            <Text style={[styles.prologueBodyText, { color: currentTheme.text, ...fontStyle, fontSize: Math.round((isFull ? 11.5 : 9.5) * fontScale), lineHeight: Math.round((isFull ? 17 : 14) * fontScale) }]}>
               가장 눈부신 순간은 언제나 멀리 있지 않았습니다. 함께 밥을 먹고, 사소한 농담을 주고받고, 문득 전해진 다정한 안부 속에 우리 가족의 가장 따뜻한 계절이 깃들어 있었습니다.
             </Text>
-            <Text style={[styles.prologueBodyText, { color: currentTheme.text, marginTop: isSmallScreen ? 4 : 8 }, isSmallScreen && { fontSize: 9.5, lineHeight: 14 }, isFull && { fontSize: 12, lineHeight: 18 }]}>
+            <Text style={[styles.prologueBodyText, { color: currentTheme.text, marginTop: 6, ...fontStyle, fontSize: Math.round((isFull ? 11.5 : 9.5) * fontScale), lineHeight: Math.round((isFull ? 17 : 14) * fontScale) }]}>
               지난 6개월간 매일 주고받은 스몰톡 문답과 카메라에 담긴 온기를 엮어, 우리들의 찬란했던 시간들을 이 한 권의 책에 고이 남깁니다.
             </Text>
           </View>
@@ -362,238 +448,222 @@ export default function PhotobookStudioScreen({
             <Edit3 size={11} color="#78716C" style={{ marginRight: 4 }} />
             <Text style={styles.editTitleMiniBtnText}>제목 편집</Text>
           </TouchableOpacity>
-          <Text style={styles.pageNumberFootnote}>- {currentSpread.leftPage} -</Text>
+          <Text style={styles.pageNumberFootnote}>- {pageNum} -</Text>
         </View>
       );
     }
 
-    if (currentSpread.category === 'interview') {
+    // 2. 특수 통계 페이지 (P.29)
+    if (sDef.category === 'stats' && side === 'left' && format === 'smalltalk') {
+      return (
+        <View style={styles.statsPageContent}>
+          <Text style={[styles.statsPageHeading, { color: currentTheme.accent, ...fontStyle }]}>180-DAY MEMORY METRICS</Text>
+          <Text style={[styles.statsPageSub, { color: '#1C1917', ...fontStyle, fontSize: Math.round((isFull ? 14 : 12) * fontScale), marginBottom: 8 }]}>
+            우리 가족의 180일 온기 발자취
+          </Text>
+          <View style={styles.metricGrid}>
+            <View style={[styles.metricBox, isSmallScreen && { padding: 4 }]}>
+              <Text style={[styles.metricBigNum, { color: '#FF6B47' }]}>180</Text>
+              <Text style={styles.metricLabel}>스몰톡 문답</Text>
+            </View>
+            <View style={[styles.metricBox, isSmallScreen && { padding: 4 }]}>
+              <Text style={[styles.metricBigNum, { color: '#3B82F6' }]}>{chatPhotos.length || 42}</Text>
+              <Text style={styles.metricLabel}>함께한 사진</Text>
+            </View>
+            <View style={[styles.metricBox, isSmallScreen && { padding: 4 }]}>
+              <Text style={[styles.metricBigNum, { color: '#10B981' }]}>1,420</Text>
+              <Text style={styles.metricLabel}>나눈 메시지</Text>
+            </View>
+            <View style={[styles.metricBox, isSmallScreen && { padding: 4 }]}>
+              <Text style={[styles.metricBigNum, { color: '#8B5CF6' }]}>Lv. 14</Text>
+              <Text style={styles.metricLabel}>반려몽 성장</Text>
+            </View>
+          </View>
+          <Text style={styles.pageNumberFootnote}>- {pageNum} -</Text>
+        </View>
+      );
+    }
+
+    // 3. 특수 에필로그 (P.32)
+    if (sDef.category === 'epilogue' && side === 'right' && format === 'smalltalk') {
+      return (
+        <View style={styles.epiloguePageContent}>
+          <Text style={[styles.chapterKicker, { color: currentTheme.accent, ...fontStyle }]}>EPILOGUE</Text>
+          <Text style={[styles.epilogueTitle, { color: currentTheme.text, ...fontStyle, fontSize: Math.round((isFull ? 15 : 12) * fontScale) }]}>
+            끝나지 않을 우리들의 이야기
+          </Text>
+          <Text style={[styles.epilogueBody, { color: '#44403C', ...fontStyle, fontSize: Math.round((isFull ? 11 : 9.5) * fontScale), lineHeight: Math.round((isFull ? 16 : 13) * fontScale) }]}>
+            계절은 바뀌어도 우리가 함께 나눈 사랑의 온도는 변하지 않습니다. 다음 6개월 뒤에도 더 풍성하고 눈부신 추억으로 이 자리를 채워나가길 소망합니다.
+          </Text>
+          <View style={styles.colophonBox}>
+            <Text style={styles.colophonText}>기록 기간: 1~6개월 차 (180일간의 발자취)</Text>
+            <Text style={styles.colophonText}>판형: 150×150mm 코지 스퀘어 32P 양장제본</Text>
+          </View>
+          <Text style={styles.pageNumberFootnote}>- {pageNum} -</Text>
+        </View>
+      );
+    }
+
+    // 4. [포맷 1: 사진 전용 (Photo Focus)]
+    if (format === 'photo') {
+      const photoSlotIndex = side === 'left' ? 0 : 1;
+      return (
+        <View style={{ flex: 1 }}>
+          {isSplit ? (
+            <View style={styles.multiSlotContainer}>
+              <TouchableOpacity
+                style={styles.halfSlotTop}
+                onPress={() => handleOpenPhotoPicker(photoSlotIndex)}
+                activeOpacity={0.85}
+              >
+                {sPhotos[photoSlotIndex] ? (
+                  <Image source={{ uri: sPhotos[photoSlotIndex] }} style={styles.slotImageFull} resizeMode="cover" />
+                ) : (
+                  <View style={styles.emptySlotPlaceholder}><Camera size={18} color="#A8A29E" /></View>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.halfSlotBottom}
+                onPress={() => handleOpenPhotoPicker(photoSlotIndex + 1)}
+                activeOpacity={0.85}
+              >
+                {sPhotos[photoSlotIndex + 1] ? (
+                  <Image source={{ uri: sPhotos[photoSlotIndex + 1] }} style={styles.slotImageFull} resizeMode="cover" />
+                ) : (
+                  <View style={styles.emptySlotPlaceholder}><Camera size={18} color="#A8A29E" /></View>
+                )}
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.photoCanvasSlot}
+              onPress={() => handleOpenPhotoPicker(photoSlotIndex)}
+              activeOpacity={0.85}
+            >
+              {sPhotos[photoSlotIndex] ? (
+                <Image source={{ uri: sPhotos[photoSlotIndex] }} style={styles.slotImageFull} resizeMode="cover" />
+              ) : (
+                <View style={styles.emptySlotPlaceholder}>
+                  <Camera size={26} color="#A8A29E" />
+                  <Text style={[styles.emptySlotText, isSmallScreen && { fontSize: 10 }]}>터치하여 사진 교체</Text>
+                </View>
+              )}
+              <View style={styles.slotEditBadge}>
+                <Text style={styles.slotEditBadgeText}>P.{pageNum} 📸</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+
+          {sCaption ? (
+            <View style={styles.captionRibbon}>
+              <Text style={[styles.captionRibbonText, { ...fontStyle, fontSize: Math.round(10 * fontScale) }]} numberOfLines={1}>
+                "{sCaption}"
+              </Text>
+            </View>
+          ) : null}
+          <Text style={styles.pageNumberFootnote}>- {pageNum} -</Text>
+        </View>
+      );
+    }
+
+    // 5. [포맷 2: 스몰톡 전용 (SmallTalk Narrative)]
+    if (format === 'smalltalk') {
       return (
         <View style={styles.interviewPageContent}>
           <View style={styles.interviewKickerRow}>
             <Award size={12} color="#FF6B47" style={{ marginRight: 4 }} />
-            <Text style={[styles.interviewKickerText, isSmallScreen && { fontSize: 8 }, isFull && { fontSize: 11 }]}>
-              CHAPTER · {currentSpread.monthIndex !== undefined ? `${currentSpread.monthIndex + 1}개월 차` : '활동'} 스몰톡 다이제스트 (3선)
+            <Text style={[styles.interviewKickerText, { ...fontStyle, fontSize: Math.round((isFull ? 11 : 9) * fontScale) }]}>
+              CHAPTER · {sDef.monthIndex !== undefined ? `${sDef.monthIndex + 1}개월 차` : '가족'} 스몰톡 인터뷰
             </Text>
           </View>
 
           <ScrollView style={styles.answersScroll} showsVerticalScrollIndicator={false}>
-            {currentInterviewTopics.map((item, qIdx) => (
-              <View key={item.id || qIdx} style={[styles.multiQnACard, isSmallScreen && { padding: 5, marginBottom: 4 }, isFull && { padding: 8, marginBottom: 6 }]}>
+            {sTopics.slice(0, 3).map((item, qIdx) => (
+              <View key={item.id || qIdx} style={[styles.multiQnACard, isSmallScreen && { padding: 4, marginBottom: 4 }, isFull && { padding: 7, marginBottom: 5 }]}>
                 <View style={styles.multiQnAHeader}>
-                  <View style={[styles.qNumBadge, isFull && { width: 26, height: 20 }]}>
-                    <Text style={[styles.qNumBadgeText, isFull && { fontSize: 10.5 }]}>Q{qIdx + 1}</Text>
+                  <View style={styles.qNumBadge}>
+                    <Text style={styles.qNumBadgeText}>Q{qIdx + 1}</Text>
                   </View>
-                  <Text style={[styles.multiQnATitle, isSmallScreen && { fontSize: 10 }, isFull && { fontSize: 12 }]} numberOfLines={2}>
+                  <Text style={[styles.multiQnATitle, { ...fontStyle, fontSize: Math.round((isFull ? 11.5 : 10) * fontScale) }]} numberOfLines={2}>
                     "{item.topic}"
                   </Text>
                 </View>
-
                 <View style={styles.compactAnswersList}>
-                  {activeFamilyList.map((m) => {
-                    const ansText = item.answers?.[m.id] || m.answer || (smallTalkState?.responses && smallTalkState.responses[m.id]) || '함께여서 늘 고마운 우리 가족!';
+                  {activeFamilyList.slice(0, 3).map(m => {
+                    const ansText = item.answers?.[m.id] || m.answer || '함께여서 늘 고마운 우리 가족!';
                     return (
-                      <View key={m.id} style={[styles.compactAnswerRow, isFull && { marginVertical: 2 }]}>
-                        <UserAvatar avatar={m.avatar || '👦'} size={isFull ? 18 : 14} style={{ marginRight: 4 }} />
-                        <Text style={[styles.compactMemberName, isSmallScreen && { fontSize: 8 }, isFull && { fontSize: 10 }]}>{m.name || m.role}:</Text>
-                        <Text style={[styles.compactAnswerText, isSmallScreen && { fontSize: 8 }, isFull && { fontSize: 10.5 }]} numberOfLines={1}>
-                          "{ansText}"
-                        </Text>
+                      <View key={m.id} style={styles.compactAnswerRow}>
+                        <UserAvatar avatar={m.avatar || '👦'} size={14} style={{ marginRight: 3 }} />
+                        <Text style={[styles.compactMemberName, { ...fontStyle, fontSize: Math.round(9 * fontScale) }]}>{m.name || m.role}:</Text>
+                        <Text style={[styles.compactAnswerText, { ...fontStyle, fontSize: Math.round(9.5 * fontScale) }]} numberOfLines={1}>"{ansText}"</Text>
                       </View>
                     );
                   })}
                 </View>
               </View>
             ))}
-
             <TouchableOpacity
-              style={[styles.changeTopicBtn, isFull && { paddingVertical: 7 }]}
+              style={styles.changeTopicBtn}
               onPress={() => {
                 setSelectedTopicSlot(0);
                 setTopicPickerModalVisible(true);
               }}
               activeOpacity={0.75}
             >
-              <Shuffle size={11} color="#78716C" style={{ marginRight: 4 }} />
-              <Text style={[styles.changeTopicBtnText, isFull && { fontSize: 11 }]}>질문 교체 및 아카이브에서 담기</Text>
+              <Shuffle size={10} color="#78716C" style={{ marginRight: 3 }} />
+              <Text style={styles.changeTopicBtnText}>문답 교체 (180개 질문 아카이브)</Text>
             </TouchableOpacity>
           </ScrollView>
-          <Text style={styles.pageNumberFootnote}>- {currentSpread.leftPage} -</Text>
+          <Text style={styles.pageNumberFootnote}>- {pageNum} -</Text>
         </View>
       );
     }
 
-    if (currentSpread.category === 'stats') {
-      return (
-        <View style={styles.statsPageContent}>
-          <Text style={[styles.statsPageHeading, isFull && { fontSize: 12 }]}>180-DAY MEMORY METRICS</Text>
-          <Text style={[styles.statsPageSub, isSmallScreen && { fontSize: 12, marginBottom: 6 }, isFull && { fontSize: 15, marginBottom: 10 }]}>우리 가족의 180일 온기 발자취</Text>
-
-          <View style={styles.metricGrid}>
-            <View style={[styles.metricBox, isSmallScreen && { padding: 5 }, isFull && { padding: 10 }]}>
-              <Text style={[styles.metricBigNum, isSmallScreen && { fontSize: 14 }, isFull && { fontSize: 19 }]}>180</Text>
-              <Text style={[styles.metricLabel, isSmallScreen && { fontSize: 8.5 }, isFull && { fontSize: 10.5 }]}>나눈 스몰톡</Text>
-            </View>
-            <View style={[styles.metricBox, isSmallScreen && { padding: 5 }, isFull && { padding: 10 }]}>
-              <Text style={[styles.metricBigNum, { color: '#3B82F6' }, isSmallScreen && { fontSize: 14 }, isFull && { fontSize: 19 }]}>{chatPhotos.length || 42}</Text>
-              <Text style={[styles.metricLabel, isSmallScreen && { fontSize: 8.5 }, isFull && { fontSize: 10.5 }]}>공유된 사진</Text>
-            </View>
-            <View style={[styles.metricBox, isSmallScreen && { padding: 5 }, isFull && { padding: 10 }]}>
-              <Text style={[styles.metricBigNum, { color: '#10B981' }, isSmallScreen && { fontSize: 14 }, isFull && { fontSize: 19 }]}>1,420</Text>
-              <Text style={[styles.metricLabel, isSmallScreen && { fontSize: 8.5 }, isFull && { fontSize: 10.5 }]}>오고 간 메시지</Text>
-            </View>
-            <View style={[styles.metricBox, isSmallScreen && { padding: 5 }, isFull && { padding: 10 }]}>
-              <Text style={[styles.metricBigNum, { color: '#8B5CF6' }, isSmallScreen && { fontSize: 14 }, isFull && { fontSize: 19 }]}>Lv. 14</Text>
-              <Text style={[styles.metricLabel, isSmallScreen && { fontSize: 8.5 }, isFull && { fontSize: 10.5 }]}>반려몽 성장</Text>
-            </View>
-          </View>
-
-          <TouchableOpacity
-            style={[styles.appendixToggleBtn, isFull && { paddingVertical: 8 }]}
-            onPress={() => setAppendixModalVisible(true)}
-            activeOpacity={0.85}
-          >
-            <BookOpen size={12} color="#FFFFFF" style={{ marginRight: 5 }} />
-            <Text style={[styles.appendixToggleBtnText, isFull && { fontSize: 11.5 }]}>180문답 전수 인덱스 부록 📜</Text>
-          </TouchableOpacity>
-          <Text style={styles.pageNumberFootnote}>- {currentSpread.leftPage} -</Text>
-        </View>
-      );
-    }
-
-    // Default: Photo slot
+    // 6. [포맷 3: 사진 + 스몰톡 (Hybrid Memory)]
+    const photoSlotIndex = side === 'left' ? 0 : 1;
+    const coreTopic = sTopics[0] || { topic: '우리 가족에게 가장 힘이 되는 순간은?', answers: {} };
     return (
-      <View style={{ flex: 1 }}>
+      <View style={styles.hybridPageContent}>
+        {/* 상단 사진 영역 */}
         <TouchableOpacity
-          style={styles.photoCanvasSlot}
-          onPress={() => handleOpenPhotoPicker(0)}
+          style={styles.hybridPhotoSlot}
+          onPress={() => handleOpenPhotoPicker(photoSlotIndex)}
           activeOpacity={0.85}
         >
-          {currentPhotos[0] ? (
-            <Image source={{ uri: currentPhotos[0] }} style={styles.slotImageFull} resizeMode="cover" />
+          {sPhotos[photoSlotIndex] ? (
+            <Image source={{ uri: sPhotos[photoSlotIndex] }} style={styles.slotImageFull} resizeMode="cover" />
           ) : (
             <View style={styles.emptySlotPlaceholder}>
-              <Camera size={26} color="#A8A29E" />
-              <Text style={[styles.emptySlotText, isSmallScreen && { fontSize: 10 }]}>터치하여 사진 넣기</Text>
+              <Camera size={22} color="#A8A29E" />
+              <Text style={[styles.emptySlotText, { fontSize: 9.5 }]}>사진 터치</Text>
             </View>
           )}
           <View style={styles.slotEditBadge}>
-            <Text style={styles.slotEditBadgeText}>P.{currentSpread.leftPage} 📸</Text>
+            <Text style={styles.slotEditBadgeText}>P.{pageNum} 📸</Text>
           </View>
         </TouchableOpacity>
-        <Text style={styles.pageNumberFootnote}>- {currentSpread.leftPage} -</Text>
-      </View>
-    );
-  };
 
-  // =========================================================
-  // ▶ 우측 페이지 렌더러 (Right Page Content)
-  // =========================================================
-  const renderRightPageContent = (isFull = false) => {
-    if (currentSpread.category === 'epilogue') {
-      return (
-        <View style={styles.epiloguePageContent}>
-          <Text style={[styles.chapterKicker, { color: currentTheme.accent }]}>EPILOGUE</Text>
-          <Text style={[styles.epilogueTitle, isSmallScreen && { fontSize: 12, marginBottom: 3 }, isFull && { fontSize: 15, marginBottom: 6 }]}>끝나지 않을 우리들의 이야기</Text>
-          <Text style={[styles.epilogueText, isSmallScreen && { fontSize: 9.5, lineHeight: 13.5, marginBottom: 6 }, isFull && { fontSize: 12, lineHeight: 17, marginBottom: 10 }]}>
-            계절은 바뀌어도 우리가 함께 나눈 사랑의 온도는 변하지 않습니다. 다음 6개월 뒤에도 더 풍성하고 눈부신 추억으로 이 자리를 채워나가길 소망합니다.
-          </Text>
-
-          <View style={styles.signDivider} />
-          <View style={styles.signatureRow}>
-            <Text style={styles.signatureLabel}>가족 서명:</Text>
-            <Text
-              style={[styles.signatureFamilyText, isSmallScreen && { fontSize: 10 }, isFull && { fontSize: 12 }]}
-              numberOfLines={2}
-              adjustsFontSizeToFit
-            >
-              {familyMembers.map(m => m.name || m.role).join(', ') || '엄마, 아빠, 지수, 민준'} 올림
+        {/* 하단 스몰톡 영역 */}
+        <View style={styles.hybridTalkBox}>
+          <View style={styles.hybridTalkHeader}>
+            <View style={styles.hybridQBadge}><Text style={styles.hybridQBadgeText}>Q</Text></View>
+            <Text style={[styles.hybridTopicText, { ...fontStyle, fontSize: Math.round(10.5 * fontScale) }]} numberOfLines={1}>
+              "{coreTopic.topic}"
             </Text>
           </View>
-
-          <View style={[styles.colophonBox, isFull && { padding: 8 }]}>
-            <Text style={[styles.colophonText, isFull && { fontSize: 10 }]}>기록 기간: 1~6개월 차 (180일간의 발자취)</Text>
-            <Text style={[styles.colophonText, isFull && { fontSize: 10 }]}>발행처: FamLink Family Press (POD Standard)</Text>
-            <Text style={[styles.colophonText, isFull && { fontSize: 10 }]}>판형: 150 × 150mm 코지 스퀘어 32P / 랑데뷰 160g 양장</Text>
+          <View style={styles.hybridAnswersList}>
+            {activeFamilyList.slice(0, 2).map(m => {
+              const ans = coreTopic.answers?.[m.id] || m.answer || '늘 곁에서 든든한 버팀목이 되어줘서 고마워요.';
+              return (
+                <View key={m.id} style={styles.hybridAnsRow}>
+                  <Text style={[styles.hybridAnsAuthor, { ...fontStyle, fontSize: Math.round(8.5 * fontScale) }]}>{m.name || m.role}:</Text>
+                  <Text style={[styles.hybridAnsText, { ...fontStyle, fontSize: Math.round(9 * fontScale) }]} numberOfLines={1}>"{ans}"</Text>
+                </View>
+              );
+            })}
           </View>
-          <Text style={styles.pageNumberFootnote}>- {currentSpread.rightPage} -</Text>
         </View>
-      );
-    }
-
-    return (
-      <View style={{ flex: 1 }}>
-        {currentLayout === 'wide' ? (
-          <View style={styles.multiSlotContainer}>
-            <TouchableOpacity
-              style={styles.halfSlotTop}
-              onPress={() => handleOpenPhotoPicker(1)}
-              activeOpacity={0.85}
-            >
-              {currentPhotos[1] ? (
-                <Image source={{ uri: currentPhotos[1] }} style={styles.slotImageFull} resizeMode="cover" />
-              ) : (
-                <View style={styles.emptySlotPlaceholder}><Camera size={18} color="#A8A29E" /></View>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.halfSlotBottom}
-              onPress={() => handleOpenPhotoPicker(2)}
-              activeOpacity={0.85}
-            >
-              {currentPhotos[2] ? (
-                <Image source={{ uri: currentPhotos[2] }} style={styles.slotImageFull} resizeMode="cover" />
-              ) : (
-                <View style={styles.emptySlotPlaceholder}><Camera size={18} color="#A8A29E" /></View>
-              )}
-            </TouchableOpacity>
-          </View>
-        ) : currentLayout === 'grid' ? (
-          <View style={styles.gridSlotContainer}>
-            {[1, 2, 3, 4].map(idx => (
-              <TouchableOpacity
-                key={idx}
-                style={styles.gridQuarterSlot}
-                onPress={() => handleOpenPhotoPicker(idx)}
-                activeOpacity={0.85}
-              >
-                {currentPhotos[idx] ? (
-                  <Image source={{ uri: currentPhotos[idx] }} style={styles.slotImageFull} resizeMode="cover" />
-                ) : (
-                  <View style={styles.emptySlotPlaceholder}><Camera size={15} color="#A8A29E" /></View>
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-        ) : (
-          <TouchableOpacity
-            style={styles.photoCanvasSlot}
-            onPress={() => handleOpenPhotoPicker(1)}
-            activeOpacity={0.85}
-          >
-            {currentPhotos[1] ? (
-              <Image source={{ uri: currentPhotos[1] }} style={styles.slotImageFull} resizeMode="cover" />
-            ) : (
-              <View style={styles.emptySlotPlaceholder}>
-                <Camera size={26} color="#A8A29E" />
-                <Text style={[styles.emptySlotText, isSmallScreen && { fontSize: 10 }]}>터치하여 사진 교체</Text>
-              </View>
-            )}
-            <View style={styles.slotEditBadge}>
-              <Text style={styles.slotEditBadgeText}>P.{currentSpread.rightPage} 📸</Text>
-            </View>
-          </TouchableOpacity>
-        )}
-
-        {spreadCaptions[currentSpreadIndex] ? (
-          <View style={styles.captionRibbon}>
-            <Text style={[styles.captionRibbonText, isSmallScreen && { fontSize: 9 }, isFull && { fontSize: 11 }]}>
-              "{spreadCaptions[currentSpreadIndex]}"
-            </Text>
-          </View>
-        ) : null}
-
-        <Text style={styles.pageNumberFootnote}>- {currentSpread.rightPage} -</Text>
+        <Text style={styles.pageNumberFootnote}>- {pageNum} -</Text>
       </View>
     );
   };
@@ -601,239 +671,683 @@ export default function PhotobookStudioScreen({
   return (
     <View style={styles.container}>
       {/* ========================================================= */}
-      {/* 1. 슬림 스튜디오 헤더 (Slim Header)                         */}
+      {/* 1. 슬림 스튜디오 헤더 (권차 선택 & 미리보기로 심플화)         */}
       {/* ========================================================= */}
       <View style={styles.slimTopHeader}>
-        <View style={styles.slimHeaderLeft}>
-          <Text style={styles.slimHeaderTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
-            스토리북
-          </Text>
-          <View style={styles.slimHeaderSpecBadge}>
-            <Text style={styles.slimHeaderSpecText}>15×15 스퀘어</Text>
+        <TouchableOpacity
+          style={styles.headerTitleBtn}
+          onPress={() => setVolumePickerModalVisible(true)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.headerTitleIconCircle}>
+            <Bookmark size={12} color="#FF6B47" strokeWidth={2.6} />
           </View>
-        </View>
+          <Text style={styles.headerBookTitle}>{currentVolObj.label}</Text>
+          <Text style={styles.headerBookPeriod}>({currentVolObj.period})</Text>
+          <ChevronDown size={13} color="#78716C" style={{ marginLeft: 3 }} />
+        </TouchableOpacity>
 
-        <View style={styles.slimHeaderRight}>
+        {/* 페이지 형식 vs 스크롤 형식 모드 전환 탭 */}
+        <View style={styles.headerModeSwitcher}>
           <TouchableOpacity
-            style={styles.slimFlipBtn}
-            onPress={() => setFlipbookModalVisible(true)}
-            activeOpacity={0.85}
-          >
-            <BookOpen size={12} color="#1C1917" strokeWidth={2.2} />
-            <Text style={styles.slimFlipBtnText}>3D 보기</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.slimOrderBtn}
-            onPress={() => setOrderModalVisible(true)}
-            activeOpacity={0.85}
-          >
-            <ShoppingBag size={12} color="#FFFFFF" strokeWidth={2.3} />
-            <Text style={styles.slimOrderBtnText}>실물 주문</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* ========================================================= */}
-      {/* 2. 6개월 단위 누적 볼륨 칩 (Vol. 1, Vol. 2, Vol. 3)       */}
-      {/* ========================================================= */}
-      <View style={styles.volumeChipsRow}>
-        {VOLUME_OPTIONS.map(v => {
-          const isSelected = selectedVolume === v.id;
-          return (
-            <TouchableOpacity
-              key={v.id}
-              style={[styles.volumeChipBtn, isSelected && styles.volumeChipBtnActive]}
-              onPress={() => {
-                setSelectedVolume(v.id);
-                setBookTitle(`우리 가족의 ${v.label === '제1권' ? '첫 번째' : v.label === '제2권' ? '두 번째' : '세 번째'} 이야기 (${v.title})`);
-              }}
-              activeOpacity={0.8}
-            >
-              <Text
-                style={[styles.volumeChipText, isSelected && styles.volumeChipTextActive]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.8}
-              >
-                {v.label} ({v.period})
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {/* ========================================================= */}
-      {/* 3. 뷰 모드 토글 (양면 전체 vs 1페이지 집중) & 스프레드 네비  */}
-      {/* ========================================================= */}
-      <View style={styles.modeAndNavRow}>
-        <View style={styles.viewModeGroup}>
-          <TouchableOpacity
-            style={[styles.viewModeBtn, viewMode === 'dual' && styles.viewModeBtnActive]}
-            onPress={() => setViewMode('dual')}
+            style={[styles.headerModeTab, studioViewMode === 'layout' && styles.headerModeTabActive]}
+            onPress={() => setStudioViewMode('layout')}
             activeOpacity={0.8}
           >
-            <BookOpen size={11} color={viewMode === 'dual' ? '#FFFFFF' : '#78716C'} />
-            <Text style={[styles.viewModeBtnText, viewMode === 'dual' && styles.viewModeBtnTextActive]}>양면 전체</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.viewModeBtn, viewMode === 'single' && styles.viewModeBtnActive]}
-            onPress={() => setViewMode('single')}
-            activeOpacity={0.8}
-          >
-            <Layers size={11} color={viewMode === 'single' ? '#FFFFFF' : '#78716C'} />
-            <Text style={[styles.viewModeBtnText, viewMode === 'single' && styles.viewModeBtnTextActive]}>1페이지 집중</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* 1페이지 집중 모드일 때 좌/우 페이지 선택 알약 버튼 */}
-        {viewMode === 'single' && (
-          <View style={styles.singleSidePillGroup}>
-            <TouchableOpacity
-              style={[styles.singleSidePill, activeSingleSide === 'left' && styles.singleSidePillActive]}
-              onPress={() => setActiveSingleSide('left')}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.singleSidePillText, activeSingleSide === 'left' && styles.singleSidePillTextActive]}>
-                P.{currentSpread.leftPage} 좌
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.singleSidePill, activeSingleSide === 'right' && styles.singleSidePillActive]}
-              onPress={() => setActiveSingleSide('right')}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.singleSidePillText, activeSingleSide === 'right' && styles.singleSidePillTextActive]}>
-                P.{currentSpread.rightPage} 우
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* 스프레드 이전 / 다음 버튼 */}
-        <View style={styles.miniNavGroup}>
-          <TouchableOpacity
-            style={[styles.miniArrowBtn, currentSpreadIndex === 0 && styles.miniArrowBtnDisabled]}
-            disabled={currentSpreadIndex === 0}
-            onPress={() => setCurrentSpreadIndex(prev => Math.max(0, prev - 1))}
-            activeOpacity={0.7}
-          >
-            <ChevronLeft size={16} color={currentSpreadIndex === 0 ? '#A8A29E' : '#1C1917'} />
-          </TouchableOpacity>
-          <Text style={styles.miniSpreadBadge}>
-            {currentSpreadIndex + 1}/16
-          </Text>
-          <TouchableOpacity
-            style={[styles.miniArrowBtn, currentSpreadIndex === SPREAD_DEFINITIONS.length - 1 && styles.miniArrowBtnDisabled]}
-            disabled={currentSpreadIndex === SPREAD_DEFINITIONS.length - 1}
-            onPress={() => setCurrentSpreadIndex(prev => Math.min(SPREAD_DEFINITIONS.length - 1, prev + 1))}
-            activeOpacity={0.7}
-          >
-            <ChevronRight size={16} color={currentSpreadIndex === SPREAD_DEFINITIONS.length - 1 ? '#A8A29E' : '#1C1917'} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* ========================================================= */}
-      {/* 4. 화면 높이에 맞춘 캔버스 뷰포트 (One-Screen Fitted Canvas) */}
-      {/* ========================================================= */}
-      <ScrollView
-        style={styles.canvasScrollView}
-        contentContainerStyle={styles.canvasScrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* 제목 배너 */}
-        <View style={styles.spreadTitleRow}>
-          <Text style={styles.spreadTitleText} numberOfLines={1}>
-            {currentSpread.title} (P.{currentSpread.leftPage}-{currentSpread.rightPage})
-          </Text>
-        </View>
-
-        {/* 실제 캔버스 (양면 전체 or 1페이지 집중) */}
-        {viewMode === 'dual' ? (
-          <View style={[styles.dualPageSpreadFrame, { backgroundColor: currentTheme.bg, borderColor: currentTheme.border, height: canvasHeight }]}>
-            <View style={styles.bookCenterSeam} />
-            <View style={[styles.singlePageHalf, isSmallScreen && { padding: 8 }]}>
-              {renderLeftPageContent(false)}
-            </View>
-            <View style={[styles.singlePageHalf, isSmallScreen && { padding: 8 }]}>
-              {renderRightPageContent(false)}
-            </View>
-          </View>
-        ) : (
-          <View style={[styles.singlePageFullFrame, { backgroundColor: currentTheme.bg, borderColor: currentTheme.border, height: canvasHeight }]}>
-            <View style={[styles.singlePageFullContent, isSmallScreen && { padding: 10 }]}>
-              {activeSingleSide === 'left' ? renderLeftPageContent(true) : renderRightPageContent(true)}
-            </View>
-          </View>
-        )}
-
-        {/* ========================================================= */}
-        {/* 5. 하단 16개 스프레드 미니 썸네일 스트립 (Filmstrip)         */}
-        {/* ========================================================= */}
-        <View style={styles.filmstripContainer}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filmstripScroll}>
-            {SPREAD_DEFINITIONS.map((s, idx) => {
-              const isSelected = idx === currentSpreadIndex;
-              const icon = s.category === 'prologue' ? '📖' : s.category === 'interview' ? '💬' : s.category === 'stats' ? '📊' : s.category === 'epilogue' ? '✍️' : '📷';
-              return (
-                <TouchableOpacity
-                  key={s.spreadIndex}
-                  style={[styles.filmstripItem, isSelected && styles.filmstripItemActive]}
-                  onPress={() => setCurrentSpreadIndex(idx)}
-                  activeOpacity={0.75}
-                >
-                  <Text style={styles.filmstripItemIcon}>{icon}</Text>
-                  <Text style={[styles.filmstripItemPage, isSelected && styles.filmstripItemPageActive]}>
-                    P.{s.leftPage}-{s.rightPage}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        {/* ========================================================= */}
-        {/* 6. 원터치 스마트 조판 컨트롤 덱 (Action Dock)             */}
-        {/* ========================================================= */}
-        <View style={styles.bottomActionDock}>
-          <TouchableOpacity style={styles.dockBtn} onPress={handleShuffleLayout} activeOpacity={0.8}>
-            <Shuffle size={13} color="#FF6B47" style={{ marginRight: 3 }} />
-            <Text style={styles.dockBtnText}>
-              {currentLayout === 'single' ? '전면' : currentLayout === 'wide' ? '2분할' : '4분할'} 셔플
+            <BookOpen size={11} color={studioViewMode === 'layout' ? '#FF6B47' : '#78716C'} style={{ marginRight: 3 }} />
+            <Text style={[styles.headerModeTabText, studioViewMode === 'layout' && styles.headerModeTabTextActive]}>
+              페이지
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.dockBtn} onPress={handleGenerateAiCaption} activeOpacity={0.8}>
-            <Sparkles size={13} color="#7C3AED" style={{ marginRight: 3 }} />
-            <Text style={[styles.dockBtnText, { color: '#7C3AED' }]}>AI 글귀</Text>
+          <TouchableOpacity
+            style={[styles.headerModeTab, studioViewMode === 'scroll' && styles.headerModeTabActive]}
+            onPress={() => setStudioViewMode('scroll')}
+            activeOpacity={0.8}
+          >
+            <Scroll size={11} color={studioViewMode === 'scroll' ? '#FF6B47' : '#78716C'} style={{ marginRight: 3 }} />
+            <Text style={[styles.headerModeTabText, studioViewMode === 'scroll' && styles.headerModeTabTextActive]}>
+              스크롤
+            </Text>
           </TouchableOpacity>
+        </View>
+      </View>
 
-          <TouchableOpacity style={styles.dockBtn} onPress={() => setAppendixModalVisible(true)} activeOpacity={0.8}>
-            <BookOpen size={13} color="#3B82F6" style={{ marginRight: 3 }} />
-            <Text style={[styles.dockBtnText, { color: '#3B82F6' }]}>180문답</Text>
-          </TouchableOpacity>
-
-          {/* 테마 컬러 팔레트 선택기 */}
-          <View style={styles.dockThemeGroup}>
-            {STUDIO_THEMES.map(t => (
+      {/* ========================================================= */}
+      {/* 2. 스튜디오 메인 뷰: 페이지 편집 모드 vs 스크롤 피드 모드    */}
+      {/* ========================================================= */}
+      {studioViewMode === 'layout' ? (
+        <>
+          {/* ========================================================= */}
+          {/* 1. 캔버스 직상단 스마트 컨트롤 HUD 툴바                   */}
+          {/*    [ 🎨 테마 ]  [ 🔤 서체 ]  [ 📐 레이아웃 ]  [ 📖 P.X-Y ] */}
+          {/* ========================================================= */}
+          <View style={styles.canvasHudBar}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.canvasHudScrollContent}
+            >
+              {/* A. 테마 선택 칩 */}
               <TouchableOpacity
-                key={t.id}
-                style={[
-                  styles.dockThemeDot,
-                  { backgroundColor: t.bg, borderColor: selectedThemeId === t.id ? '#FF6B47' : t.border },
-                  selectedThemeId === t.id && styles.dockThemeDotActive,
-                ]}
-                onPress={() => setSelectedThemeId(t.id)}
+                style={styles.hudChip}
+                onPress={() => setThemePickerModalVisible(true)}
                 activeOpacity={0.8}
               >
-                <View style={[styles.dockThemeInnerDot, { backgroundColor: t.accent }]} />
+                <Palette size={12} color={currentTheme.accent} style={{ marginRight: 4 }} />
+                <Text style={styles.hudChipText}>{currentTheme.name}</Text>
+                <ChevronDown size={11} color="#78716C" style={{ marginLeft: 3 }} />
               </TouchableOpacity>
-            ))}
+
+              {/* B. 폰트 & 크기 선택 칩 */}
+              <TouchableOpacity
+                style={styles.hudChip}
+                onPress={() => setFontPickerModalVisible(true)}
+                activeOpacity={0.8}
+              >
+                <Type size={12} color="#FF6B47" style={{ marginRight: 4 }} />
+                <Text style={styles.hudChipText}>
+                  {bookFontFamily === 'serif' ? '명조' : bookFontFamily === 'sans' ? '고딕' : '손글씨'} · {bookFontSize === 'small' ? '소' : bookFontSize === 'large' ? '대' : '중'}
+                </Text>
+                <ChevronDown size={11} color="#78716C" style={{ marginLeft: 3 }} />
+              </TouchableOpacity>
+
+              {/* C. 레이아웃 선택 칩 (포맷1 사진 / 포맷2 스몰톡 / 포맷3 사진+톡) */}
+              <TouchableOpacity
+                style={styles.hudChip}
+                onPress={() => setLayoutPickerModalVisible(true)}
+                activeOpacity={0.8}
+              >
+                <Layout size={12} color="#FF6B47" style={{ marginRight: 4 }} />
+                <Text style={styles.hudChipText}>
+                  {getPageFormat(currentSpreadIndex, activeSingleSide) === 'photo'
+                    ? '포맷1 (사진)'
+                    : getPageFormat(currentSpreadIndex, activeSingleSide) === 'smalltalk'
+                    ? '포맷2 (스몰톡)'
+                    : '포맷3 (사진+톡)'}
+                </Text>
+                <ChevronDown size={11} color="#78716C" style={{ marginLeft: 3 }} />
+              </TouchableOpacity>
+
+              {/* D. 페이지 선택 드롭다운 & 넘김 화살표 */}
+              <View style={styles.hudPageGroup}>
+                <TouchableOpacity
+                  style={[styles.hudArrowMini, currentSpreadIndex === 0 && { opacity: 0.3 }]}
+                  disabled={currentSpreadIndex === 0}
+                  onPress={() => handleGoToSpread(currentSpreadIndex - 1)}
+                  activeOpacity={0.7}
+                >
+                  <ChevronLeft size={13} color="#1C1917" />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.hudPageDropdown}
+                  onPress={() => setPagePickerModalVisible(true)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.hudPageDropdownText}>
+                    P.{currentSpread.leftPage}-{currentSpread.rightPage}
+                  </Text>
+                  <ChevronDown size={10} color="#78716C" style={{ marginLeft: 3 }} />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.hudArrowMini, currentSpreadIndex === SPREAD_DEFINITIONS.length - 1 && { opacity: 0.3 }]}
+                  disabled={currentSpreadIndex === SPREAD_DEFINITIONS.length - 1}
+                  onPress={() => handleGoToSpread(currentSpreadIndex + 1)}
+                  activeOpacity={0.7}
+                >
+                  <ChevronRight size={13} color="#1C1917" />
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+
+          {/* 15×15 코지 스퀘어 좌/우 페이지 세그먼트 & 양면 2:1 토글 */}
+          <View style={styles.squarePageNavRow}>
+            <View style={styles.squarePageSegment}>
+              <TouchableOpacity
+                style={[styles.squarePageTab, (viewMode === 'single' && activeSingleSide === 'left') && styles.squarePageTabActive]}
+                onPress={() => {
+                  setViewMode('single');
+                  setActiveSingleSide('left');
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.squarePageTabLabel, (viewMode === 'single' && activeSingleSide === 'left') && styles.squarePageTabLabelActive]}>
+                  P.{currentSpread.leftPage} ({getPageFormat(currentSpreadIndex, 'left') === 'photo' ? '사진' : getPageFormat(currentSpreadIndex, 'left') === 'smalltalk' ? '스몰톡' : '사진+톡'})
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.squarePageTab, (viewMode === 'single' && activeSingleSide === 'right') && styles.squarePageTabActive]}
+                onPress={() => {
+                  setViewMode('single');
+                  setActiveSingleSide('right');
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.squarePageTabLabel, (viewMode === 'single' && activeSingleSide === 'right') && styles.squarePageTabLabelActive]}>
+                  P.{currentSpread.rightPage} ({getPageFormat(currentSpreadIndex, 'right') === 'photo' ? '사진' : getPageFormat(currentSpreadIndex, 'right') === 'smalltalk' ? '스몰톡' : '사진+톡'})
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.squareDualToggleBtn, viewMode === 'dual' && styles.squareDualToggleBtnActive]}
+              onPress={() => setViewMode(prev => prev === 'dual' ? 'single' : 'dual')}
+              activeOpacity={0.8}
+            >
+              <Layers size={11} color={viewMode === 'dual' ? '#FFFFFF' : '#78716C'} style={{ marginRight: 3 }} />
+              <Text style={[styles.squareDualToggleText, viewMode === 'dual' && styles.squareDualToggleTextActive]}>
+                {viewMode === 'dual' ? '1:1' : '양면'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* ========================================================= */}
+          {/* 2. 가로 스크롤 페이징 캔버스 (Swipeable Spreads Canvas)   */}
+          {/*    손가락 좌우 스와이프로 책장을 넘기듯 16개 스프레드 이동  */}
+          {/* ========================================================= */}
+          <ScrollView
+            style={styles.canvasScrollView}
+            contentContainerStyle={styles.canvasScrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* 좌우 스와이프 페이징 스크롤뷰 */}
+            <ScrollView
+              ref={spreadScrollRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={(e) => {
+                const contentOffsetX = e.nativeEvent.contentOffset.x;
+                const winW = windowWidth || Dimensions.get('window').width;
+                const newIdx = Math.round(contentOffsetX / winW);
+                if (newIdx !== currentSpreadIndex && newIdx >= 0 && newIdx < SPREAD_DEFINITIONS.length) {
+                  setCurrentSpreadIndex(newIdx);
+                }
+              }}
+              style={{ width: windowWidth || Dimensions.get('window').width }}
+              contentContainerStyle={{ alignItems: 'center' }}
+            >
+              {SPREAD_DEFINITIONS.map((sDef, sIdx) => {
+                const winW = windowWidth || Dimensions.get('window').width;
+                return (
+                  <View key={sDef.spreadIndex} style={{ width: winW, alignItems: 'center', justifyContent: 'center' }}>
+                    {viewMode === 'dual' ? (
+                      <View style={[styles.dualPageSpreadFrame, { backgroundColor: currentTheme.bg, borderColor: currentTheme.border, height: dualCanvasHeight }]}>
+                        <View style={styles.bookCenterSeam} />
+                        <View style={[styles.singlePageHalf, isSmallScreen && { padding: 8 }]}>
+                          {renderPage(sIdx, 'left', false)}
+                        </View>
+                        <View style={[styles.singlePageHalf, isSmallScreen && { padding: 8 }]}>
+                          {renderPage(sIdx, 'right', false)}
+                        </View>
+                      </View>
+                    ) : (
+                      <View style={[styles.singlePageFullFrame, { backgroundColor: currentTheme.bg, borderColor: currentTheme.border, width: squareCanvasSize, height: squareCanvasSize, alignSelf: 'center' }]}>
+                        <View style={[styles.singlePageFullContent, isSmallScreen && { padding: 10 }]}>
+                          {renderPage(sIdx, activeSingleSide, true)}
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+            </ScrollView>
+
+            {/* ========================================================= */}
+            {/* 3. 하단 콘텐츠 에디팅 덱 (3대 포맷 선택 & 도서 발주 CTA)   */}
+            {/* ========================================================= */}
+            <View style={styles.bottomActionDock}>
+              {/* 3대 포맷 선택 세그먼트 */}
+              <View style={styles.formatSegmentRow}>
+                <Text style={styles.formatSegmentTitle}>
+                  P.{activeSingleSide === 'left' ? currentSpread.leftPage : currentSpread.rightPage} 포맷:
+                </Text>
+                <View style={styles.formatSegmentContainer}>
+                  <TouchableOpacity
+                    style={[styles.formatSegmentTab, getPageFormat(currentSpreadIndex, activeSingleSide) === 'photo' && styles.formatSegmentTabActive]}
+                    onPress={() => handleSetPageFormat('photo')}
+                    activeOpacity={0.8}
+                  >
+                    <Camera size={11} color={getPageFormat(currentSpreadIndex, activeSingleSide) === 'photo' ? '#FF6B47' : '#78716C'} style={{ marginRight: 3 }} />
+                    <Text style={[styles.formatSegmentTabText, getPageFormat(currentSpreadIndex, activeSingleSide) === 'photo' && styles.formatSegmentTabTextActive]}>
+                      포맷1 (사진)
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.formatSegmentTab, getPageFormat(currentSpreadIndex, activeSingleSide) === 'smalltalk' && styles.formatSegmentTabActive]}
+                    onPress={() => handleSetPageFormat('smalltalk')}
+                    activeOpacity={0.8}
+                  >
+                    <FileText size={11} color={getPageFormat(currentSpreadIndex, activeSingleSide) === 'smalltalk' ? '#FF6B47' : '#78716C'} style={{ marginRight: 3 }} />
+                    <Text style={[styles.formatSegmentTabText, getPageFormat(currentSpreadIndex, activeSingleSide) === 'smalltalk' && styles.formatSegmentTabTextActive]}>
+                      포맷2 (스몰톡)
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.formatSegmentTab, getPageFormat(currentSpreadIndex, activeSingleSide) === 'hybrid' && styles.formatSegmentTabActive]}
+                    onPress={() => handleSetPageFormat('hybrid')}
+                    activeOpacity={0.8}
+                  >
+                    <Sparkles size={11} color={getPageFormat(currentSpreadIndex, activeSingleSide) === 'hybrid' ? '#FF6B47' : '#78716C'} style={{ marginRight: 3 }} />
+                    <Text style={[styles.formatSegmentTabText, getPageFormat(currentSpreadIndex, activeSingleSide) === 'hybrid' && styles.formatSegmentTabTextActive]}>
+                      포맷3 (사진+톡)
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* 보조 에디팅 버튼들 */}
+              <View style={styles.dockSubActionRow}>
+                <TouchableOpacity
+                  style={styles.dockSubBtn}
+                  onPress={() => {
+                    const next = spreadLayouts[currentSpreadIndex] === 'wide' ? 'single' : 'wide';
+                    setSpreadLayouts(prev => ({ ...prev, [currentSpreadIndex]: next }));
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Layout size={12} color="#FF6B47" style={{ marginRight: 3 }} />
+                  <Text style={styles.dockSubBtnText}>
+                    {spreadLayouts[currentSpreadIndex] === 'wide' ? '1장 전면' : '2장 분할'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.dockSubBtn} onPress={handleGenerateAiCaption} activeOpacity={0.8}>
+                  <Sparkles size={12} color="#7C3AED" style={{ marginRight: 3 }} />
+                  <Text style={[styles.dockSubBtnText, { color: '#7C3AED' }]}>AI 글귀</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.dockSubBtn} onPress={() => setTopicPickerModalVisible(true)} activeOpacity={0.8}>
+                  <BookOpen size={12} color="#3B82F6" style={{ marginRight: 3 }} />
+                  <Text style={[styles.dockSubBtnText, { color: '#3B82F6' }]}>180문답</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* 실물 주문 메인 CTA 버튼 */}
+              <TouchableOpacity
+                style={styles.dockMainOrderBtn}
+                onPress={() => setOrderModalVisible(true)}
+                activeOpacity={0.85}
+              >
+                <ShoppingBag size={14} color="#FFFFFF" strokeWidth={2.4} style={{ marginRight: 5 }} />
+                <Text style={styles.dockMainOrderBtnText}>
+                  {finalCashPrice.toLocaleString()}원 · 15×15cm 하드커버 양장본 실물 주문
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </>
+      ) : (
+        /* 스크롤 형식: 표지부터 32P까지 세로 연속 피드로 완독 감상 */
+        <ScrollView
+          style={styles.previewScrollFeed}
+          contentContainerStyle={styles.previewScrollFeedContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* 1. 150×150mm 코지 스퀘어 하드커버 겉표지 */}
+          <View style={[styles.previewCoverCard, { backgroundColor: currentTheme.bg, borderColor: currentTheme.border }]}>
+            <View style={[styles.previewCoverSpineLine, { backgroundColor: currentTheme.accent }]} />
+            <View style={styles.previewCoverInner}>
+              <View style={styles.previewCoverEmbossBox}>
+                <Text style={[styles.previewCoverBadgeText, { color: currentTheme.accent }]}>
+                  FAMLINK FAMILY STORYBOOK · 150×150MM SQUARE
+                </Text>
+                <Text style={[styles.previewCoverTitle, { color: currentTheme.text }]} numberOfLines={2}>
+                  {bookTitle}
+                </Text>
+                <Text style={[styles.previewCoverSub, { color: currentTheme.accent }]} numberOfLines={1}>
+                  {bookSubtitle}
+                </Text>
+
+                <View style={styles.previewCoverHeroFrame}>
+                  {currentPhotos[0] ? (
+                    <Image source={{ uri: currentPhotos[0] }} style={styles.previewCoverHeroImg} resizeMode="cover" />
+                  ) : (
+                    <View style={styles.previewCoverHeroPlaceholder}>
+                      <Heart size={32} color={currentTheme.accent} />
+                      <Text style={[styles.previewCoverHeroText, { color: currentTheme.text }]}>우리 가족 첫 이야기</Text>
+                    </View>
+                  )}
+                </View>
+
+                <Text style={[styles.previewCoverFamilySign, { color: currentTheme.text }]}>
+                  {currentUserProfile?.name || '가족'}네 따뜻한 보금자리 · FamLink Family Press
+                </Text>
+                <Text style={styles.previewCoverSpecLabel}>32 Pages Hardcover 양장제본 · 랑데뷰 160g</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* 2. 16개 스프레드 전수 연속 렌더링 (P.1 ~ P.32) */}
+          {SPREAD_DEFINITIONS.map((sDef, sIdx) => {
+            return (
+              <View key={sDef.spreadIndex} style={styles.previewSpreadCard}>
+                <View style={styles.previewSpreadHeader}>
+                  <View style={styles.previewSpreadTag}>
+                    <Text style={styles.previewSpreadTagText}>SPREAD {sIdx + 1} / 16</Text>
+                  </View>
+                  <Text style={styles.previewSpreadTitleText} numberOfLines={1}>
+                    P.{sDef.leftPage} - P.{sDef.rightPage} · {sDef.title}
+                  </Text>
+                </View>
+
+                <View style={[styles.previewSpreadFrame, { backgroundColor: currentTheme.bg, borderColor: currentTheme.border }]}>
+                  <View style={styles.previewSpreadCenterSeam} />
+                  <View style={styles.previewSpreadPageCol}>
+                    {renderPage(sIdx, 'left', false)}
+                  </View>
+                  <View style={styles.previewSpreadPageCol}>
+                    {renderPage(sIdx, 'right', false)}
+                  </View>
+                </View>
+              </View>
+            );
+          })}
+
+          {/* 하단 주문 발주 유도 카드 */}
+          <View style={styles.previewBottomCtaCard}>
+            <Text style={styles.previewBottomCtaTitle}>우리 가족만의 15×15cm 스퀘어 이야기책 📖</Text>
+            <Text style={styles.previewBottomCtaSub}>
+              매일 나눈 스몰톡과 소중한 사진이 영구 보존용 양장 하드커버 도서로 완성됩니다.
+            </Text>
+            <TouchableOpacity
+              style={styles.previewBottomOrderBtn}
+              onPress={() => setOrderModalVisible(true)}
+              activeOpacity={0.85}
+            >
+              <ShoppingBag size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={styles.previewBottomOrderBtnText}>
+                {finalCashPrice.toLocaleString()}원 결제하고 실물 주문하기 (포인트 최대 12,000P 할인)
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      )}
+
+      {/* ========================================================= */}
+      {/* ========================================================= */}
+      {/* 3-0. 페이지 레이아웃 선택 모달 (Layout Picker Modal)         */}
+      {/* ========================================================= */}
+      <Modal visible={layoutPickerModalVisible} transparent animationType="fade">
+        <View style={styles.modalCenterBackdrop}>
+          <TouchableOpacity
+            style={styles.modalCenterBackdropTouch}
+            activeOpacity={1}
+            onPress={() => setLayoutPickerModalVisible(false)}
+          />
+          <View style={styles.miniPickerCard}>
+            <View style={styles.miniPickerHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Layout size={16} color="#FF6B47" style={{ marginRight: 6 }} />
+                <Text style={styles.miniPickerTitle}>페이지 레이아웃 설정</Text>
+              </View>
+              <TouchableOpacity onPress={() => setLayoutPickerModalVisible(false)} style={styles.closeBtn}>
+                <X size={18} color="#1C1917" />
+              </TouchableOpacity>
+            </View>
+
+            {/* 대상 페이지 선택 탭 */}
+            <View style={styles.layoutTargetPageRow}>
+              <Text style={styles.layoutPickerTargetNote}>대상 페이지:</Text>
+              <View style={styles.layoutTargetTabGroup}>
+                <TouchableOpacity
+                  style={[styles.layoutTargetTab, activeSingleSide === 'left' && styles.layoutTargetTabActive]}
+                  onPress={() => setActiveSingleSide('left')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.layoutTargetTabText, activeSingleSide === 'left' && styles.layoutTargetTabTextActive]}>
+                    P.{currentSpread.leftPage} (좌)
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.layoutTargetTab, activeSingleSide === 'right' && styles.layoutTargetTabActive]}
+                  onPress={() => setActiveSingleSide('right')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.layoutTargetTabText, activeSingleSide === 'right' && styles.layoutTargetTabTextActive]}>
+                    P.{currentSpread.rightPage} (우)
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* 3대 포맷 선택 목록 */}
+            <Text style={styles.miniPickerSectionTitle}>3대 출판 레이아웃 포맷</Text>
+            <View style={styles.layoutOptionCol}>
+              {[
+                { id: 'photo', name: '포맷 1: 사진 전용', desc: '15×15cm 정방형 풀프레임 앨범', icon: Camera },
+                { id: 'smalltalk', name: '포맷 2: 스몰톡 전용', desc: '가족 180문답과 다정한 대화 수필', icon: FileText },
+                { id: 'hybrid', name: '포맷 3: 사진 + 스몰톡', desc: '상단 사진 1장 + 하단 스몰톡 결합', icon: Sparkles },
+              ].map(fmt => {
+                const currentFmt = getPageFormat(currentSpreadIndex, activeSingleSide);
+                const isSelected = currentFmt === fmt.id;
+                const IconComp = fmt.icon;
+                return (
+                  <TouchableOpacity
+                    key={fmt.id}
+                    style={[styles.layoutFormatItem, isSelected && styles.layoutFormatItemActive]}
+                    onPress={() => {
+                      handleSetPageFormat(fmt.id);
+                      setLayoutPickerModalVisible(false);
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <View style={[styles.layoutFormatIconBox, isSelected && styles.layoutFormatIconBoxActive]}>
+                      <IconComp size={15} color={isSelected ? '#FF6B47' : '#78716C'} />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 10 }}>
+                      <Text style={[styles.layoutFormatName, isSelected && styles.layoutFormatNameActive]}>
+                        {fmt.name}
+                      </Text>
+                      <Text style={styles.layoutFormatDesc}>{fmt.desc}</Text>
+                    </View>
+                    {isSelected && <Check size={16} color="#FF6B47" strokeWidth={2.5} />}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* 사진 프레임 분할 토글 */}
+            <View style={styles.layoutDivider} />
+            <View style={styles.layoutPhotoSplitRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.layoutPhotoSplitTitle}>사진 프레임 구성</Text>
+                <Text style={styles.layoutPhotoSplitSub}>
+                  {spreadLayouts[currentSpreadIndex] === 'wide' ? '1장 전면 풀 프레임' : '2장 상하 분할 프레임'}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.layoutPhotoSplitBtn}
+                onPress={() => {
+                  const next = spreadLayouts[currentSpreadIndex] === 'wide' ? 'single' : 'wide';
+                  setSpreadLayouts(prev => ({ ...prev, [currentSpreadIndex]: next }));
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.layoutPhotoSplitBtnText}>
+                  {spreadLayouts[currentSpreadIndex] === 'wide' ? '2장 분할로 변경' : '1장 전면으로 변경'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-      </ScrollView>
+      </Modal>
+
+      {/* ========================================================= */}
+      {/* 3-1. 테마 선택 모달 (Theme Picker Modal)                    */}
+      {/* ========================================================= */}
+      <Modal visible={themePickerModalVisible} transparent animationType="fade">
+        <View style={styles.modalCenterBackdrop}>
+          <TouchableOpacity
+            style={styles.modalCenterBackdropTouch}
+            activeOpacity={1}
+            onPress={() => setThemePickerModalVisible(false)}
+          />
+          <View style={styles.miniPickerCard}>
+            <View style={styles.miniPickerHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Palette size={16} color="#FF6B47" style={{ marginRight: 6 }} />
+                <Text style={styles.miniPickerTitle}>포토북 테마 팔레트</Text>
+              </View>
+              <TouchableOpacity onPress={() => setThemePickerModalVisible(false)} style={styles.closeBtn}>
+                <X size={18} color="#1C1917" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.themeOptionsGrid2x2}>
+              {STUDIO_THEMES.map(t => {
+                const isSelected = selectedThemeId === t.id;
+                return (
+                  <TouchableOpacity
+                    key={t.id}
+                    style={[styles.themeOptionItem2x2, isSelected && styles.themeOptionItemActive, { backgroundColor: t.bg, borderColor: isSelected ? '#FF6B47' : t.border }]}
+                    onPress={() => {
+                      setSelectedThemeId(t.id);
+                      setThemePickerModalVisible(false);
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <View style={[styles.themeDotBig, { backgroundColor: t.accent }]} />
+                    <Text style={[styles.themeOptionItemName, { color: t.text }]} numberOfLines={1}>{t.name}</Text>
+                    {isSelected && <Check size={14} color="#FF6B47" strokeWidth={2.5} />}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ========================================================= */}
+      {/* 3-2. 폰트 & 글자 크기 선택 모달 (Font Picker Modal)          */}
+      {/* ========================================================= */}
+      <Modal visible={fontPickerModalVisible} transparent animationType="fade">
+        <View style={styles.modalCenterBackdrop}>
+          <TouchableOpacity
+            style={styles.modalCenterBackdropTouch}
+            activeOpacity={1}
+            onPress={() => setFontPickerModalVisible(false)}
+          />
+          <View style={styles.miniPickerCard}>
+            <View style={styles.miniPickerHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Type size={16} color="#FF6B47" style={{ marginRight: 6 }} />
+                <Text style={styles.miniPickerTitle}>서체 및 글자 크기 설정</Text>
+              </View>
+              <TouchableOpacity onPress={() => setFontPickerModalVisible(false)} style={styles.closeBtn}>
+                <X size={18} color="#1C1917" />
+              </TouchableOpacity>
+            </View>
+
+            {/* 서체 패밀리 선택 */}
+            <Text style={styles.miniPickerSectionTitle}>서체 선택</Text>
+            <View style={styles.fontOptionRow}>
+              {[
+                { id: 'serif', label: '감성 명조', desc: '에세이 감성' },
+                { id: 'sans', label: '모던 고딕', desc: '깔끔한 사진집' },
+                { id: 'handwriting', label: '다정 손글씨', desc: '가족 일기체' },
+              ].map(f => {
+                const isSelected = bookFontFamily === f.id;
+                return (
+                  <TouchableOpacity
+                    key={f.id}
+                    style={[styles.fontOptionBtn, isSelected && styles.fontOptionBtnActive]}
+                    onPress={() => setBookFontFamily(f.id)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.fontOptionLabel, isSelected && styles.fontOptionLabelActive]}>{f.label}</Text>
+                    <Text style={styles.fontOptionDesc}>{f.desc}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* 글자 크기 선택 */}
+            <Text style={[styles.miniPickerSectionTitle, { marginTop: 14 }]}>글자 크기</Text>
+            <View style={styles.fontSizeRow}>
+              {[
+                { id: 'small', label: '작게 (12pt)' },
+                { id: 'medium', label: '보통 (14pt · 권장)' },
+                { id: 'large', label: '크게 (16pt · 부모님용)' },
+              ].map(s => {
+                const isSelected = bookFontSize === s.id;
+                return (
+                  <TouchableOpacity
+                    key={s.id}
+                    style={[styles.fontSizeBtn, isSelected && styles.fontSizeBtnActive]}
+                    onPress={() => setBookFontSize(s.id)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.fontSizeBtnText, isSelected && styles.fontSizeBtnTextActive]}>{s.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ========================================================= */}
+      {/* 3-3. 16개 스프레드 빠른 점프 4×4 콤팩트 그리드 모달            */}
+      {/* ========================================================= */}
+      <Modal visible={pagePickerModalVisible} transparent animationType="fade">
+        <View style={styles.modalCenterBackdrop}>
+          <TouchableOpacity
+            style={styles.modalCenterBackdropTouch}
+            activeOpacity={1}
+            onPress={() => setPagePickerModalVisible(false)}
+          />
+          <View style={[styles.miniPickerCard, { maxWidth: 370 }]}>
+            <View style={styles.miniPickerHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <BookOpen size={16} color="#FF6B47" style={{ marginRight: 6 }} />
+                <Text style={styles.miniPickerTitle}>페이지 빠른 이동</Text>
+              </View>
+              <TouchableOpacity onPress={() => setPagePickerModalVisible(false)} style={styles.closeBtn}>
+                <X size={18} color="#1C1917" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.pageGridIntroSub}>
+              총 16개 펼침면(32P) 중 이동할 페이지를 터치하세요:
+            </Text>
+
+            {/* 4×4 정방형 콤팩트 그리드 */}
+            <View style={styles.pageGridMatrix}>
+              {SPREAD_DEFINITIONS.map((s, idx) => {
+                const isCurrent = idx === currentSpreadIndex;
+                const icon = s.category === 'prologue' ? '📖' : s.category === 'interview' ? '💬' : s.category === 'stats' ? '📊' : s.category === 'epilogue' ? '✍️' : '📷';
+                return (
+                  <TouchableOpacity
+                    key={s.spreadIndex}
+                    style={[styles.pageGridCell, isCurrent && styles.pageGridCellActive]}
+                    onPress={() => {
+                      handleGoToSpread(idx);
+                      setPagePickerModalVisible(false);
+                    }}
+                    activeOpacity={0.75}
+                  >
+                    <View style={styles.pageGridCellTopRow}>
+                      <Text style={{ fontSize: 9.5 }}>{icon}</Text>
+                      <Text style={[styles.pageGridCellSpNum, isCurrent && styles.pageGridCellSpNumActive]}>
+                        #{idx + 1}
+                      </Text>
+                    </View>
+                    <Text style={[styles.pageGridCellPages, isCurrent && styles.pageGridCellPagesActive]}>
+                      P.{s.leftPage}-{s.rightPage}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* ========================================================= */}
       {/* 4. 사진 트레이 선택 모달 (Photo Picker Tray)                */}
@@ -875,60 +1389,70 @@ export default function PhotobookStudioScreen({
       </Modal>
 
       {/* ========================================================= */}
-      {/* 5. 3D 전체 플립북 모달 (Flipbook Simulation)                */}
+      {/* 5. 가족 기록(권차) 선택 모달 (Volume Picker Modal)            */}
       {/* ========================================================= */}
-      <Modal visible={flipbookModalVisible} animationType="slide">
-        <View style={styles.flipbookContainer}>
-          <View style={styles.flipbookHeader}>
-            <TouchableOpacity onPress={() => setFlipbookModalVisible(false)} style={styles.flipCloseBtn}>
-              <X size={22} color="#FFFFFF" />
-            </TouchableOpacity>
-            <Text style={styles.flipbookHeaderTitle}>32P 양장 플립북 전체 넘겨보기</Text>
-            <TouchableOpacity
-              style={styles.flipbookOrderBtn}
-              onPress={() => {
-                setFlipbookModalVisible(false);
-                setOrderModalVisible(true);
-              }}
-            >
-              <Text style={styles.flipbookOrderBtnText}>실물 주문</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.flipbookBody}>
-            <Text style={styles.flipbookSpineText}>📖 {bookTitle} (32P 완권 프리뷰)</Text>
-            <View style={[styles.flipbookCard, { backgroundColor: currentTheme.bg }]}>
-              <Text style={[styles.flipbookMockTitle, { color: currentTheme.text }]}>
-                SPREAD {currentSpreadIndex + 1}
-              </Text>
-              <Text style={[styles.flipbookMockSub, { color: currentTheme.accent }]}>
-                {currentSpread.title} (P.{currentSpread.leftPage} - P.{currentSpread.rightPage})
-              </Text>
-              <View style={styles.flipbookPreviewPhotos}>
-                {currentPhotos.slice(0, 2).map((uri, idx) => (
-                  <Image key={idx} source={{ uri }} style={styles.flipbookThumb} resizeMode="cover" />
-                ))}
+      <Modal visible={volumePickerModalVisible} transparent animationType="slide">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.volumeSheetCard}>
+            <View style={styles.sheetHeader}>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                  <Bookmark size={15} color="#FF6B47" strokeWidth={2.5} style={{ marginRight: 6 }} />
+                  <Text style={styles.sheetTitle}>가족 기록 도서(권차) 선택</Text>
+                </View>
+                <Text style={styles.sheetSub}>6개월 활동 단위로 완간되는 우리 가족 이야기책을 선택하세요.</Text>
               </View>
+              <TouchableOpacity onPress={() => setVolumePickerModalVisible(false)} style={styles.closeBtn}>
+                <X size={20} color="#1C1917" />
+              </TouchableOpacity>
             </View>
 
-            <View style={styles.flipbookPagination}>
-              <TouchableOpacity
-                style={styles.flipNavBtn}
-                onPress={() => setCurrentSpreadIndex(prev => Math.max(0, prev - 1))}
-              >
-                <ChevronLeft size={24} color="#FFFFFF" />
-              </TouchableOpacity>
-              <Text style={styles.flipNavText}>{currentSpreadIndex + 1} / 16</Text>
-              <TouchableOpacity
-                style={styles.flipNavBtn}
-                onPress={() => setCurrentSpreadIndex(prev => Math.min(15, prev + 1))}
-              >
-                <ChevronRight size={24} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
+            <ScrollView contentContainerStyle={styles.volumeListScroll} showsVerticalScrollIndicator={false}>
+              {VOLUME_OPTIONS.map((v, idx) => {
+                const isSelected = selectedVolume === v.id;
+                return (
+                  <TouchableOpacity
+                    key={v.id}
+                    style={[styles.volumeOptionCard, isSelected && styles.volumeOptionCardActive]}
+                    onPress={() => {
+                      setSelectedVolume(v.id);
+                      setBookTitle(`우리 가족의 ${v.label === '제1권' ? '첫 번째' : v.label === '제2권' ? '두 번째' : '세 번째'} 이야기 (${v.title})`);
+                      setVolumePickerModalVisible(false);
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <View style={[styles.volumeBadgeCircle, isSelected && styles.volumeBadgeCircleActive]}>
+                      <Text style={[styles.volumeBadgeCircleText, isSelected && styles.volumeBadgeCircleTextActive]}>
+                        {v.title}
+                      </Text>
+                    </View>
+
+                    <View style={{ flex: 1, marginHorizontal: 12 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                        <Text style={[styles.volumeOptionTitle, isSelected && styles.volumeOptionTitleActive]}>
+                          {v.label} · {v.period}
+                        </Text>
+                        {idx === 0 && (
+                          <View style={styles.activeVolTag}>
+                            <Text style={styles.activeVolTagText}>완간 수록</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.volumeOptionDesc}>{v.desc}</Text>
+                    </View>
+
+                    <View style={[styles.volumeRadioCircle, isSelected && styles.volumeRadioCircleActive]}>
+                      {isSelected && <Check size={13} color="#FFFFFF" strokeWidth={3} />}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
         </View>
       </Modal>
+
+
 
       {/* ========================================================= */}
       {/* 6. 실물 양장본 인쇄 주문 모달 (POD Commerce Modal)         */}
@@ -1299,174 +1823,138 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F5F0E8',
     overflow: 'hidden',
   },
-  slimHeaderLeft: {
-    flex: 1,
+  headerTitleBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    minWidth: 0,
-    marginRight: 6,
+    paddingVertical: 3,
+    paddingHorizontal: 2,
   },
-  slimHeaderTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#1C1917',
-    flexShrink: 1,
-  },
-  slimHeaderSpecBadge: {
+  headerTitleIconCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: '#FFF5F2',
     borderWidth: 1,
     borderColor: '#FFE8E0',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
   },
-  slimHeaderSpecText: {
-    fontSize: 9.5,
-    fontWeight: '800',
-    color: '#FF6B47',
+  headerBookTitle: {
+    fontSize: 14.5,
+    fontWeight: '900',
+    color: '#1C1917',
+    marginRight: 4,
   },
-  slimHeaderRight: {
+  headerBookPeriod: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#78716C',
+  },
+  headerModeSwitcher: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    flexShrink: 0,
+    backgroundColor: '#F5F0E8',
+    borderRadius: 10,
+    padding: 2.5,
   },
-  slimFlipBtn: {
+  headerModeTab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4.5,
+    borderRadius: 8,
+  },
+  headerModeTabActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  headerModeTabText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#78716C',
+  },
+  headerModeTabTextActive: {
+    color: '#FF6B47',
+    fontWeight: '800',
+  },
+  // 1-1. 캔버스 직상단 스마트 컨트롤 HUD 툴바
+  canvasHudBar: {
+    backgroundColor: '#FAF8F3',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F0E8',
+    paddingVertical: 7,
+  },
+  canvasHudScrollContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    gap: 6,
+  },
+  hudChip: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E7E5E4',
+    borderRadius: 9,
     paddingHorizontal: 8,
     paddingVertical: 5,
-    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  slimFlipBtnText: {
-    fontSize: 10.5,
+  hudChipText: {
+    fontSize: 11,
     fontWeight: '700',
     color: '#1C1917',
-    marginLeft: 3,
   },
-  slimOrderBtn: {
+  hudPageGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FF6B47',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    shadowColor: '#FF6B47',
-    shadowOffset: { width: 0, height: 1.5 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  slimOrderBtnText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    marginLeft: 3,
-  },
-
-  // 2. 볼륨 칩스
-  volumeChipsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 4,
-    gap: 5,
-    backgroundColor: '#FAF8F3',
-  },
-  volumeChipBtn: {
-    flex: 1,
-    paddingVertical: 5,
-    paddingHorizontal: 4,
-    borderRadius: 8,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#F5F0E8',
+    borderColor: '#E7E5E4',
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    paddingVertical: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  hudArrowMini: {
+    padding: 3,
+  },
+  hudPageDropdown: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    paddingHorizontal: 4,
   },
-  volumeChipBtnActive: {
-    backgroundColor: '#FFF5F2',
-    borderColor: '#FF6B47',
-  },
-  volumeChipText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#78716C',
-  },
-  volumeChipTextActive: {
-    color: '#FF6B47',
+  hudPageDropdownText: {
+    fontSize: 11,
     fontWeight: '800',
+    color: '#FF6B47',
   },
 
-  // 3. 뷰 모드 및 스프레드 네비
-  modeAndNavRow: {
+  // 2. 15×15 코지 스퀘어 페이징 바
+  squarePageNavRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 14,
-    paddingVertical: 4,
+    paddingVertical: 5,
     backgroundColor: '#FAF8F3',
+    gap: 6,
   },
-  viewModeGroup: {
-    flexDirection: 'row',
-    backgroundColor: '#F5F0E8',
-    borderRadius: 9,
-    padding: 2,
-  },
-  viewModeBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 7,
-  },
-  viewModeBtnActive: {
-    backgroundColor: '#FF6B47',
-  },
-  viewModeBtnText: {
-    fontSize: 10.5,
-    fontWeight: '700',
-    color: '#78716C',
-    marginLeft: 3,
-  },
-  viewModeBtnTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-  },
-  singleSidePillGroup: {
-    flexDirection: 'row',
-    backgroundColor: '#F5F0E8',
-    borderRadius: 9,
-    padding: 2,
-  },
-  singleSidePill: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 7,
-  },
-  singleSidePillActive: {
-    backgroundColor: '#1C1917',
-  },
-  singleSidePillText: {
-    fontSize: 10.5,
-    fontWeight: '700',
-    color: '#78716C',
-  },
-  singleSidePillTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-  },
-  miniNavGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  miniArrowBtn: {
+  squareNavArrowBtn: {
     width: 28,
     height: 28,
     borderRadius: 14,
@@ -1476,14 +1964,63 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  miniArrowBtnDisabled: {
+  squareNavArrowBtnDisabled: {
     opacity: 0.35,
   },
-  miniSpreadBadge: {
-    fontSize: 11,
+  squarePageSegment: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: '#F5F0E8',
+    borderRadius: 10,
+    padding: 2.5,
+    gap: 2,
+  },
+  squarePageTab: {
+    flex: 1,
+    paddingVertical: 5,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  squarePageTabActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  squarePageTabLabel: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#78716C',
+  },
+  squarePageTabLabelActive: {
+    color: '#FF6B47',
     fontWeight: '800',
-    color: '#1C1917',
-    paddingHorizontal: 4,
+  },
+  squareDualToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#F5F0E8',
+  },
+  squareDualToggleBtnActive: {
+    backgroundColor: '#1C1917',
+    borderColor: '#1C1917',
+  },
+  squareDualToggleText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#78716C',
+  },
+  squareDualToggleTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '800',
   },
 
   // 4. 캔버스 영역
@@ -1491,12 +2028,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   canvasScrollContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 20,
+    paddingHorizontal: 0,
+    paddingBottom: 40,
   },
   spreadTitleRow: {
     alignItems: 'center',
     marginBottom: 6,
+    paddingHorizontal: 16,
   },
   spreadTitleText: {
     fontSize: 13,
@@ -1562,51 +2100,106 @@ const styles = StyleSheet.create({
 
   // 6. 하단 조판 액션 독
   bottomActionDock: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#F5F0E8',
-    borderRadius: 12,
-    paddingHorizontal: 6,
-    paddingVertical: 5,
-    gap: 4,
+    borderRadius: 16,
+    padding: 12,
+    marginTop: 6,
+    marginHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  dockBtn: {
+  formatSegmentRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 6,
-    paddingVertical: 5,
-    borderRadius: 7,
-    backgroundColor: '#FAF8F3',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    gap: 8,
   },
-  dockBtnText: {
-    fontSize: 10,
+  formatSegmentTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#78716C',
+  },
+  formatSegmentContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: '#F5F0E8',
+    borderRadius: 10,
+    padding: 3,
+    gap: 4,
+  },
+  formatSegmentTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6.5,
+    borderRadius: 8,
+  },
+  formatSegmentTabActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  formatSegmentTabText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#78716C',
+  },
+  formatSegmentTabTextActive: {
+    color: '#FF6B47',
+    fontWeight: '800',
+  },
+  dockSubActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 8,
+  },
+  dockSubBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FAF8F3',
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+    paddingVertical: 6.5,
+    borderRadius: 9,
+  },
+  dockSubBtnText: {
+    fontSize: 11,
     fontWeight: '700',
     color: '#1C1917',
   },
-  dockThemeGroup: {
+  dockMainOrderBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-  },
-  dockThemeDot: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 1.5,
-    alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#FF6B47',
+    paddingVertical: 11,
+    borderRadius: 12,
+    shadowColor: '#FF6B47',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  dockThemeDotActive: {
-    borderWidth: 2,
+  dockMainOrderBtnText: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
-  dockThemeInnerDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
+
   dualPageSpreadFrame: {
     flexDirection: 'row',
     height: 380,
@@ -2021,6 +2614,44 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E8E0D0',
   },
+  polaroidSlotBox: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E8E0D0',
+    padding: 8,
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+    justifyContent: 'space-between',
+  },
+  polaroidPhotoFrame: {
+    flex: 1,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#F5F0E8',
+    position: 'relative',
+    marginBottom: 6,
+  },
+  polaroidCaptionFrame: {
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    backgroundColor: '#FAF8F3',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#F5F0E8',
+  },
+  polaroidCaptionText: {
+    fontSize: 9.5,
+    fontStyle: 'italic',
+    color: '#78716C',
+    textAlign: 'center',
+    lineHeight: 14,
+  },
   captionRibbon: {
     backgroundColor: '#FFFFFF',
     padding: 6,
@@ -2087,6 +2718,383 @@ const styles = StyleSheet.create({
     color: '#A8A29E',
     fontWeight: '700',
   },
+
+  // 포맷 3: 사진 + 스몰톡 (Hybrid) 전용 스타일
+  hybridPageContent: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  hybridPhotoSlot: {
+    height: '52%',
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: '#F5F5F4',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.08)',
+    position: 'relative',
+  },
+  hybridTalkBox: {
+    height: '44%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#F5F0E8',
+    padding: 8,
+    justifyContent: 'space-between',
+  },
+  hybridTalkHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  hybridQBadge: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#FF6B47',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 4,
+  },
+  hybridQBadgeText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#FFFFFF',
+  },
+  hybridTopicText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#1C1917',
+    flex: 1,
+  },
+  hybridAnswersList: {
+    gap: 3,
+  },
+  hybridAnsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  hybridAnsAuthor: {
+    fontSize: 8.5,
+    fontWeight: '800',
+    color: '#FF6B47',
+    marginRight: 3,
+  },
+  hybridAnsText: {
+    fontSize: 8.5,
+    color: '#44403C',
+    flex: 1,
+  },
+
+  // 레이아웃 선택 모달 전용 스타일
+  layoutTargetPageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FAF8F3',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#F5F0E8',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 12,
+  },
+  layoutPickerTargetNote: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#78716C',
+  },
+  layoutTargetTabGroup: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  layoutTargetTab: {
+    paddingHorizontal: 10,
+    paddingVertical: 4.5,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+  },
+  layoutTargetTabActive: {
+    backgroundColor: '#FFF5F2',
+    borderColor: '#FF6B47',
+  },
+  layoutTargetTabText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#78716C',
+  },
+  layoutTargetTabTextActive: {
+    color: '#FF6B47',
+    fontWeight: '800',
+  },
+  layoutOptionCol: {
+    gap: 8,
+  },
+  layoutFormatItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#FAF8F3',
+    borderWidth: 1.5,
+    borderColor: '#F5F0E8',
+  },
+  layoutFormatItemActive: {
+    backgroundColor: '#FFF5F2',
+    borderColor: '#FF6B47',
+  },
+  layoutFormatIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#F5F0E8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  layoutFormatIconBoxActive: {
+    backgroundColor: '#FFE8E0',
+    borderColor: '#FF6B47',
+  },
+  layoutFormatName: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#1C1917',
+    marginBottom: 2,
+  },
+  layoutFormatNameActive: {
+    color: '#FF6B47',
+    fontWeight: '800',
+  },
+  layoutFormatDesc: {
+    fontSize: 10,
+    color: '#78716C',
+  },
+  layoutDivider: {
+    height: 1,
+    backgroundColor: '#F5F0E8',
+    marginVertical: 12,
+  },
+  layoutPhotoSplitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FAF8F3',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#F5F0E8',
+  },
+  layoutPhotoSplitTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#1C1917',
+    marginBottom: 2,
+  },
+  layoutPhotoSplitSub: {
+    fontSize: 10,
+    color: '#78716C',
+  },
+  layoutPhotoSplitBtn: {
+    backgroundColor: '#FF6B47',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 10,
+  },
+  layoutPhotoSplitBtnText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+
+  // 미니 모달 (테마, 폰트, 페이지 선택) 스타일
+  miniPickerCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    elevation: 10,
+  },
+  miniPickerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F0E8',
+  },
+  miniPickerTitle: {
+    fontSize: 14.5,
+    fontWeight: '900',
+    color: '#1C1917',
+  },
+  miniPickerSectionTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#78716C',
+    marginBottom: 8,
+  },
+  themeOptionsGrid: {
+    gap: 8,
+  },
+  themeOptionsGrid2x2: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'space-between',
+  },
+  themeOptionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    justifyContent: 'space-between',
+  },
+  themeOptionItem2x2: {
+    width: '48%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    justifyContent: 'space-between',
+  },
+  themeOptionItemActive: {
+    borderColor: '#FF6B47',
+  },
+  themeDotBig: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    marginRight: 10,
+  },
+  themeOptionItemName: {
+    fontSize: 13,
+    fontWeight: '800',
+    flex: 1,
+  },
+  fontOptionRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  fontOptionBtn: {
+    flex: 1,
+    backgroundColor: '#FAF8F3',
+    borderWidth: 1,
+    borderColor: '#F5F0E8',
+    borderRadius: 12,
+    padding: 10,
+    alignItems: 'center',
+  },
+  fontOptionBtnActive: {
+    backgroundColor: '#FFF5F2',
+    borderColor: '#FF6B47',
+  },
+  fontOptionLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#1C1917',
+    marginBottom: 2,
+  },
+  fontOptionLabelActive: {
+    color: '#FF6B47',
+  },
+  fontOptionDesc: {
+    fontSize: 9,
+    color: '#78716C',
+  },
+  fontSizeRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  fontSizeBtn: {
+    flex: 1,
+    backgroundColor: '#FAF8F3',
+    borderWidth: 1,
+    borderColor: '#F5F0E8',
+    borderRadius: 10,
+    paddingVertical: 9,
+    alignItems: 'center',
+  },
+  fontSizeBtnActive: {
+    backgroundColor: '#FFF5F2',
+    borderColor: '#FF6B47',
+  },
+  fontSizeBtnText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#78716C',
+  },
+  fontSizeBtnTextActive: {
+    color: '#FF6B47',
+    fontWeight: '800',
+  },
+  // 4×4 콤팩트 페이지 점프 그리드 스타일
+  pageGridIntroSub: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#78716C',
+    marginBottom: 10,
+  },
+  pageGridMatrix: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    justifyContent: 'space-between',
+  },
+  pageGridCell: {
+    width: '23%',
+    backgroundColor: '#FAF8F3',
+    borderWidth: 1,
+    borderColor: '#F5F0E8',
+    borderRadius: 10,
+    paddingVertical: 7,
+    paddingHorizontal: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pageGridCellActive: {
+    backgroundColor: '#FF6B47',
+    borderColor: '#FF6B47',
+    shadowColor: '#FF6B47',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  pageGridCellTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginBottom: 2,
+  },
+  pageGridCellSpNum: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#78716C',
+  },
+  pageGridCellSpNumActive: {
+    color: 'rgba(255, 255, 255, 0.85)',
+  },
+  pageGridCellPages: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#1C1917',
+  },
+  pageGridCellPagesActive: {
+    color: '#FFFFFF',
+  },
+
   controlDeckCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 18,
@@ -2155,6 +3163,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
+  modalCenterBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.52)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  modalCenterBackdropTouch: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.55)',
@@ -2212,100 +3234,304 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  flipbookContainer: {
-    flex: 1,
-    backgroundColor: '#0F172A',
+  // 8. 가족 기록(권차) 선택 모달
+  volumeSheetCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    maxHeight: '75%',
   },
-  flipbookHeader: {
+  volumeListScroll: {
+    paddingVertical: 10,
+    gap: 10,
+  },
+  volumeOptionCard: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 50 : 20,
-    paddingBottom: 16,
+    backgroundColor: '#FAF8F3',
+    borderWidth: 1,
+    borderColor: '#F5F0E8',
+    borderRadius: 16,
+    padding: 14,
   },
-  flipCloseBtn: {
-    padding: 6,
+  volumeOptionCardActive: {
+    backgroundColor: '#FFF5F2',
+    borderColor: '#FF6B47',
   },
-  flipbookHeaderTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#FFFFFF',
+  volumeBadgeCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#F5F0E8',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  flipbookOrderBtn: {
+  volumeBadgeCircleActive: {
     backgroundColor: '#FF6B47',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 10,
   },
-  flipbookOrderBtnText: {
-    color: '#FFFFFF',
+  volumeBadgeCircleText: {
     fontSize: 12,
-    fontWeight: '800',
-  },
-  flipbookBody: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  flipbookSpineText: {
-    color: '#94A3B8',
-    fontSize: 13,
-    fontWeight: '700',
-    marginBottom: 16,
-  },
-  flipbookCard: {
-    width: '100%',
-    height: 360,
-    borderRadius: 20,
-    padding: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.35,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  flipbookMockTitle: {
-    fontSize: 22,
     fontWeight: '900',
+    color: '#78716C',
+  },
+  volumeBadgeCircleTextActive: {
+    color: '#FFFFFF',
+  },
+  volumeOptionTitle: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: '#1C1917',
+  },
+  volumeOptionTitleActive: {
+    color: '#FF6B47',
+  },
+  activeVolTag: {
+    backgroundColor: '#FF6B47',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  activeVolTagText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  volumeOptionDesc: {
+    fontSize: 11.5,
+    color: '#78716C',
+    lineHeight: 16,
+  },
+  volumeRadioCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: '#D6D3D1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  volumeRadioCircleActive: {
+    backgroundColor: '#FF6B47',
+    borderColor: '#FF6B47',
+  },
+
+
+  // A. 스크롤 형식 스타일
+  previewScrollFeed: {
+    flex: 1,
+    backgroundColor: '#FAF8F3',
+  },
+  previewScrollFeedContent: {
+    padding: 16,
+    paddingBottom: 40,
+    alignItems: 'center',
+  },
+  previewCoverCard: {
+    width: Math.min(SCREEN_WIDTH - 32, 360),
+    height: Math.min(SCREEN_WIDTH - 32, 360),
+    borderRadius: 18,
+    borderWidth: 1.5,
+    overflow: 'hidden',
+    position: 'relative',
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  previewCoverSpineLine: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    width: 14,
+    opacity: 0.8,
+  },
+  previewCoverInner: {
+    flex: 1,
+    marginLeft: 14,
+    padding: 14,
+  },
+  previewCoverEmbossBox: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.08)',
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  previewCoverBadgeText: {
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  previewCoverTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    textAlign: 'center',
+    marginVertical: 3,
+  },
+  previewCoverSub: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    textAlign: 'center',
     marginBottom: 6,
   },
-  flipbookMockSub: {
-    fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 20,
+  previewCoverHeroFrame: {
+    width: 120,
+    height: 120,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.06)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 3,
   },
-  flipbookPreviewPhotos: {
-    flexDirection: 'row',
-    gap: 12,
+  previewCoverHeroImg: {
+    width: '100%',
+    height: '100%',
   },
-  flipbookThumb: {
-    width: 110,
-    height: 110,
-    borderRadius: 12,
-  },
-  flipbookPagination: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 20,
-    marginTop: 24,
-  },
-  flipNavBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+  previewCoverHeroPlaceholder: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  flipNavText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '800',
+  previewCoverHeroText: {
+    fontSize: 10,
+    fontWeight: '700',
+    marginTop: 4,
   },
+  previewCoverFamilySign: {
+    fontSize: 9.5,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  previewCoverSpecLabel: {
+    fontSize: 8,
+    color: '#78716C',
+    fontWeight: '600',
+  },
+  previewSpreadCard: {
+    width: Math.min(SCREEN_WIDTH - 32, 480),
+    marginBottom: 18,
+  },
+  previewSpreadHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 5,
+    paddingHorizontal: 4,
+  },
+  previewSpreadTag: {
+    backgroundColor: '#FFF5F2',
+    borderWidth: 1,
+    borderColor: '#FFE8E0',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  previewSpreadTagText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#FF6B47',
+  },
+  previewSpreadTitleText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1C1917',
+    flex: 1,
+    marginLeft: 8,
+  },
+  previewSpreadFrame: {
+    width: '100%',
+    height: Math.min((SCREEN_WIDTH - 32) * 0.52, 230),
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: 'row',
+    overflow: 'hidden',
+    position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  previewSpreadCenterSeam: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: '50%',
+    width: 2,
+    marginLeft: -1,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    zIndex: 10,
+  },
+  previewSpreadPageCol: {
+    flex: 1,
+    padding: 8,
+    position: 'relative',
+  },
+  previewInnerCol: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  previewBottomCtaCard: {
+    width: Math.min(SCREEN_WIDTH - 32, 480),
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 18,
+    alignItems: 'center',
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#F5F0E8',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  previewBottomCtaTitle: {
+    fontSize: 13.5,
+    fontWeight: '900',
+    color: '#1C1917',
+    marginBottom: 4,
+  },
+  previewBottomCtaSub: {
+    fontSize: 10.5,
+    color: '#78716C',
+    textAlign: 'center',
+    marginBottom: 12,
+    lineHeight: 15,
+  },
+  previewBottomOrderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FF6B47',
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    width: '100%',
+    shadowColor: '#FF6B47',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  previewBottomOrderBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+
   orderSheetCard: {
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 24,

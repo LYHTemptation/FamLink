@@ -708,28 +708,7 @@ export default function PhotoAlbumScreen({
 
   return (
     <View style={styles.container}>
-      {/* 1. Header Bar matching Figma Home/Together Warm Style */}
-      <View style={[styles.headerRow, isSmallScreen && { paddingHorizontal: 14, paddingVertical: 12 }]}>
-        <View style={styles.headerLeftCol}>
-          <Text style={styles.categorySubText}>가족 추억 · PHOTOBOOK & ARCHIVE</Text>
-          <Text style={[styles.headerMainTitle, isSmallScreen && { fontSize: 18 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
-            가족 앨범 & 포토북
-          </Text>
-        </View>
-
-        {activeTab !== 'photobook' && (
-          <TouchableOpacity
-            style={[styles.openStorybookBtn, isSmallScreen && { paddingHorizontal: 12, paddingVertical: 7 }]}
-            onPress={() => setStorybookVisible(true)}
-            activeOpacity={0.85}
-          >
-            <BookOpen size={15} color="#FFFFFF" strokeWidth={2.5} style={{ marginRight: 5 }} />
-            <Text style={[styles.openStorybookBtnText, isSmallScreen && { fontSize: 12 }]}>포토북 펼치기</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* 2. Top Segmented Navigation Tabs */}
+      {/* 1. Top Segmented Navigation Tabs */}
       <View style={[styles.segmentedTabContainer, isSmallScreen && { marginHorizontal: 14 }]}>
         <TouchableOpacity
           style={[styles.segmentBtn, activeTab === 'photobook' && styles.segmentBtnActive]}
@@ -1774,10 +1753,11 @@ const styles = StyleSheet.create({
   segmentedTabContainer: {
     flexDirection: 'row',
     backgroundColor: '#F5F0E8',
-    marginHorizontal: 20,
-    borderRadius: 16,
-    padding: 4,
-    marginBottom: 16,
+    marginHorizontal: 16,
+    borderRadius: 14,
+    padding: 3,
+    marginTop: 8,
+    marginBottom: 8,
     gap: 4,
   },
   segmentBtn: {

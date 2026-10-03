@@ -433,21 +433,7 @@ export default function SmallTalkScreen({
         showsVerticalScrollIndicator={false}
       >
         {/* ========================================================= */}
-        {/* 1. 상단 헤더 & 포인트 배지 (Figma 14:1676)                */}
-        {/* ========================================================= */}
-        <View style={styles.headerRow}>
-          <View style={styles.headerLeftCol}>
-            <Text style={styles.categorySubText}>우리 가족 일상</Text>
-            <Text style={styles.headerMainTitle}>오늘 함께</Text>
-          </View>
-
-          <View style={styles.pointsBadgePill}>
-            <Text style={styles.pointsBadgeText}>⭐ {points.toLocaleString()} pts</Text>
-          </View>
-        </View>
-
-        {/* ========================================================= */}
-        {/* 2. 오늘의 대화 주제 카드 (Figma 14:1689)                  */}
+        {/* 1. 오늘의 대화 주제 카드 (Figma 14:1689)                  */}
         {/* ========================================================= */}
         <View style={styles.sectionPad}>
           <View style={styles.dailyTalkCard}>
@@ -1187,7 +1173,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 30,
+    paddingTop: 12,
+    paddingBottom: 40,
   },
 
   // 1. 헤더 섹션

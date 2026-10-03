@@ -1983,7 +1983,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <SafeAreaView style={styles.container} edges={['top', 'bottom', 'left', 'right']}>
+      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
         <ExpoStatusBar style="dark" />
 
         {/* Top Navbar */}
@@ -2033,7 +2033,7 @@ export default function App() {
           </View>
 
           {/* Custom Tabbar (5 Tabs: [홈, 퀘스트, 반려몽, 채팅, 앨범] - Figma node-id 5:361 Spec) */}
-          <View style={styles.tabbarContainer}>
+          <SafeAreaView edges={['bottom']} style={styles.tabbarContainer}>
             <View style={styles.tabbar}>
               {/* 1. 홈 (Home) */}
               <TouchableOpacity
@@ -2085,7 +2085,7 @@ export default function App() {
                 <Text style={[styles.tabLabel, currentScreen === 'album' && styles.tabLabelActive]}>앨범</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </SafeAreaView>
         </KeyboardAvoidingView>
 
 
@@ -2294,37 +2294,28 @@ const styles = StyleSheet.create({
     zIndex: -1,
   },
   tabbarContainer: {
-    paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: Platform.OS === 'ios' ? 14 : 8,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#F5F0E8',
   },
   tabbar: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.96)',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#E8E0D0',
-    paddingVertical: 5,
-    paddingHorizontal: 4,
+    backgroundColor: '#FFFFFF',
+    paddingTop: 6,
+    paddingBottom: Platform.OS === 'ios' ? 2 : 6,
+    paddingHorizontal: 8,
     justifyContent: 'space-around',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 4,
   },
   tabItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 6,
-    borderRadius: 14,
-    marginHorizontal: 2,
+    paddingVertical: 4,
   },
   tabItemActive: {},
   tabLabel: {
-    fontSize: 11,
+    fontSize: 10.5,
     color: '#A8A29E',
     marginTop: 2,
     fontWeight: '700',
