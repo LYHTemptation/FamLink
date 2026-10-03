@@ -49,12 +49,7 @@ import {
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// Family Growth Tips (실제 인게임 경험치 획득 안내)
-const GROWTH_TIPS = [
-  { emoji: '🍗', title: '밥주기 & 간식 캐치 미니게임', desc: '배고픔을 채워주고 간식 캐치 게임으로 대량 EXP를 획득해요.' },
-  { emoji: '⚽', title: '놀아주기 & 쓰다듬기 교감', desc: '핑퐁 랠리와 매일 10회 터치 쓰다듬기로 행복도와 친밀도를 높여요.' },
-  { emoji: '💬', title: '데일리 스몰톡 & 생활 루틴', desc: '가족들이 매일 대화를 나누고 집안일을 완수할 때마다 함께 성장해요.' },
-];
+
 
 // Stage Celestial Aura Decorator
 function StageAuraVisual({ stageNum, size = 200 }) {
@@ -63,7 +58,7 @@ function StageAuraVisual({ stageNum, size = 200 }) {
     case 1:
       return (
         <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={StyleSheet.absoluteFillObject}>
-          <Circle cx={half} cy={half} r={half * 0.88} fill="rgba(255, 126, 130, 0.12)" stroke="#FF7E82" strokeWidth="1.5" strokeDasharray="4 4" />
+          <Circle cx={half} cy={half} r={half * 0.88} fill="rgba(255, 107, 71, 0.12)" stroke="#FF6B47" strokeWidth="1.5" strokeDasharray="4 4" />
           <Circle cx={half} cy={half} r={half * 0.7} fill="rgba(255, 240, 242, 0.65)" />
         </Svg>
       );
@@ -454,6 +449,8 @@ export default function PetmongGrowthBookModal({
                 </Text>
                 <Text style={styles.stageDetailSubtitle}>
                   {selectedStageData.stageTitle}
+                  {selectedStageData.targetPeriod ? ` • ${selectedStageData.targetPeriod}` : ''}
+                  {selectedStageData.requiredExp ? ` (${selectedStageData.requiredExp})` : ''}
                 </Text>
                 <Text style={styles.stageDetailDesc}>
                   {selectedStageData.desc}
@@ -488,7 +485,7 @@ export default function PetmongGrowthBookModal({
                     />
                   </View>
                   <Text style={styles.progressSubText}>
-                    현재 Lv.{activeChar?.level || 1} (EXP: {activeChar?.exp || 0}%) • 간식을 먹이거나 미니게임을 플레이하여 경험치를 모아보세요!
+                    현재 Lv.{activeChar?.level || 1} • 4개월(누적 14,000 EXP) 동안 온 가족의 따뜻한 소통으로 최종 성장(평생 식구)에 도달해요!
                   </Text>
                 </View>
               )}
@@ -497,20 +494,47 @@ export default function PetmongGrowthBookModal({
             {/* Family Growth Guide Card (실제 성장 방법 안내) */}
             <View style={styles.growthGuideCard}>
               <View style={styles.growthGuideHeader}>
-                <Sparkles size={16} color="#FF4D6D" style={{ marginRight: 6 }} />
+                <Sparkles size={16} color="#FF6B47" style={{ marginRight: 6 }} />
                 <Text style={styles.growthGuideTitle}>온 가족이 함께 키우는 법</Text>
               </View>
 
-              <View style={styles.growthTipsList}>
-                {GROWTH_TIPS.map((tip, idx) => (
-                  <View key={idx} style={styles.growthTipItem}>
-                    <Text style={{ fontSize: 20, marginRight: 10 }}>{tip.emoji}</Text>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.growthTipLabel}>{tip.title}</Text>
-                      <Text style={styles.growthTipDesc}>{tip.desc}</Text>
-                    </View>
+              {/* 1. 가족 대화 온기 채우기 핵심 가이드 */}
+              <View style={styles.warmthGuideBanner}>
+                <View style={styles.warmthBannerHeader}>
+                  <Text style={styles.warmthBannerTitle}>🔥 오늘 가족 대화 온기 채우기</Text>
+                  <View style={styles.warmthMaxBadge}>
+                    <Text style={styles.warmthMaxBadgeText}>기본 20% ~ 최대 100%</Text>
                   </View>
-                ))}
+                </View>
+                <Text style={styles.warmthBannerSub}>
+                  가족 온기는 온기를 수확해서 올라가는 것이 아니라, 오늘 가족들이 나눈 소통량에 따라 실시간으로 차오릅니다.
+                </Text>
+
+                <View style={styles.warmthMetricRow}>
+                  <View style={styles.warmthMetricCard}>
+                    <View style={styles.warmthMetricTop}>
+                      <Text style={styles.warmthMetricEmoji}>💬</Text>
+                      <Text style={styles.warmthMetricName}>가족 단톡방 대화</Text>
+                    </View>
+                    <Text style={styles.warmthMetricRate}>건당 +10% <Text style={styles.warmthMetricLimit}>(최대 60%)</Text></Text>
+                    <Text style={styles.warmthMetricDesc}>오늘 대화 6개 이상 나누면 만점!</Text>
+                  </View>
+
+                  <View style={styles.warmthMetricCard}>
+                    <View style={styles.warmthMetricTop}>
+                      <Text style={styles.warmthMetricEmoji}>💌</Text>
+                      <Text style={styles.warmthMetricName}>오늘의 스몰톡 답변</Text>
+                    </View>
+                    <Text style={styles.warmthMetricRate}>인당 +20% <Text style={styles.warmthMetricLimit}>(최대 40%)</Text></Text>
+                    <Text style={styles.warmthMetricDesc}>가족 2명 이상 답변 시 만점!</Text>
+                  </View>
+                </View>
+
+                <View style={styles.warmthRewardHintRow}>
+                  <Text style={styles.warmthRewardHintText}>
+                    🎁 <Text style={{ fontWeight: '800', color: '#FF6B47' }}>온기 수확 보상</Text>: 오늘 소통이 1건이라도 발생하면 거실에서 온기를 수확해 <Text style={{ fontWeight: '700', color: '#1C1917' }}>+30 EXP 성장 경험치</Text>와 <Text style={{ fontWeight: '700', color: '#1C1917' }}>행복도·에너지 100% 완충</Text>을 받으세요! (가족 포인트는 집안일·스몰톡에서 획득)
+                  </Text>
+                </View>
               </View>
             </View>
           </ScrollView>
@@ -912,10 +936,10 @@ const styles = StyleSheet.create({
   // Growth Guide Card
   growthGuideCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 18,
+    borderRadius: 20,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#FFE4E8',
+    borderColor: '#F5F0E8',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
@@ -928,10 +952,115 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   growthGuideTitle: {
-    fontSize: 13.5,
+    fontSize: 14,
     fontWeight: '800',
-    color: '#0F172A',
+    color: '#1C1917',
     flex: 1,
+  },
+  warmthGuideBanner: {
+    backgroundColor: '#FFF5F2',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#FFE8E0',
+    marginBottom: 16,
+  },
+  warmthBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  warmthBannerTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FF6B47',
+  },
+  warmthMaxBadge: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 0.5,
+    borderColor: '#FFE8E0',
+  },
+  warmthMaxBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FF6B47',
+  },
+  warmthBannerSub: {
+    fontSize: 11,
+    color: '#78716C',
+    lineHeight: 15,
+    marginBottom: 10,
+  },
+  warmthMetricRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+  warmthMetricCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#FFE8E0',
+  },
+  warmthMetricTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
+  },
+  warmthMetricEmoji: {
+    fontSize: 14,
+  },
+  warmthMetricName: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#1C1917',
+  },
+  warmthMetricRate: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#FF6B47',
+    marginBottom: 2,
+  },
+  warmthMetricLimit: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#78716C',
+  },
+  warmthMetricDesc: {
+    fontSize: 10,
+    color: '#78716C',
+    lineHeight: 13,
+  },
+  warmthRewardHintRow: {
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderWidth: 0.5,
+    borderColor: '#FFE8E0',
+  },
+  warmthRewardHintText: {
+    fontSize: 10.5,
+    color: '#78716C',
+    lineHeight: 15,
+  },
+  careSectionHeader: {
+    marginBottom: 10,
+    paddingBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F0E8',
+  },
+  careSectionTitle: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    color: '#1C1917',
   },
   growthTipsList: {
     gap: 12,
@@ -943,11 +1072,11 @@ const styles = StyleSheet.create({
   growthTipLabel: {
     fontSize: 12.5,
     fontWeight: '800',
-    color: '#1E293B',
+    color: '#1C1917',
   },
   growthTipDesc: {
     fontSize: 11,
-    color: '#64748B',
+    color: '#78716C',
     marginTop: 2,
     lineHeight: 15,
   },

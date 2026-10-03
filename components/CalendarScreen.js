@@ -35,9 +35,10 @@ import {
 } from './icons';
 import { colors, typography, commonStyles } from '../theme';
 import UserAvatar from './UserAvatar';
+import { getKoreanHoliday, getMonthKoreanHolidays, getNextUpcomingHoliday } from '../utils/koreanHolidays';
 
 const FAMILY_MEMBERS = {
-  mom: { name: '엄마', avatar: '👩‍🦰', color: '#FF7E82' },
+  mom: { name: '엄마', avatar: '👩‍🦰', color: '#FF6B47' },
   dad: { name: '아빠', avatar: '👨‍💼', color: '#4A90E2' },
   son: { name: '아들', avatar: '👦', color: '#2ECC71' },
   daughter: { name: '딸', avatar: '👧', color: '#F39C12' },
@@ -173,6 +174,12 @@ export default function CalendarScreen({
 
   const handleSelectDate = (dateStr) => {
     setSelectedDate(dateStr);
+    if (dateStr && dateStr.includes('-')) {
+      const [tY, tM] = dateStr.split('-').map(Number);
+      if (tY && tM && (tY !== year || tM !== month)) {
+        setCurrentDate(new Date(tY, tM - 1, 1));
+      }
+    }
     setTimeout(() => {
       mainScrollRef.current?.scrollTo({ y: 180, animated: true });
     }, 100);
@@ -316,14 +323,14 @@ export default function CalendarScreen({
 
   const selectedDateEvents = getEventsForDate(selectedDate);
 
-  // Compute upcoming D-Days
+  // Compute upcoming D-Days (가족 일정 + 다음 다가오는 법정 공휴일 연동)
   const getDDayList = () => {
-    if (!events || !Array.isArray(events)) return [];
+    const list = [];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    return events
-      .map(e => {
+    if (events && Array.isArray(events)) {
+      events.forEach(e => {
         const startDateStr = e.date;
         const endDateStr = e.endDate || e.end_date || e.date;
         const [eY, eM, eD] = startDateStr.split('-').map(Number);
@@ -338,17 +345,38 @@ export default function CalendarScreen({
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         const isOngoing = today >= eventStartDate && today <= eventEndDate;
 
-        return { ...e, diffDays, isOngoing };
-      })
-      .filter(e => e.isOngoing || e.diffDays >= 0)
-      .sort((a, b) => {
-        if (a.isOngoing && !b.isOngoing) return -1;
-        if (!a.isOngoing && b.isOngoing) return 1;
-        return a.diffDays - b.diffDays;
+        if (isOngoing || diffDays >= 0) {
+          list.push({ ...e, diffDays, isOngoing });
+        }
       });
+    }
+
+    // 다음 다가오는 법정 공휴일 1건 자동 연동 (45일 이내)
+    const upcomingHoliday = getNextUpcomingHoliday(getTodayString());
+    if (upcomingHoliday && upcomingHoliday.diffDays >= 0 && upcomingHoliday.diffDays <= 45) {
+      list.push({
+        id: `holiday-${upcomingHoliday.date}`,
+        title: `${upcomingHoliday.name} 🇰🇷`,
+        category: 'anniversary',
+        date: upcomingHoliday.date,
+        endDate: upcomingHoliday.date,
+        diffDays: upcomingHoliday.diffDays,
+        isOngoing: upcomingHoliday.isToday,
+        isHolidayChip: true,
+      });
+    }
+
+    return list.sort((a, b) => {
+      if (a.isOngoing && !b.isOngoing) return -1;
+      if (!a.isOngoing && b.isOngoing) return 1;
+      return a.diffDays - b.diffDays;
+    });
   };
 
   const dDayItems = getDDayList();
+  const monthHolidays = useMemo(() => getMonthKoreanHolidays(year, month), [year, month]);
+  const selectedDateHoliday = useMemo(() => getKoreanHoliday(selectedDate), [selectedDate]);
+
   const monthEventsCount = (events || []).filter(e => {
     if (!e || !e.date) return false;
     const parts = e.date.split('-');
@@ -417,8 +445,10 @@ export default function CalendarScreen({
             <View style={styles.summaryFooterRow}>
               <Text style={styles.summaryFooterText}>
                 {monthEventsCount > 0
-                  ? `가족들과 함께할 ${monthEventsCount}개의 약속이 있어요! ✨`
-                  : '이번 달 일정이 아직 없어요. 새로운 일정을 등록해보세요! 🌱'}
+                  ? `가족들과 함께할 ${monthEventsCount}개의 약속이 있어요! ${monthHolidays.length > 0 ? `(공휴일 ${monthHolidays.length}일 🎈)` : '✨'}`
+                  : monthHolidays.length > 0
+                    ? `이번 달에는 ${monthHolidays.map(h => h.name).join(', ')} 등 ${monthHolidays.length}일의 공휴일이 있어요! 🎈`
+                    : '이번 달 일정이 아직 없어요. 새로운 일정을 등록해보세요! 🌱'}
               </Text>
             </View>
           </View>
@@ -433,7 +463,7 @@ export default function CalendarScreen({
               {dDayItems.map((item) => {
                 const catInfo = getCategoryInfo(item.category);
                 const CatIcon = catInfo.icon;
-                const catColor = catInfo.color;
+                const catColor = item.isHolidayChip ? '#EF4444' : catInfo.color;
 
                 return (
                   <TouchableOpacity
@@ -509,6 +539,8 @@ export default function CalendarScreen({
                 const dayOfWeek = (startDayOfWeek + dayNum - 1) % 7;
                 const isSunday = dayOfWeek === 0;
                 const isSaturday = dayOfWeek === 6;
+                const holidayInfo = getKoreanHoliday(dateStr);
+                const isHoliday = Boolean(holidayInfo);
 
                 return (
                   <TouchableOpacity
@@ -520,13 +552,24 @@ export default function CalendarScreen({
                     <Text
                       style={[
                         styles.dayNumber,
-                        isSunday && styles.sundayText,
-                        isSaturday && styles.saturdayText,
+                        (isSunday || isHoliday) && styles.sundayText,
+                        isSaturday && !isHoliday && styles.saturdayText,
                         isSelected && styles.selectedDayNumber,
                       ]}
                     >
                       {dayNum}
                     </Text>
+                    {holidayInfo ? (
+                      <Text
+                        style={[
+                          styles.holidayLabel,
+                          isSelected && styles.selectedHolidayLabel,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {holidayInfo.name}
+                      </Text>
+                    ) : null}
                     <View style={styles.dotRow}>
                       {dayEvents.length <= 3 ? (
                         dayEvents.map((evt, i) => {
@@ -565,6 +608,30 @@ export default function CalendarScreen({
               <Text style={styles.eventCountBadgeText}>{selectedDateEvents.length}개 일정</Text>
             </View>
           </View>
+
+          {/* 법정 공휴일 / 대체공휴일 안내 카드 */}
+          {selectedDateHoliday && (
+            <View style={styles.holidayBannerCard}>
+              <View style={styles.holidayFlagBadge}>
+                <Text style={styles.holidayFlagText}>🇰🇷</Text>
+              </View>
+              <View style={styles.holidayBannerInfo}>
+                <View style={styles.holidayTitleRow}>
+                  <Text style={styles.holidayBannerTitle}>{selectedDateHoliday.name}</Text>
+                  <View style={[styles.holidayPill, selectedDateHoliday.isSubstitute && styles.holidaySubstitutePill]}>
+                    <Text style={[styles.holidayPillText, selectedDateHoliday.isSubstitute && styles.holidaySubstitutePillText]}>
+                      {selectedDateHoliday.isSubstitute ? '대체공휴일' : '법정 공휴일'}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.holidayBannerDesc}>
+                  {selectedDateHoliday.isSubstitute
+                    ? '공휴일이 주말 또는 다른 공휴일과 겹쳐 지정된 소중한 대체 휴일이에요! 🌿'
+                    : '온 가족이 함께 푹 쉬며 여유를 즐기는 국가 공휴일이에요! 🎉'}
+                </Text>
+              </View>
+            </View>
+          )}
 
           <View style={styles.eventList}>
             {selectedDateEvents.length === 0 ? (
@@ -1155,10 +1222,11 @@ const styles = StyleSheet.create({
   },
   dayCell: {
     width: '14.28%',
-    height: 52,
+    minHeight: 54,
     alignItems: 'center',
     justifyContent: 'flex-start',
     paddingTop: 4,
+    paddingBottom: 4,
     borderRadius: 14,
   },
   selectedDayCell: {
@@ -1168,6 +1236,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#1C1917',
+    lineHeight: 18,
   },
   sundayText: {
     color: '#EF4444',
@@ -1178,6 +1247,18 @@ const styles = StyleSheet.create({
   selectedDayNumber: {
     color: '#FFFFFF',
     fontWeight: '900',
+  },
+  holidayLabel: {
+    fontSize: 8.5,
+    fontWeight: '800',
+    color: '#EF4444',
+    textAlign: 'center',
+    lineHeight: 11,
+    letterSpacing: -0.4,
+    marginTop: 0,
+  },
+  selectedHolidayLabel: {
+    color: '#FFFFFF',
   },
   dotRow: {
     flexDirection: 'row',
@@ -1232,6 +1313,67 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     color: '#FF6B47',
+  },
+  holidayBannerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF5F2',
+    borderWidth: 1,
+    borderColor: '#FFE8E0',
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 14,
+  },
+  holidayFlagBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FFE8E0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  holidayFlagText: {
+    fontSize: 20,
+  },
+  holidayBannerInfo: {
+    flex: 1,
+  },
+  holidayTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  holidayBannerTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#1C1917',
+  },
+  holidayPill: {
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  holidayPillText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#EF4444',
+  },
+  holidaySubstitutePill: {
+    backgroundColor: '#FEF3C7',
+  },
+  holidaySubstitutePillText: {
+    color: '#D97706',
+  },
+  holidayBannerDesc: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#78716C',
+    lineHeight: 16,
   },
   eventList: {
     gap: 10,

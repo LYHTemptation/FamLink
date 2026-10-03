@@ -1,60 +1,66 @@
 /**
- * FamLink Global Color Palette
- * 일관된 UI 톤앤매너와 다크모드/테마 확장을 지원하는 컬러 시스템
+ * FamLink Global Color Palette (Warm Cozy Family Theme)
+ * 피그마 기반의 따뜻하고 편안한 감성 패밀리 디자인 시스템 토큰
  */
 export const colors = {
-  // Brand & Primary Colors
-  primary: '#FF7E82',
-  primaryLight: '#FFF2F3',
-  primaryDark: '#E66A6E',
-  primaryBorder: '#FFA2A5',
+  // Brand Primary (Warm Coral & Peach)
+  primary: '#FF6B47',
+  primaryLight: '#FFF5F2',
+  primaryDark: '#E05330',
+  primaryBorder: '#FED7AA',
+  brandCoral: '#FF6B47',
+  brandPeach: '#FFF5F2',
 
-  // Secondary & Accents
-  secondary: '#4A90E2',
-  secondaryLight: '#EBF5FF',
-  secondaryDark: '#357ABD',
-  secondaryBorder: '#D0E7FF',
+  // Secondary & Accents (Petmong Periwinkle & Sky)
+  secondary: '#7C3AED',
+  secondaryLight: '#EDE9FE',
+  secondaryDark: '#6D28D9',
+  secondaryBorder: '#DDD6FE',
+  petmongPurple: '#7C3AED',
+  petmongPurpleLight: '#EDE9FE',
 
   // Functional Status Colors
-  success: '#059669',
+  success: '#10B981',
   successLight: '#ECFDF5',
   successBorder: '#A7F3D0',
 
-  warning: '#D97706',
+  warning: '#F59E0B',
   warningLight: '#FFFBEB',
   warningBorder: '#FDE68A',
 
-  danger: '#FF3B30',
-  dangerLight: '#FFF1F0',
-  dangerBorder: '#FFA39E',
+  danger: '#EF4444',
+  dangerLight: '#FEF2F2',
+  dangerBorder: '#FECACA',
 
-  point: '#F1C40F',
+  point: '#F59E0B',
   pointLight: '#FFF9E6',
-  pointDark: '#B7950B',
-  pointBorder: '#FFEAA7',
+  pointDark: '#D97706',
+  pointBorder: '#FDE68A',
 
-  // Neutrals & Backgrounds
-  background: '#F8F9FA',
+  // Neutrals & Surfaces (Warm Linen & Stone)
+  background: '#FAF8F3', // Figma node 1:700 웜 아이보리 캔버스
   card: '#FFFFFF',
+  cardWarm: '#FFFDF9',
   surface: '#FFFFFF',
-  inputBg: '#F1F2F4',
-  divider: '#F2F2F7',
-  border: '#EBEBEB',
-  borderLight: '#F0F0F2',
+  inputBg: '#FFFFFF',
+  divider: '#F5F0E8',
+  border: '#F5F0E8',
+  borderLight: '#FAF5ED',
+  borderDark: '#E8E0D0',
 
-  // Text Hierarchy
+  // Warm Stone Text Hierarchy
   text: {
-    primary: '#1C1C1E',
-    secondary: '#636E72',
-    muted: '#8E8E93',
-    light: '#AEAEB2',
+    primary: '#1C1917',   // Stone 900
+    secondary: '#78716C', // Stone 500
+    muted: '#A8A29E',     // Stone 400
+    light: '#D6D3D1',     // Stone 300
     inverse: '#FFFFFF',
   },
 
   // Overlays
-  overlay: 'rgba(0, 0, 0, 0.5)',
-  overlayDark: 'rgba(0, 0, 0, 0.65)',
-  overlayLight: 'rgba(255, 255, 255, 0.9)',
+  overlay: 'rgba(28, 25, 23, 0.45)',
+  overlayDark: 'rgba(28, 25, 23, 0.65)',
+  overlayLight: 'rgba(250, 248, 243, 0.92)',
 };
 
 export default colors;

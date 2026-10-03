@@ -34,6 +34,7 @@ import SnackCatchGame from './minigames/SnackCatchGame';
 import KeepyUppyGame from './minigames/KeepyUppyGame';
 import BubblePopGame from './minigames/BubblePopGame';
 import DreamConstellationGame from './minigames/DreamConstellationGame';
+import { stripEmojis } from '../utils/topics';
 
 // 한국형 생활 행동 기반 아이콘 & 카테고리 스마트 매퍼
 export const getChoreIconMeta = (category, title = '') => {
@@ -122,7 +123,6 @@ export default function SmallTalkScreen({
   // 집안일 추가 모달 상태
   const [addChoreModalVisible, setAddChoreModalVisible] = useState(false);
   const [newChoreTitle, setNewChoreTitle] = useState('');
-  const [newChorePoints, setNewChorePoints] = useState('20');
   const [newChoreAssignee, setNewChoreAssignee] = useState('가족 전체');
   const [newChoreRepeatType, setNewChoreRepeatType] = useState('daily'); // 'none' (오늘만) | 'daily' (매일 반복)
 
@@ -139,14 +139,15 @@ export default function SmallTalkScreen({
   const [isDreamGameVisible, setIsDreamGameVisible] = useState(false);
 
 
-  // 반려몽 체류형 미니게임 완료 콜백
-  const handleCompletePetmongGame = (gameTitle, { score, points: awardedPts = 25 }) => {
-    if (onAwardPoints && awardedPts) {
-      onAwardPoints(awardedPts, `${gameTitle} 완료`);
+  // 반려몽 체류형 미니게임 완료 콜백 (반려몽 영역 활동: EXP 성장 지급)
+  const handleCompletePetmongGame = (gameTitle, { score, exp: awardedExp, points: awardedPts }) => {
+    const finalExp = awardedExp || Math.max(15, Math.min(50, Math.round((score || 100) / 10)));
+    if (onAwardPetExp) {
+      onAwardPetExp(null, finalExp, `${gameTitle} 완료 (+${finalExp} EXP)`);
     }
     Alert.alert(
       '🎉 미니게임 완료!',
-      `${gameTitle}을(를) 멋지게 마쳤어요!\n🎁 +${awardedPts} 가족 포인트를 획득했습니다!`
+      `${gameTitle}을(를) 멋지게 마쳤어요!\n🌱 반려몽이 +${finalExp} EXP를 획득하여 쑥쑥 성장했습니다!`
     );
   };
 
@@ -166,9 +167,9 @@ export default function SmallTalkScreen({
   // 2. 오늘의 대화 주제 및 응답 계산 (FamLink 기존 스몰톡 기능 100% 연동)
   const { topic = '', responses = {} } = smallTalkState || {};
   const topicTitle = useMemo(() => {
-    if (!topic) return '오늘 가장 많이 웃었던 일은 무엇인가요? 😂';
-    if (typeof topic === 'string') return topic;
-    return topic.text || topic.title || '오늘 하루 가장 기억에 남는 순간은?';
+    if (!topic) return '오늘 가장 많이 웃었던 일은 무엇인가요?';
+    const raw = typeof topic === 'string' ? topic : (topic.text || topic.title || '오늘 하루 가장 기억에 남는 순간은?');
+    return stripEmojis(raw);
   }, [topic]);
 
   const topicCategory = useMemo(() => {
@@ -338,7 +339,7 @@ export default function SmallTalkScreen({
       Alert.alert('알림', '집안일 이름을 입력해주세요.');
       return;
     }
-    const pts = parseInt(newChorePoints, 10) || 20;
+    const pts = 20; // 표준 가족 집안일 고정 보상 (+20 P)
     const iconMeta = getChoreIconMeta(null, trimmedTitle);
 
     if (onAddItem) {
@@ -363,11 +364,10 @@ export default function SmallTalkScreen({
     }
 
     setNewChoreTitle('');
-    setNewChorePoints('20');
     setNewChoreRepeatType('daily');
     setAddChoreModalVisible(false);
     const repeatLabel = newChoreRepeatType === 'daily' ? '매일 루틴' : '오늘만';
-    Alert.alert('등록 완료 🎉', `'${trimmedTitle}' [${repeatLabel}] 집안일이 추가되었습니다!`);
+    Alert.alert('등록 완료 🎉', `'${trimmedTitle}' [${repeatLabel}] 집안일이 추가되었습니다!\n완료 시 +20 가족 포인트가 적립돼요.`);
   };
 
   // 내 대화 답변 모달 열기 (로그인한 사용자 전용)
@@ -584,9 +584,9 @@ export default function SmallTalkScreen({
               })}
             </View>
 
-            {/* 카드 하단 200점 보너스 배너 */}
+            {/* 카드 하단 30P 보너스 배너 */}
             <View style={styles.dailyTalkBonusBanner}>
-              <Text style={styles.dailyTalkBonusText}>모두 참여하면 가족 +200점 🎁</Text>
+              <Text style={styles.dailyTalkBonusText}>모두 참여하면 가족 +30 P 보너스 🎁</Text>
             </View>
           </View>
         </View>
@@ -797,9 +797,9 @@ export default function SmallTalkScreen({
           <View style={styles.tabContentContainer}>
             {/* 상단 안내 배너 */}
             <View style={styles.gamesNoticeBanner}>
-              <Text style={styles.gamesNoticeTitle}>🎮 게임으로 가족 포인트를 모아요!</Text>
+              <Text style={styles.gamesNoticeTitle}>🎮 반려몽과 놀며 성장 EXP를 모아요!</Text>
               <Text style={styles.gamesNoticeSub}>
-                모든 게임은 짧고 재밌으며 온 가족이 즐길 수 있어요.
+                모든 게임은 짧고 재밌으며 반려몽을 쑥쑥 성장시킬 수 있어요.
               </Text>
             </View>
 
@@ -808,12 +808,12 @@ export default function SmallTalkScreen({
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, paddingHorizontal: 4 }}>
                 <Gamepad2 size={18} color="#FF6B47" style={{ marginRight: 6 }} />
                 <Text style={{ fontSize: 15, fontWeight: '800', color: '#1C1917' }}>반려몽 액션 놀이터</Text>
-                <View style={{ marginLeft: 8, backgroundColor: '#FFF0ED', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>
-                  <Text style={{ fontSize: 10, fontWeight: '800', color: '#FF6B47' }}>가족 포인트(P) 획득</Text>
+                <View style={{ marginLeft: 8, backgroundColor: '#DCFCE7', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>
+                  <Text style={{ fontSize: 10, fontWeight: '800', color: '#16A34A' }}>반려몽 성장 EXP 획득</Text>
                 </View>
               </View>
               <Text style={{ fontSize: 12, color: '#78716C', paddingHorizontal: 4, marginBottom: 10 }}>
-                가족 누구나 플레이하여 가족 포인트(P)를 함께 모아요!
+                가족 누구나 플레이하여 우리 반려몽 성장 EXP(+15 ~ +50 EXP)를 함께 모아요!
               </Text>
 
               <View style={styles.gamesCardsList}>
@@ -834,7 +834,7 @@ export default function SmallTalkScreen({
                       </View>
                     </View>
                     <Text style={styles.gameDescText}>30초 동안 쏟아지는 사과/고기/케이크 캐치!</Text>
-                    <Text style={[styles.gamePointsText, { color: '#EA580C' }]}>최대 100 P 적립</Text>
+                    <Text style={[styles.gamePointsText, { color: '#16A34A' }]}>+15 ~ +50 EXP 획득 🌱</Text>
                   </View>
                   <Text style={styles.gameChevron}>›</Text>
                 </TouchableOpacity>
@@ -856,7 +856,7 @@ export default function SmallTalkScreen({
                       </View>
                     </View>
                     <Text style={styles.gameDescText}>손가락 패들로 공을 튕겨 올려 반려몽과 랠리 대결!</Text>
-                    <Text style={[styles.gamePointsText, { color: '#0284C7' }]}>최대 120 P 적립</Text>
+                    <Text style={[styles.gamePointsText, { color: '#16A34A' }]}>+15 ~ +50 EXP 획득 🌱</Text>
                   </View>
                   <Text style={styles.gameChevron}>›</Text>
                 </TouchableOpacity>
@@ -878,7 +878,7 @@ export default function SmallTalkScreen({
                       </View>
                     </View>
                     <Text style={styles.gameDescText}>피어오르는 비누방울을 팡팡 터트리는 쾌감 액션!</Text>
-                    <Text style={[styles.gamePointsText, { color: '#0D9488' }]}>최대 100 P 적립</Text>
+                    <Text style={[styles.gamePointsText, { color: '#16A34A' }]}>+15 ~ +50 EXP 획득 🌱</Text>
                   </View>
                   <Text style={styles.gameChevron}>›</Text>
                 </TouchableOpacity>
@@ -900,7 +900,7 @@ export default function SmallTalkScreen({
                       </View>
                     </View>
                     <Text style={styles.gameDescText}>빛나는 별들을 순서대로 이어 별자리를 완성해요!</Text>
-                    <Text style={[styles.gamePointsText, { color: '#4F46E5' }]}>최대 150 P 적립</Text>
+                    <Text style={[styles.gamePointsText, { color: '#16A34A' }]}>+15 ~ +50 EXP 획득 🌱</Text>
                   </View>
                   <Text style={styles.gameChevron}>›</Text>
                 </TouchableOpacity>
@@ -1047,14 +1047,11 @@ export default function SmallTalkScreen({
               onChangeText={setNewChoreTitle}
             />
 
-            <View style={styles.modalFieldRow}>
-              <Text style={styles.modalFieldLabel}>보상 포인트 (P):</Text>
-              <TextInput
-                style={styles.modalNumberInput}
-                keyboardType="numeric"
-                value={newChorePoints}
-                onChangeText={setNewChorePoints}
-              />
+            <View style={styles.choreRewardBadgeRow}>
+              <Award size={16} color="#FF6B47" style={{ marginRight: 6 }} />
+              <Text style={styles.choreRewardBadgeText}>
+                완료 시 가족 포인트 <Text style={{ fontWeight: '800', color: '#FF6B47' }}>+20 P</Text> 자동 적립
+              </Text>
             </View>
 
             {/* 자동 스마트 카테고리 실시간 프리뷰 */}
@@ -2084,18 +2081,21 @@ const styles = StyleSheet.create({
     color: '#1C1917',
     marginBottom: 6,
   },
-  modalNumberInput: {
-    width: 80,
-    backgroundColor: '#FAF8F3',
+  choreRewardBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF5F2',
     borderWidth: 1,
-    borderColor: '#E8E0D0',
+    borderColor: '#FFE8E0',
     borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    textAlign: 'center',
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#FF6B47',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 14,
+  },
+  choreRewardBadgeText: {
+    fontSize: 13,
+    color: '#44403C',
+    fontWeight: '600',
   },
   autoCategoryPreviewRow: {
     flexDirection: 'row',

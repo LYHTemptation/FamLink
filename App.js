@@ -27,6 +27,7 @@ import {
   TabFamilyIcon,
 } from './components/icons';
 import UserAvatar from './components/UserAvatar';
+import { getRequiredExpForLevel, getEvolutionStage } from './lib/petmongEvolution';
 
 // Web Polyfill for Alert.alert (react-native-web has empty stub alert() {})
 if (Platform.OS === 'web') {
@@ -73,13 +74,14 @@ import PhotoAlbumScreen from './components/PhotoAlbumScreen';
 import InteriorScreen from './components/InteriorScreen';
 import AuthScreen from './screens/AuthScreen';
 import { supabase, isSupabaseReady } from './lib/supabase';
-import { getTopicForToday } from './utils/topics';
+import { getTopicForToday, stripEmojis } from './utils/topics';
+import { fetchSmallTalkTopicsFromDB, getTopicForDateFromList } from './services/smallTalkService';
 import { showError } from './utils/errorHandler';
 import * as Notifications from 'expo-notifications';
 import { registerForPushNotificationsAsync, sendExpoPushNotification } from './utils/notifications';
 
 const FAMILY_MEMBERS = {
-  mom: { name: '엄마', avatar: '👩‍🦰', color: '#FF7E82' },
+  mom: { name: '엄마', avatar: '👩‍🦰', color: '#FF6B47' },
   dad: { name: '아빠', avatar: '👨‍💼', color: '#4A90E2' },
   son: { name: '아들', avatar: '👦', color: '#2ECC71' },
   daughter: { name: '딸', avatar: '👧', color: '#F39C12' },
@@ -129,6 +131,7 @@ const INITIAL_MOCK_DATA = {
       sender: 'son',
       text: '엄마 아빠 오늘 저녁 치킨 먹어요!! 🍗',
       timestamp: '오후 6:00',
+      created_at: new Date(Date.now() - 35 * 60 * 1000).toISOString(),
       readBy: ['son', 'mom', 'dad'],
     },
     {
@@ -136,6 +139,7 @@ const INITIAL_MOCK_DATA = {
       sender: 'mom',
       text: '그래? 아빠 퇴근할 때 시켜달라고 하자~',
       timestamp: '오후 6:02',
+      created_at: new Date(Date.now() - 33 * 60 * 1000).toISOString(),
       readBy: ['son', 'mom', 'dad'],
     },
     {
@@ -143,6 +147,7 @@ const INITIAL_MOCK_DATA = {
       sender: 'dad',
       text: '좋지! 아빠가 치킨 쏠게 퇴근하고 보자! 😎',
       timestamp: '오후 6:05',
+      created_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
       readBy: ['son', 'mom', 'dad'],
     },
   ],
@@ -326,6 +331,13 @@ export default function App() {
       })
       .subscribe();
 
+    const topicsChannel = supabase
+      .channel(`realtime-topics-${familyId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'small_talk_topics' }, () => {
+        fetchRealSmallTalk(familyId);
+      })
+      .subscribe();
+
     const profilesChannel = supabase
       .channel(`realtime-profiles-${familyId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles', filter: `family_id=eq.${familyId}` }, () => {
@@ -391,6 +403,7 @@ export default function App() {
       supabase.removeChannel(eventsChannel);
       supabase.removeChannel(pointsChannel);
       supabase.removeChannel(responsesChannel);
+      supabase.removeChannel(topicsChannel);
       supabase.removeChannel(profilesChannel);
       supabase.removeChannel(shoppingChannel);
       supabase.removeChannel(petmongChannel);
@@ -635,6 +648,7 @@ export default function App() {
           image_url: m.image_url || null,
           room_id: m.room_id || 'family-group',
           timestamp,
+          created_at: m.created_at,
           readBy: m.read_by || [],
         };
       });
@@ -722,13 +736,19 @@ export default function App() {
   };
 
   const fetchRealSmallTalk = async (familyId) => {
-    const todayTopic = getTopicForToday();
+    let dbTopics = [];
+    try {
+      dbTopics = await fetchSmallTalkTopicsFromDB(familyId);
+    } catch (e) {
+      console.warn('Error fetching small talk topics from DB:', e);
+    }
+    const todayTopic = stripEmojis(getTopicForDateFromList(dbTopics, new Date()));
+
     const [{ data: respData }, { count: memberCount }] = await Promise.all([
       supabase
         .from('small_talk_responses')
         .select('*')
         .eq('family_id', familyId)
-        .eq('topic', todayTopic)
         .order('created_at', { ascending: true }),
       supabase
         .from('profiles')
@@ -739,7 +759,7 @@ export default function App() {
     const responsesMap = {};
     if (respData) {
       respData.forEach(resp => {
-        if (resp.profile_id) {
+        if (resp.profile_id && (resp.topic === todayTopic || stripEmojis(resp.topic) === todayTopic)) {
           responsesMap[resp.profile_id] = resp.text;
         }
       });
@@ -804,7 +824,7 @@ export default function App() {
       }
 
       const baseMembers = [
-        { id: 'm1', name: '엄마', avatar: '👩‍🦰', color: '#FF7E82', role: 'mom', mood: '😊', status_text: '오늘도 화이팅!' },
+        { id: 'm1', name: '엄마', avatar: '👩‍🦰', color: '#FF6B47', role: 'mom', mood: '😊', status_text: '오늘도 화이팅!' },
         { id: 'm2', name: '아빠', avatar: '👨‍💼', color: '#4A90E2', role: 'dad', mood: '💼', status_text: '열일 중!' },
         { id: 'm3', name: '아들', avatar: '👦', color: '#2ECC71', role: 'son', mood: '✏️', status_text: '열공 중!' },
         { id: 'm4', name: '딸', avatar: '👧', color: '#F39C12', role: 'daughter', mood: '🏠', status_text: '휴식 중~' },
@@ -1033,12 +1053,16 @@ export default function App() {
 
     let newExp = (targetChar.exp || 0) + expGain;
     let newLevel = targetChar.level || 1;
+    const oldLevel = newLevel;
     let leveledUp = false;
 
-    while (newExp >= 100) {
-      newExp -= 100;
+    // 4개월(14,000 EXP) 밸런스 공식 적용
+    let reqExp = getRequiredExpForLevel(newLevel);
+    while (newExp >= reqExp) {
+      newExp -= reqExp;
       newLevel += 1;
       leveledUp = true;
+      reqExp = getRequiredExpForLevel(newLevel);
     }
 
     const updatedChar = { ...targetChar, exp: newExp, level: newLevel };
@@ -1067,10 +1091,19 @@ export default function App() {
     }
 
     if (leveledUp) {
-      Alert.alert(
-        '🎊 우리 가족 반려몽 레벨업! 🎊',
-        `우리 가족의 수호 반려몽 ${targetChar.name}의 레벨이 Lv.${newLevel}로 올랐습니다! 온 가족이 함께 키워내고 있어요! 🌱`
-      );
+      const oldStage = getEvolutionStage(oldLevel);
+      const newStage = getEvolutionStage(newLevel);
+      if (newStage.stage > oldStage.stage) {
+        Alert.alert(
+          '✨ 축하합니다! 우리 반려몽 진화! ✨',
+          `우리 가족의 수호 반려몽 ${targetChar.name}이(가) [${newStage.stageTitle}] 단계로 멋지게 진화했습니다! 온 가족의 사랑이 결실을 맺었어요! 🐾💖`
+        );
+      } else {
+        Alert.alert(
+          '🎊 우리 가족 반려몽 레벨업! 🎊',
+          `우리 가족의 수호 반려몽 ${targetChar.name}의 레벨이 Lv.${newLevel}로 올랐습니다! 다음 성장까지 함께 힘내요! 🌱`
+        );
+      }
     }
   };
 
@@ -1101,20 +1134,17 @@ export default function App() {
         const todayEarnedPoints = todayEarnedList.reduce((sum, i) => sum + (i.points || 20), 0);
 
         if (todayEarnedCount < DAILY_MAX_CHORES && todayEarnedPoints < DAILY_MAX_POINTS) {
-          const expGain = Math.min(20, Math.max(10, Math.floor(itemPoints / 2)));
-          handleAwardPetmongExp(session?.user?.id || profile?.id, expGain, `집안일 완료: ${item.title} (+${expGain} EXP)`);
           newPoints += itemPoints;
           willEarnPoints = true;
           Alert.alert(
             '집안일 완료 🎉',
-            `+${itemPoints}P와 함께 반려몽이 +${expGain} EXP를 획득했어요!\n(오늘 달성: ${todayEarnedCount + 1}/${DAILY_MAX_CHORES}건, 총 ${todayEarnedPoints + itemPoints}/${DAILY_MAX_POINTS}P)`
+            `+${itemPoints} 가족 포인트를 획득했어요!\n(오늘 달성: ${todayEarnedCount + 1}/${DAILY_MAX_CHORES}건, 총 ${todayEarnedPoints + itemPoints}/${DAILY_MAX_POINTS}P)`
           );
         } else {
-          // 일일 상한선 도달 시: 포인트는 0P 지급, 반려몽 애정도 EXP만 소량(+5) 지급
-          handleAwardPetmongExp(session?.user?.id || profile?.id, 5, `집안일 완료: ${item.title} (+5 EXP)`);
+          // 일일 상한선 도달 시
           Alert.alert(
             '집안일 완료 ✅',
-            `오늘의 집안일 포인트 한도(하루 ${DAILY_MAX_CHORES}건 / 최대 ${DAILY_MAX_POINTS}P)를 모두 채웠습니다!\n포인트 대신 반려몽이 감사하며 +5 EXP를 획득했어요 🌱`
+            `오늘의 집안일 포인트 한도(하루 ${DAILY_MAX_CHORES}건 / 최대 ${DAILY_MAX_POINTS}P)를 모두 채웠습니다!`
           );
         }
       }
@@ -1318,6 +1348,7 @@ export default function App() {
       image_url: messageData.image || null,
       room_id: messageData.roomId || 'family-group',
       timestamp,
+      created_at: now.toISOString(),
       readBy: [profile?.id || currentUser],
       isSending: true,
     };
@@ -1592,16 +1623,11 @@ export default function App() {
           .insert({
             family_id: profile.family_id,
             profile_id: myId,
-            topic: smallTalk.topic,
+            topic: stripEmojis(smallTalk.topic),
             text: answerText,
           });
         if (error) throw error;
-
-        // Award +20 EXP for answering small talk
-        if (myId) {
-          handleAwardPetmongExp(myId, 20, '스몰톡 답변 완료 (+20 EXP)');
-        }
-
+ 
         const updatedResponses = {
           ...smallTalk.responses,
           ...(myId ? { [myId]: answerText } : { [user]: answerText }),
@@ -1638,8 +1664,6 @@ export default function App() {
             if (willAwardAllBonus) {
               setCelebrationVisible(true);
               logPointTransaction('earn', 30, '스몰톡 가족 전원 완료 보너스 (+30P)', newPoints, 'smalltalk');
-              // Award +50 EXP bonus to our family petmong for complete family participation!
-              handleAwardPetmongExp(null, 50, '스몰톡 가족 전원 완료 보너스 (+50 EXP)');
             }
           }
         }
@@ -1659,9 +1683,6 @@ export default function App() {
         [user]: answerText,
       };
 
-      // Local mock mode award exp
-      handleAwardPetmongExp(user, 20, '스몰톡 답변 완료 (+20 EXP)');
-
       const totalMembers = familyMembersList.length || 4;
       const answeredCount = Object.keys(updatedResponses).length;
       const isCompleted = answeredCount === totalMembers;
@@ -1677,7 +1698,6 @@ export default function App() {
         pointsEarned += 30;
         pointsAwardedStatus = true;
         setCelebrationVisible(true);
-        handleAwardPetmongExp(null, 50, '스몰톡 가족 전원 완료 보너스 (+50 EXP)');
       }
 
       const updatedSmallTalk = {
@@ -1765,6 +1785,7 @@ export default function App() {
               onNavigateScreen={setCurrentScreen}
               onToggleQuest={handleToggleItem}
               onAwardPoints={handleAwardFamilyPoints}
+              onAddResponse={handleAddResponse}
             />
           </View>
         )}
@@ -1936,7 +1957,7 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#FF7E82" />
+          <ActivityIndicator size="large" color="#FF6B47" />
           <Text style={styles.loadingText}>가족 데이터를 동기화하는 중...</Text>
         </View>
       </SafeAreaProvider>
@@ -2175,9 +2196,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FAF8F3',
     borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
+    borderBottomColor: '#F5F0E8',
   },
   logoRow: {
     flexDirection: 'row',
@@ -2186,20 +2207,20 @@ const styles = StyleSheet.create({
   logoText: {
     fontSize: 20,
     fontWeight: '900',
-    color: '#FF7E82',
+    color: '#FF6B47',
     letterSpacing: -0.5,
   },
   familyCodeBadge: {
     fontSize: 9,
     fontWeight: '800',
-    color: '#FF7E82',
-    backgroundColor: '#FFF2F3',
+    color: '#FF6B47',
+    backgroundColor: '#FFF5F2',
     borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 2,
     marginLeft: 6,
     borderWidth: 0.5,
-    borderColor: '#FFA2A5',
+    borderColor: '#FED7AA',
   },
   topRightControls: {
     flexDirection: 'row',
@@ -2237,7 +2258,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#FAF8F3',
   },
   switcherAvatar: {
     fontSize: 14,
@@ -2423,7 +2444,7 @@ const styles = StyleSheet.create({
   celebrationPoints: {
     fontSize: 22,
     fontWeight: '900',
-    color: '#FF7E82',
+    color: '#FF6B47',
     marginVertical: 10,
   },
   celebrationSub: {
@@ -2433,10 +2454,10 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   celebrationCloseButton: {
-    backgroundColor: '#FF7E82',
+    backgroundColor: '#FF6B47',
     paddingVertical: 13,
     paddingHorizontal: 36,
-    borderRadius: 12,
+    borderRadius: 16,
   },
   celebrationCloseText: {
     color: '#FFFFFF',

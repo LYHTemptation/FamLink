@@ -62,6 +62,7 @@ import {
   EVOLUTION_STAGES,
   getStageEvolutionPrompt,
   getStageNameWithPet,
+  getRequiredExpForLevel,
 } from '../lib/petmongEvolution';
 import PetmongGrowthBookModal from './PetmongGrowthBookModal';
 import {
@@ -652,9 +653,11 @@ export default function InteriorScreen({
         if (!prev) return prev;
         let newExp = (prev.exp || 0) + amount;
         let newLevel = prev.level || 1;
-        if (newExp >= 100) {
-          newExp -= 100;
+        let reqExp = getRequiredExpForLevel(newLevel);
+        while (newExp >= reqExp) {
+          newExp -= reqExp;
           newLevel += 1;
+          reqExp = getRequiredExpForLevel(newLevel);
           setLevelUpInfo({ name: prev.name, level: newLevel });
           setLevelUpModalVisible(true);
         }
@@ -1653,9 +1656,11 @@ Crucial requirements:
         if (!prev) return prev;
         let newExp = (prev.exp || 0) + expGain;
         let newLevel = prev.level || 1;
-        if (newExp >= 100) {
-          newExp -= 100;
+        let reqExp = getRequiredExpForLevel(newLevel);
+        while (newExp >= reqExp) {
+          newExp -= reqExp;
           newLevel += 1;
+          reqExp = getRequiredExpForLevel(newLevel);
           Alert.alert('레벨업! 🎉', `${prev.name}의 레벨이 ${newLevel}이 되었습니다!`);
         }
         return { ...prev, exp: newExp, level: newLevel };
@@ -2037,7 +2042,7 @@ Crucial requirements:
             {/* AI Generation Loading Overlay */}
             {isGenerating && (
               <View style={styles.generatingOverlay}>
-                <ActivityIndicator size="large" color="#FF7E82" />
+                <ActivityIndicator size="large" color="#FF6B47" />
                 <Text style={styles.generatingText}>
                   {displayedCharacter
                     ? `AI가 사진을 분석하여 우리 반려몽을\n멋지게 새 단장하고 있습니다... 🪄`
@@ -2078,8 +2083,8 @@ Crucial requirements:
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.interactBtnItem} onPress={() => handleInteract('gift')}>
-                <View style={[styles.interactIconBox, { backgroundColor: '#FFEBEB' }]}>
-                  <Gift size={24} color="#FF7E82" />
+                <View style={[styles.interactIconBox, { backgroundColor: '#FFF5F2' }]}>
+                  <Gift size={24} color="#FF6B47" />
                 </View>
                 <Text style={styles.interactBtnText}>선물하기 🎁</Text>
               </TouchableOpacity>
@@ -2145,7 +2150,7 @@ Crucial requirements:
                       )}
                     </View>
 
-                    <ChevronRight size={22} color="#FF7E82" />
+                    <ChevronRight size={22} color="#FF6B47" />
 
                     <View style={[styles.evolutionPreviewBox, styles.evolutionPreviewBoxActive]}>
                       <Text style={[styles.evolutionPreviewLabel, { color: '#D48806', fontWeight: '800' }]}>

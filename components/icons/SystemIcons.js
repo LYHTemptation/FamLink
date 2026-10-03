@@ -267,7 +267,7 @@ export function IconCheckCircle({ size = 20, color = '#2ECC71', strokeWidth = 2,
 /**
  * 11. 하트/응원 아이콘 (IconHeart)
  */
-export function IconHeart({ size = 20, color = '#FF7E82', filled = false, strokeWidth = 2, ...props }) {
+export function IconHeart({ size = 20, color = '#FF6B47', filled = false, strokeWidth = 2, ...props }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Path
@@ -333,7 +333,7 @@ export function IconShare({ size = 20, color = '#8E8E93', strokeWidth = 2, ...pr
  * 14. 반복 아이콘 (IconRepeat)
  * 매일/정기 반복 할 일을 나타내는 듀얼 순환 화살표 SVG
  */
-export function IconRepeat({ size = 20, color = '#FF7E82', strokeWidth = 2, ...props }) {
+export function IconRepeat({ size = 20, color = '#FF6B47', strokeWidth = 2, ...props }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Path

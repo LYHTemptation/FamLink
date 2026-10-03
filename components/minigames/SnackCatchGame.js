@@ -481,13 +481,13 @@ export default function SnackCatchGame({
   };
 
   const handleClaimAndClose = () => {
-    const finalPoints = Math.max(10, Math.min(100, Math.round(score / 8)));
+    const finalExp = Math.max(15, Math.min(50, Math.round(score / 15)));
 
     if (onGameComplete) {
       onGameComplete({
         score,
         maxCombo,
-        points: finalPoints,
+        exp: finalExp,
       });
     }
     if (onClose) onClose();
@@ -533,7 +533,7 @@ export default function SnackCatchGame({
           {/* Score Counter */}
           <View style={[styles.hudPill, styles.hudPillScore]}>
             <Trophy size={16} color="#D48806" />
-            <Text style={styles.scoreText}>{score} Pts</Text>
+            <Text style={styles.scoreText}>{score}점</Text>
           </View>
 
           {/* Close Game Button */}
@@ -725,7 +725,7 @@ export default function SnackCatchGame({
               {/* Score Display */}
               <View style={styles.resultScoreBox}>
                 <Text style={styles.resultScoreLabel}>최종 획득 점수</Text>
-                <Text style={styles.resultScoreVal}>{score} Pts</Text>
+                <Text style={styles.resultScoreVal}>{score}점</Text>
                 <Text style={styles.resultMaxCombo}>최고 콤보: {maxCombo} Combo</Text>
               </View>
 
@@ -734,7 +734,7 @@ export default function SnackCatchGame({
                 <View style={styles.rewardRow}>
                   <Trophy size={18} color="#D48806" />
                   <Text style={[styles.rewardText, { color: '#B45309', fontWeight: '800' }]}>
-                    가족 포인트 +{Math.max(10, Math.min(100, Math.round(score / 8)))} P 적립!
+                    반려몽 성장 경험치 +{Math.max(15, Math.min(50, Math.round(score / 15)))} EXP 획득! 🌱
                   </Text>
                 </View>
               </View>

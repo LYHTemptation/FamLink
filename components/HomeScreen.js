@@ -8,10 +8,14 @@ import {
   Image,
   Dimensions,
   Platform,
+  TextInput,
+  Alert,
 } from 'react-native';
-import { Plus } from 'lucide-react-native';
+import { Plus, Send } from 'lucide-react-native';
 import UserAvatar from './UserAvatar';
-import { getEvolutionStage, getStageNameWithPet } from '../lib/petmongEvolution';
+import { getEvolutionStage, getStageNameWithPet, getRequiredExpForLevel } from '../lib/petmongEvolution';
+import { stripEmojis } from '../utils/topics';
+import { getKoreanHoliday } from '../utils/koreanHolidays';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -80,6 +84,7 @@ export default function HomeScreen({
   onNavigateScreen,
   onToggleQuest,
   onAwardPoints,
+  onAddResponse,
 }) {
   // shoppingItems를 기반으로 홈 화면 집안일/미션 목록 구성 (함께 페이지와 양방향 100% 실시간 연동)
   const quests = useMemo(() => {
@@ -153,11 +158,17 @@ export default function HomeScreen({
 
   const canHarvestFruit = (todayMessages.length > 0 || todayResponsesCount > 0);
 
+  // 실제 대화방에 보관된 사진 수 집계 (Mock 데이터 제거)
+  const totalPhotosCount = useMemo(() => {
+    if (!messages || !Array.isArray(messages)) return 0;
+    return messages.filter(m => m && (m.image || m.image_url)).length;
+  }, [messages]);
+
   const petLevel = activePetmong?.level || 1;
   const stageInfo = useMemo(() => getEvolutionStage(petLevel), [petLevel]);
   const stageTitle = useMemo(() => getStageNameWithPet(stageInfo?.stage || 1, activePetmong?.name || '우리 몽이'), [stageInfo, activePetmong?.name]);
   const petExp = activePetmong?.exp || 0;
-  const petMaxExp = activePetmong?.max_exp || (petLevel * 100);
+  const petMaxExp = activePetmong?.max_exp || getRequiredExpForLevel(petLevel);
   const expRatio = Math.min(100, Math.max(0, Math.round((petExp / petMaxExp) * 100)));
 
   const routineDialogue = useMemo(() => {
@@ -165,7 +176,7 @@ export default function HomeScreen({
       return '가족 대화 소리가 가득해서 마음이 훈훈해요 몽! ✨';
     }
     if (canHarvestFruit) {
-      return '온기 열매가 영글었어요! 거실에서 수확해 주세요 🍇';
+      return '가족 대화 온기가 가득 찼어요! 보러와 주세요 몽 ✨';
     }
     const hour = new Date().getHours();
     if (hour >= 22 || hour < 6) {
@@ -189,6 +200,19 @@ export default function HomeScreen({
   const todayScheduleList = useMemo(() => {
     const now = new Date();
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const todayHoliday = getKoreanHoliday(todayStr);
+
+    const list = [];
+    if (todayHoliday) {
+      list.push({
+        id: `holiday-${todayStr}`,
+        emoji: '🇰🇷',
+        title: `${todayHoliday.name} (${todayHoliday.isSubstitute ? '대체공휴일' : '법정 공휴일'})`,
+        category: '공휴일',
+        member: '대한민국 공휴일',
+        dotColor: '#EF4444',
+      });
+    }
     
     // 실제 events 중 오늘에 해당하는 일정 탐색
     const matchedEvents = (events || []).filter(e => {
@@ -199,7 +223,7 @@ export default function HomeScreen({
     });
 
     if (matchedEvents.length > 0) {
-      return matchedEvents.slice(0, 3).map((e, idx) => {
+      const formatted = matchedEvents.slice(0, 3).map((e, idx) => {
         let emoji = '📅';
         if (e.emoji) {
           emoji = e.emoji;
@@ -226,9 +250,10 @@ export default function HomeScreen({
           dotColor: idx % 2 === 0 ? '#34D399' : '#60A5FA',
         };
       });
+      list.push(...formatted);
     }
 
-    return [];
+    return list;
   }, [events]);
 
   // 가족 멤버 목록 (데이터 없으면 Figma 기본 목업: 엄마, 아빠, 지수, 민준)
@@ -243,6 +268,54 @@ export default function HomeScreen({
       { id: 'm4', name: '민준', role: '민준', avatar: '👦', color: '#90EE90' },
     ];
   }, [familyMembers]);
+
+  // 스몰톡 즉시 답변 상태 & 파싱
+  const [smallTalkInputText, setSmallTalkInputText] = useState('');
+  const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
+
+  const { topic = '', responses = {} } = smallTalkState || {};
+  const topicTitle = useMemo(() => {
+    if (!topic) return '오늘 가장 많이 웃었던 일은 무엇인가요?';
+    const raw = typeof topic === 'string' ? topic : (topic.text || topic.title || '오늘 하루 가장 기억에 남는 순간은?');
+    return stripEmojis(raw);
+  }, [topic]);
+
+  const topicCategory = useMemo(() => {
+    if (typeof topic === 'object' && topic?.category) return topic.category;
+    return '오늘의 스몰톡 질문';
+  }, [topic]);
+
+  const myId = currentUserProfile?.id;
+  const myResponse = myId ? (responses[myId] || responses[currentUser]) : responses[currentUser];
+
+  const answeredMembersCount = useMemo(() => {
+    return displayFamilyMembers.filter(m => responses[m.id] || responses[m.name] || responses[m.role]).length;
+  }, [displayFamilyMembers, responses]);
+
+  const allAnswered = displayFamilyMembers.length > 0 && answeredMembersCount >= displayFamilyMembers.length;
+
+  const handleQuickSubmitSmallTalk = async () => {
+    const trimmed = smallTalkInputText.trim();
+    if (!trimmed) {
+      Alert.alert('알림', '답변 내용을 입력해주세요.');
+      return;
+    }
+    if (onAddResponse) {
+      setIsSubmittingAnswer(true);
+      try {
+        await onAddResponse(myId || currentUser, trimmed);
+        setSmallTalkInputText('');
+        Alert.alert('답변 등록 완료 🎉', '스몰톡 답변이 등록되고 +5 가족 포인트가 적립되었습니다!');
+      } catch (e) {
+        console.error('Error submitting smalltalk answer from home:', e);
+      } finally {
+        setIsSubmittingAnswer(false);
+      }
+    } else {
+      Alert.alert('안내', '스몰톡 화면으로 이동하여 답변을 등록해주세요.');
+      if (onNavigateScreen) onNavigateScreen('smalltalk');
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -344,11 +417,11 @@ export default function HomeScreen({
               </View>
 
               <TouchableOpacity
-                style={styles.cardActionLink}
+                style={styles.cardHeaderPillBtn}
                 onPress={() => onNavigateScreen && onNavigateScreen('calendar')}
                 activeOpacity={0.7}
               >
-                <Text style={styles.scheduleLinkText}>전체 보기 →</Text>
+                <Text style={styles.cardHeaderPillText}>전체 보기 →</Text>
               </TouchableOpacity>
             </View>
 
@@ -385,6 +458,104 @@ export default function HomeScreen({
         </View>
 
         {/* ========================================================= */}
+        {/* 2.5 💬 오늘의 스몰톡 즉시 답변 (오늘의 일정 바로 아래)     */}
+        {/* ========================================================= */}
+        <View style={styles.cardSection}>
+          <View style={[styles.dashboardCard, styles.smallTalkHomeCard]}>
+            {/* 상단 헤더: 라벨 + 포인트 뱃지 + 스몰톡 전체 보기 */}
+            <View style={styles.cardHeaderRow}>
+              <View style={styles.cardHeaderLeftCol}>
+                <View style={styles.smallTalkBadgeRow}>
+                  <Text style={[styles.cardSubLabel, styles.smallTalkSubLabel]}>오늘의 스몰톡</Text>
+                  <View style={styles.smallTalkPointsPill}>
+                    <Text style={styles.smallTalkPointsPillText}>+5 P</Text>
+                  </View>
+                </View>
+                <Text style={styles.smallTalkCategoryText}>{topicCategory}</Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.cardHeaderPillBtn}
+                onPress={() => onNavigateScreen && onNavigateScreen('smalltalk')}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.cardHeaderPillText}>전체 보기 →</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* 질문 본문 */}
+            <TouchableOpacity
+              onPress={() => onNavigateScreen && onNavigateScreen('smalltalk')}
+              activeOpacity={0.85}
+              style={styles.smallTalkQuestionBox}
+            >
+              <Text style={styles.smallTalkQuestionText}>
+                {topicTitle}
+              </Text>
+            </TouchableOpacity>
+
+            {/* 카드 구분선 */}
+            <View style={[styles.cardDivider, styles.smallTalkDivider]} />
+
+            {/* 답변 입력 또는 내 답변 노출 영역 */}
+            {myResponse ? (
+              <View style={styles.myAnswerDoneBox}>
+                <View style={styles.myAnswerHeaderRow}>
+                  <View style={styles.myAnswerBadge}>
+                    <Text style={styles.myAnswerCheckIcon}>✓</Text>
+                    <Text style={styles.myAnswerBadgeText}>내 답변 완료 (+5P 적립됨)</Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => onNavigateScreen && onNavigateScreen('smalltalk')}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.myAnswerEditBtn}>수정 ✍️</Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.myAnswerContentText} numberOfLines={2}>
+                  "{myResponse}"
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.quickAnswerInputContainer}>
+                <TextInput
+                  style={styles.quickAnswerInput}
+                  placeholder="답변을 남겨보세요... (+5P)"
+                  placeholderTextColor="#A8A29E"
+                  value={smallTalkInputText}
+                  onChangeText={setSmallTalkInputText}
+                  multiline={false}
+                  returnKeyType="send"
+                  onSubmitEditing={handleQuickSubmitSmallTalk}
+                />
+                <TouchableOpacity
+                  style={[
+                    styles.quickAnswerSubmitBtn,
+                    (!smallTalkInputText.trim() || isSubmittingAnswer) && styles.quickAnswerSubmitBtnDisabled,
+                  ]}
+                  onPress={handleQuickSubmitSmallTalk}
+                  disabled={!smallTalkInputText.trim() || isSubmittingAnswer}
+                  activeOpacity={0.85}
+                >
+                  <Send size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
+                  <Text style={styles.quickAnswerSubmitBtnText}>등록</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* 하단 가족 참여 진행 현황 */}
+            <View style={styles.smallTalkFooterRow}>
+              <Text style={styles.smallTalkParticipationText}>
+                가족 참여: <Text style={{ fontWeight: '800', color: '#1C1917' }}>{answeredMembersCount}명</Text> / {displayFamilyMembers.length}명
+              </Text>
+              <Text style={styles.smallTalkBonusHint}>
+                {allAnswered ? '🎉 전원 완료 (+30P 보너스 달성!)' : '모두 참여 시 +30 P 보너스 🎁'}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* ========================================================= */}
         {/* 3. 오늘의 퀘스트 진행도 카드 (이미지 시안 스타일)             */}
         {/* ========================================================= */}
         <View style={styles.cardSection}>
@@ -404,11 +575,11 @@ export default function HomeScreen({
               </View>
 
               <TouchableOpacity
-                style={styles.questPillBtn}
+                style={styles.cardHeaderPillBtn}
                 onPress={() => onNavigateScreen && onNavigateScreen('smalltalk')}
                 activeOpacity={0.7}
               >
-                <Text style={styles.questPillText}>전체 보기 →</Text>
+                <Text style={styles.cardHeaderPillText}>전체 보기 →</Text>
               </TouchableOpacity>
             </View>
 
@@ -450,16 +621,11 @@ export default function HomeScreen({
             onPress={() => onNavigateScreen && onNavigateScreen('interior')}
             activeOpacity={0.9}
           >
-            {/* 카드 상단 헤더: 서브라벨 + 펫 이름/단계 + 거실 가기 버튼 */}
+            {/* 카드 상단 헤더: 서브라벨 + 펫 이름/단계 + 보러가기 버튼 */}
             <View style={styles.cardHeaderRow}>
               <View style={styles.cardHeaderLeftCol}>
                 <View style={styles.petSubLabelRow}>
                   <Text style={[styles.cardSubLabel, styles.petSubLabel]}>우리 가족 반려몽</Text>
-                  {canHarvestFruit && (
-                    <View style={styles.harvestFruitChip}>
-                      <Text style={styles.harvestFruitChipText}>🍇 열매 결실</Text>
-                    </View>
-                  )}
                 </View>
                 <View style={styles.petTitleRow}>
                   <Text style={styles.cardMainTitle}>{activePetmong?.name || '우리 몽이'}</Text>
@@ -468,11 +634,11 @@ export default function HomeScreen({
               </View>
 
               <TouchableOpacity
-                style={styles.petPillBtn}
+                style={styles.cardHeaderPillBtn}
                 onPress={() => onNavigateScreen && onNavigateScreen('interior')}
                 activeOpacity={0.7}
               >
-                <Text style={styles.petPillText}>거실 가기 →</Text>
+                <Text style={styles.cardHeaderPillText}>보러가기 →</Text>
               </TouchableOpacity>
             </View>
 
@@ -483,11 +649,27 @@ export default function HomeScreen({
             <View style={styles.petCardInnerRow}>
               <View style={styles.petEmojiBox}>
                 {activePetmong?.image_url ? (
-                  <Image
-                    source={{ uri: activePetmong.image_url }}
-                    style={styles.petAvatarImage}
-                    resizeMode="contain"
-                  />
+                  Platform.OS === 'web' ? (
+                    <img
+                      src={activePetmong.image_url}
+                      alt={activePetmong.name || '반려몽'}
+                      style={{
+                        width: 56,
+                        height: 56,
+                        objectFit: 'contain',
+                        mixBlendMode: 'multiply',
+                        display: 'block',
+                        pointerEvents: 'none',
+                        userSelect: 'none',
+                      }}
+                    />
+                  ) : (
+                    <Image
+                      source={{ uri: activePetmong.image_url }}
+                      style={styles.petAvatarImage}
+                      resizeMode="contain"
+                    />
+                  )
                 ) : (
                   <Text style={styles.petAvatarEmoji}>{activePetmong?.emoji || '😸'}</Text>
                 )}
@@ -543,16 +725,16 @@ export default function HomeScreen({
                 <Text style={[styles.cardSubLabel, styles.albumSubLabel]}>우리 가족 앨범</Text>
                 <View style={styles.albumTitleRow}>
                   <Text style={styles.cardMainTitle}>이번 달 추억</Text>
-                  <Text style={styles.albumTitleTotal}> · {messages.length + 19}개 보관 중</Text>
+                  <Text style={styles.albumTitleTotal}> · {totalPhotosCount}장 보관 중</Text>
                 </View>
               </View>
 
               <TouchableOpacity
-                style={styles.albumPillBtn}
+                style={styles.cardHeaderPillBtn}
                 onPress={() => onNavigateScreen && onNavigateScreen('album')}
                 activeOpacity={0.7}
               >
-                <Text style={styles.albumPillText}>앨범 보기 →</Text>
+                <Text style={styles.cardHeaderPillText}>앨범 보기 →</Text>
               </TouchableOpacity>
             </View>
 
@@ -738,31 +920,176 @@ const styles = StyleSheet.create({
   // 2. 공통 대시보드 카드 (오늘의 일정 & 오늘의 퀘스트 공통 CSS)
   dashboardCard: {
     borderRadius: 24,
-    borderWidth: 1.2,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#F5F0E8',
     paddingHorizontal: 18,
     paddingTop: 18,
     paddingBottom: 18,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
+    shadowOpacity: 0.04,
     shadowRadius: 8,
-    elevation: 1,
+    elevation: 1.5,
   },
   scheduleCardTheme: {
-    backgroundColor: '#FEFBF2',
-    borderColor: '#F6E8B8',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#F5F0E8',
   },
   questCardTheme: {
-    backgroundColor: '#FFF5F5',
-    borderColor: '#FECDD3',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#F5F0E8',
   },
   petCardTheme: {
-    backgroundColor: '#EEF2FF',
-    borderColor: '#C7D2FE',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#F5F0E8',
   },
   albumCardTheme: {
-    backgroundColor: '#FFF7ED',
-    borderColor: '#FED7AA',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#F5F0E8',
+  },
+  smallTalkHomeCard: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#F5F0E8',
+  },
+  smallTalkSubLabel: {
+    color: '#FF6B47',
+  },
+  smallTalkBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 2,
+  },
+  smallTalkPointsPill: {
+    backgroundColor: '#FFF5F2',
+    paddingHorizontal: 7,
+    paddingVertical: 1,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FFE8E0',
+  },
+  smallTalkPointsPillText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#FF6B47',
+  },
+  smallTalkCategoryText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#A8A29E',
+  },
+  smallTalkLinkText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FF6B47',
+  },
+  smallTalkQuestionBox: {
+    marginTop: 10,
+    marginBottom: 4,
+    paddingVertical: 2,
+  },
+  smallTalkQuestionText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1C1917',
+    lineHeight: 23,
+    letterSpacing: -0.3,
+  },
+  smallTalkDivider: {
+    backgroundColor: '#F5F0E8',
+    marginVertical: 12,
+  },
+  myAnswerDoneBox: {
+    backgroundColor: '#FFF5F2',
+    borderWidth: 1,
+    borderColor: '#FFE4DC',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+  },
+  myAnswerHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  myAnswerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  myAnswerCheckIcon: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#16A34A',
+  },
+  myAnswerBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#16A34A',
+  },
+  myAnswerEditBtn: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#78716C',
+  },
+  myAnswerContentText: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: '#292524',
+    lineHeight: 19,
+  },
+  quickAnswerInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FAF8F3',
+    borderRadius: 14,
+    borderWidth: 1.2,
+    borderColor: '#E8E0D0',
+    paddingLeft: 12,
+    paddingRight: 6,
+    paddingVertical: 5,
+    marginBottom: 10,
+  },
+  quickAnswerInput: {
+    flex: 1,
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: '#1C1917',
+    paddingVertical: 6,
+  },
+  quickAnswerSubmitBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FF6B47',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  quickAnswerSubmitBtnDisabled: {
+    backgroundColor: '#E8E0D0',
+  },
+  quickAnswerSubmitBtnText: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  smallTalkFooterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 2,
+  },
+  smallTalkParticipationText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#78716C',
+  },
+  smallTalkBonusHint: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FF6B47',
   },
   cardHeaderRow: {
     flexDirection: 'row',
@@ -777,18 +1104,19 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 4,
     letterSpacing: -0.2,
+    color: '#78716C',
   },
   scheduleSubLabel: {
-    color: '#854D0E',
+    color: '#78716C',
   },
   questSubLabel: {
-    color: '#9F1239',
+    color: '#78716C',
   },
   petSubLabel: {
-    color: '#4338CA',
+    color: '#78716C',
   },
   albumSubLabel: {
-    color: '#C2410C',
+    color: '#78716C',
   },
   cardMainTitle: {
     fontSize: 20,
@@ -803,51 +1131,76 @@ const styles = StyleSheet.create({
   questTitleTotal: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#FDA4AF',
+    color: '#A8A29E',
+  },
+  cardHeaderPillBtn: {
+    backgroundColor: '#FAF8F3',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#F5F0E8',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+    elevation: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'flex-start',
+  },
+  cardHeaderPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FF6B47',
+    letterSpacing: -0.2,
   },
   cardActionLink: {
     paddingVertical: 4,
     paddingHorizontal: 4,
   },
   scheduleLinkText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
-    color: '#854D0E',
+    color: '#FF6B47',
   },
   questPillBtn: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FAF8F3',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#FEE2E2',
+    borderColor: '#F5F0E8',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
     elevation: 1,
+    alignSelf: 'flex-start',
   },
   questPillText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#9F1239',
+    color: '#FF6B47',
   },
   cardDivider: {
     height: 1,
     width: '100%',
     marginVertical: 14,
+    backgroundColor: '#F5F0E8',
   },
   scheduleDivider: {
-    backgroundColor: '#F8E8BE',
+    backgroundColor: '#F5F0E8',
   },
   questDivider: {
-    backgroundColor: '#FEE2E2',
+    backgroundColor: '#F5F0E8',
   },
   petDivider: {
-    backgroundColor: '#E0E7FF',
+    backgroundColor: '#F5F0E8',
   },
   albumDivider: {
-    backgroundColor: '#FFEDD5',
+    backgroundColor: '#F5F0E8',
   },
 
   // 2.1 오늘의 일정 전용 스타일
@@ -862,15 +1215,12 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 13,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FAF8F3',
+    borderWidth: 1,
+    borderColor: '#F5F0E8',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
   },
   scheduleEmojiText: {
     fontSize: 20,
@@ -914,14 +1264,14 @@ const styles = StyleSheet.create({
   // 3.1 오늘의 퀘스트 전용 스타일
   progressBarTrack: {
     height: 8,
-    backgroundColor: '#FECDD3',
+    backgroundColor: '#F5F0E8',
     borderRadius: 4,
     overflow: 'hidden',
     marginBottom: 10,
   },
   progressBarFill: {
     height: '100%',
-    backgroundColor: '#E11D48',
+    backgroundColor: '#FF6B47',
     borderRadius: 4,
   },
   questMetaRow: {
@@ -932,7 +1282,7 @@ const styles = StyleSheet.create({
   questRemainingText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#9F1239',
+    color: '#78716C',
   },
   questPercentText: {
     fontSize: 13,
@@ -967,26 +1317,26 @@ const styles = StyleSheet.create({
   petTitleSub: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#6366F1',
+    color: '#78716C',
     marginLeft: 4,
   },
   petPillBtn: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FAF8F3',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#C7D2FE',
+    borderColor: '#F5F0E8',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
     elevation: 1,
   },
   petPillText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#4338CA',
+    color: '#FF6B47',
   },
   petCardInnerRow: {
     flexDirection: 'row',
@@ -995,21 +1345,17 @@ const styles = StyleSheet.create({
   petEmojiBox: {
     width: 60,
     height: 60,
-    borderRadius: 16,
-    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
     position: 'relative',
+    backgroundColor: 'transparent',
   },
   petAvatarImage: {
-    width: 52,
-    height: 52,
+    width: 56,
+    height: 56,
+    resizeMode: 'contain',
+    ...(Platform.OS === 'web' ? { mixBlendMode: 'multiply' } : {}),
   },
   petAvatarEmoji: {
     fontSize: 34,
@@ -1043,12 +1389,12 @@ const styles = StyleSheet.create({
     width: 60,
     fontSize: 11,
     fontWeight: '700',
-    color: '#4338CA',
+    color: '#78716C',
   },
   petStatBarBg: {
     flex: 1,
     height: 6,
-    backgroundColor: '#E0E7FF',
+    backgroundColor: '#F5F0E8',
     borderRadius: 3,
     overflow: 'hidden',
   },
@@ -1064,18 +1410,18 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   petRoutineBubble: {
-    backgroundColor: '#F5F3FF',
+    backgroundColor: '#FAF8F3',
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 4,
     marginTop: 2,
-    borderWidth: 0.5,
-    borderColor: '#DDD6FE',
+    borderWidth: 1,
+    borderColor: '#F5F0E8',
   },
   petRoutineText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#4F46E5',
+    color: '#78716C',
   },
 
   // 5. 우리 가족 앨범 전용 스타일
@@ -1087,26 +1433,26 @@ const styles = StyleSheet.create({
   albumTitleTotal: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#F97316',
+    color: '#78716C',
     marginLeft: 4,
   },
   albumPillBtn: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FAF8F3',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#FED7AA',
+    borderColor: '#F5F0E8',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
     elevation: 1,
   },
   albumPillText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#C2410C',
+    color: '#FF6B47',
   },
   albumInnerRow: {
     flexDirection: 'row',
@@ -1116,15 +1462,12 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 14,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FAF8F3',
+    borderWidth: 1,
+    borderColor: '#F5F0E8',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
   },
   albumEmojiText: {
     fontSize: 22,
@@ -1147,7 +1490,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#F97316',
+    backgroundColor: '#FF6B47',
     marginLeft: 8,
   },
 });

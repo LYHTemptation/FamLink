@@ -36,6 +36,82 @@ import {
   MessageCircle,
 } from 'lucide-react-native';
 import UserAvatar from './UserAvatar';
+import { stripEmojis } from '../utils/topics';
+
+/**
+ * 대화방 목록 시간 포맷팅 (카카오톡/라인/메신저 표준 UX):
+ * - 오늘: 오전/오후 H:MM (예: 오후 6:05)
+ * - 어제: '어제'
+ * - 올해: M월 D일 (예: 10월 2일)
+ * - 작년 이전: YYYY.MM.DD (예: 2025.12.31)
+ */
+export const formatChatRoomTime = (dateOrIso, fallbackTimestamp) => {
+  let msgDate = null;
+  if (dateOrIso) {
+    const d = new Date(dateOrIso);
+    if (!isNaN(d.getTime())) {
+      msgDate = d;
+    }
+  }
+
+  if (!msgDate && fallbackTimestamp) {
+    return fallbackTimestamp;
+  }
+
+  if (!msgDate) {
+    return '대화 가능';
+  }
+
+  const now = new Date();
+  const isSameYear = msgDate.getFullYear() === now.getFullYear();
+  const isSameMonth = msgDate.getMonth() === now.getMonth();
+  const isSameDate = msgDate.getDate() === now.getDate();
+
+  // 1. 오늘: 시간 표시
+  if (isSameYear && isSameMonth && isSameDate) {
+    const isPm = msgDate.getHours() >= 12;
+    const hours = msgDate.getHours() % 12 || 12;
+    const minutes = msgDate.getMinutes() < 10 ? `0${msgDate.getMinutes()}` : msgDate.getMinutes();
+    return `${isPm ? '오후' : '오전'} ${hours}:${minutes}`;
+  }
+
+  // 2. 어제: '어제'
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  const isYesterday = (
+    msgDate.getFullYear() === yesterday.getFullYear() &&
+    msgDate.getMonth() === yesterday.getMonth() &&
+    msgDate.getDate() === yesterday.getDate()
+  );
+  if (isYesterday) {
+    return '어제';
+  }
+
+  // 3. 올해 (어제 이전): M월 D일
+  if (isSameYear) {
+    return `${msgDate.getMonth() + 1}월 ${msgDate.getDate()}일`;
+  }
+
+  // 4. 작년 이전: YYYY.MM.DD
+  const month = String(msgDate.getMonth() + 1).padStart(2, '0');
+  const day = String(msgDate.getDate()).padStart(2, '0');
+  return `${msgDate.getFullYear()}.${month}.${day}`;
+};
+
+export const parseKoreanTimeToMs = (timeStr) => {
+  if (!timeStr || typeof timeStr !== 'string') return 0;
+  const match = timeStr.match(/(오전|오후)\s*(\d{1,2}):(\d{2})/);
+  if (match) {
+    const isPm = match[1] === '오후';
+    let hours = parseInt(match[2], 10);
+    const minutes = parseInt(match[3], 10);
+    if (isPm && hours < 12) hours += 12;
+    if (!isPm && hours === 12) hours = 0;
+    const d = new Date();
+    d.setHours(hours, minutes, 0, 0);
+    return d.getTime();
+  }
+  return 0;
+};
 
 export default function ChatScreen({
   messages,
@@ -265,16 +341,29 @@ export default function ChatScreen({
     const last = roomMsgs[roomMsgs.length - 1];
     const sender = getSenderInfo(last.profile_id, last.sender, last.senderObj);
     const text = last.image ? '📷 사진을 공유했습니다.' : (last.text || '');
+
+    let timestampMs = 0;
+    const dateSource = last.created_at || last.rawDate;
+    if (dateSource) {
+      const parsed = new Date(dateSource).getTime();
+      if (!isNaN(parsed)) timestampMs = parsed;
+    }
+    if (!timestampMs && last.timestamp) {
+      timestampMs = parseKoreanTimeToMs(last.timestamp);
+    }
+
     return {
       senderName: sender?.name || '가족',
       text: text,
       fullText: `${sender?.name || '가족'}: ${text}`,
-      time: last.timestamp || '방금',
+      time: formatChatRoomTime(dateSource, last.timestamp),
+      timestampMs: timestampMs || 0,
     };
   };
 
   // Dynamic SmallTalk topic and latest response info for banner
-  const todayTopic = smallTalk?.topic || '오늘 가장 기분 좋았던 순간은?';
+  const rawTopic = smallTalk?.topic || '오늘 가장 기분 좋았던 순간은?';
+  const todayTopic = stripEmojis(typeof rawTopic === 'string' ? rawTopic : (rawTopic.text || rawTopic.title || '오늘 가장 기분 좋았던 순간은?'));
   const responses = smallTalk?.responses || {};
   const responseKeys = Object.keys(responses);
   const responseCount = responseKeys.length;
@@ -391,7 +480,8 @@ export default function ChatScreen({
       title: '우리 가족 수다방',
       subtitle: `가족 ${memberCount || 4}명`,
       lastMessage: familyLast ? familyLast.fullText : '가족들과 따뜻한 이야기를 나눠보세요! 💬',
-      time: familyLast ? familyLast.time : '방금',
+      time: familyLast ? familyLast.time : '대화 가능',
+      lastMessageTimestamp: familyLast ? familyLast.timestampMs : 0,
       avatar: '👨‍👩‍👧‍👦',
       color: '#FF6B47',
       badge: familyGroupUnread > 0 ? `${familyGroupUnread}` : null,
@@ -407,7 +497,8 @@ export default function ChatScreen({
       CHAT_ROOMS.push({
         ...room,
         lastMessage: last ? last.fullText : (room.lastMessage || '새로운 대화방입니다. 인사 나눠보세요!'),
-        time: last ? last.time : (room.time || '방금'),
+        time: last ? last.time : (room.time || '대화 가능'),
+        lastMessageTimestamp: last ? last.timestampMs : 0,
         badge: count > 0 ? `${count}` : null,
       });
     });
@@ -434,6 +525,7 @@ export default function ChatScreen({
           subtitle: `1:1 대화방`,
           lastMessage: last ? last.fullText : `${member.name}님에게 메시지를 보내보세요.`,
           time: last ? last.time : '대화 가능',
+          lastMessageTimestamp: last ? last.timestampMs : 0,
           avatar: member.avatar || '👦',
           color: member.color || '#3B82F6',
           badge: count > 0 ? `${count}` : null,
@@ -442,6 +534,19 @@ export default function ChatScreen({
       }
     });
   }
+
+  // 🚀 대화방 최신순 정렬 (카카오톡/라인/메신저 표준 UX)
+  CHAT_ROOMS.sort((a, b) => {
+    const timeA = a.lastMessageTimestamp || 0;
+    const timeB = b.lastMessageTimestamp || 0;
+    if (timeB !== timeA) {
+      return timeB - timeA;
+    }
+    // 대화 내역이 없는 방들 간에는 기본 가족 수다방 우선
+    if (a.id === 'family-group') return -1;
+    if (b.id === 'family-group') return 1;
+    return 0;
+  });
 
   const handleToggleMemberSelect = (roleKey) => {
     if (selectedMembers.includes(roleKey)) {

@@ -294,7 +294,7 @@ export default function DreamConstellationGame({
           Animated.timing(constCompleteAnim, { toValue: 0, duration: 300, useNativeDriver: false }),
         ]).start();
 
-        triggerToast(`🌟 [${currentConstellation.name}] 완성! +200 P`, '#F59E0B', screenWidthRef.current / 2, 220);
+        triggerToast(`🌟 [${currentConstellation.name}] 완성! +200점`, '#F59E0B', screenWidthRef.current / 2, 220);
 
         // Next Constellation or Finish
         transitionTimerRef.current = setTimeout(() => {
@@ -405,13 +405,13 @@ export default function DreamConstellationGame({
   };
 
   const handleClaimAndClose = () => {
-    const finalPoints = Math.max(15, Math.min(150, Math.round(score / 5) + completedConstCount * 15));
+    const finalExp = Math.max(15, Math.min(50, Math.round(score / 20) + completedConstCount * 10));
 
     if (onGameComplete) {
       onGameComplete({
         score,
         completedCount: completedConstCount,
-        points: finalPoints,
+        exp: finalExp,
       });
     }
     if (onClose) onClose();
@@ -512,7 +512,7 @@ export default function DreamConstellationGame({
           {/* Score Counter */}
           <View style={[styles.hudPill, styles.hudPillScore]}>
             <Trophy size={16} color="#FBBF24" />
-            <Text style={styles.scoreText}>{score} P</Text>
+            <Text style={styles.scoreText}>{score}점</Text>
           </View>
 
           {/* Close Game Button */}
@@ -667,7 +667,7 @@ export default function DreamConstellationGame({
             onPress={() => {
               setShootingStar(null);
               setScore(s => s + 80);
-              triggerToast('별똥별 소원 보너스! (+80 P)', '#FBBF24', shootingStar.x, shootingStar.y);
+              triggerToast('별똥별 소원 보너스! (+80점)', '#FBBF24', shootingStar.x, shootingStar.y);
             }}
             activeOpacity={0.8}
           >
@@ -801,7 +801,7 @@ export default function DreamConstellationGame({
                 <View style={styles.instructionItem}>
                   <Gift size={16} color="#A5B4FC" style={{ marginRight: 8 }} />
                   <Text style={styles.instructionText}>
-                    별자리 완성 시 등급별 풍성한 가족 포인트(P) 보상 지급!
+                    별자리 완성 시 등급별 풍성한 반려몽 성장 경험치(EXP) 지급!
                   </Text>
                 </View>
               </View>
@@ -855,9 +855,9 @@ export default function DreamConstellationGame({
                 <Text style={styles.rewardBoxTitle}>🎉 미니게임 완료 보상</Text>
                 <View style={styles.rewardRow}>
                   <View style={styles.rewardPill}>
-                    <Text style={styles.rewardPillEmoji}>🏆</Text>
-                    <Text style={[styles.rewardPillText, { fontWeight: '800', color: '#B45309' }]}>
-                      가족 포인트 +{Math.max(15, Math.min(150, Math.round(score / 5) + completedConstCount * 15))} P 적립!
+                    <Text style={styles.rewardPillEmoji}>🌱</Text>
+                    <Text style={[styles.rewardPillText, { fontWeight: '800', color: '#15803D' }]}>
+                      반려몽 성장 경험치 +{Math.max(15, Math.min(50, Math.round(score / 20) + completedConstCount * 10))} EXP 획득!
                     </Text>
                   </View>
                 </View>

@@ -26,7 +26,7 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v56.0.0/ before 
 - **윤호 계정**: `test@naver.com` / `kun916211`
 - **윤성 계정**: `test2@naver.com` / `kun916211`
 - **포인트 부자 테스트 계정**: `rich_test@famlink.com` / `password1234!` (가족코드: `FAM-RICH99`, 포인트: `50,000 P`)
-- **용도**: 브라우저 일반 창 vs 시크릿 창 다중 로그인 테스트, 1:1 채팅 및 가구 해금/포인트 상점 검증용
+- **용도**: 브라우저 일반 창 vs 시크릿 창 다중 로그인 테스트, 1:1 채팅 및 가족 포인트 자산 검증용
 
 # 🛡️ 코드 정적 분석 및 무결성 검증 강제 규칙 (Pre-Commit Zero ReferenceError Check)
 
@@ -88,6 +88,49 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v56.0.0/ before 
   3. **데이터베이스 & 실시간 연동 시**:
      - *“가족 구성원 간 실시간 데이터 동기화(`supabase.channel`) 구독 시 중복 구독 및 메모리 누수가 방지되었는가?”*
      - *“오프라인 또는 API 응답 지연 시 `AsyncStorage` 로컬 캐시와 낙관적 UI 업데이트(Optimistic Update)가 제공되는가?”*
+
+# 🎨 FamLink 디자인 시스템 & 스타일 규칙 헌장 (Design System & Styling Charter)
+
+신규 화면/컴포넌트를 제작하거나 기존 화면을 수정할 때는 반드시 아래의 통합 스타일 가이드라인을 엄격히 준수하세요.
+
+### 1. 단일 진실 원칙 (Single Source of Truth)
+- 모든 공통 색상 및 컴포넌트 스타일은 `theme/colors.js`와 `theme/commonStyles.js`를 최우선으로 import하여 사용하세요.
+- 임의의 HEX 컬러 하드코딩을 지양하고 테마 토큰 객체를 참조하세요.
+
+### 2. Figma Warm Cozy Living 컬러 팔레트 준수
+- **Brand Primary (코랄 오렌지)**: `#FF6B47` (주요 CTA, 활성 탭, 대표 포인트)
+- **Primary Tint (소프트 피치)**: `#FFF5F2` (선택된 칩 배경, 보너스/알림 뱃지, 연한 하이라이트)
+- **Primary Border**: `#FFE8E0` (피치 배경 카드 테두리)
+- **Canvas Background (웜 아이보리)**: `#FAF8F3` (앱 전역 스크린 배경, 차가운 쿨그레이 `#F8F9FA` 대체)
+- **Surface / Card (카드 표면)**: `#FFFFFF` (입체형 정보 카드 배경)
+- **Border / Divider (웜 스톤 보더)**: `#F5F0E8` (기본 카드 외곽선, 구분선)
+- **Text 계층 구조 (Stone Warm Greys)**:
+  - Header / Primary: `#1C1917` (Stone 900 - 타이틀, 메인 라벨)
+  - Sub / Secondary: `#78716C` (Stone 500 - 보조 설명, 날짜/시간, 힌트)
+  - Placeholder / Disabled: `#A8A29E` (Stone 400 - 인풋 플레이스홀더, 비활성 텍스트)
+- **Accent**:
+  - Petmong Purple: `#7C3AED` (반려몽 육성/스킬/상점 포인트)
+  - Success Green: `#2ECC71` (완료 체크, 온라인 상태 표시)
+- ⚠️ **절대 사용 금지 레거시 컬러**: 구형 연분홍 핑크 `#FF7E82`, `#FFF2F3`, `#FFE5E7` 및 차가운 블루그레이 `#F8F9FA`, `#F2F2F7`의 무분별한 신규 코드 삽입을 금지합니다.
+
+### 3. 카드 & 레이아웃 구조 (Card & Layout Architecture)
+- **화면 컨테이너**: `commonStyles.screenContainer` 적용 (`backgroundColor: '#FAF8F3'`)
+- **정보 카드**: `borderRadius: 20`, `padding: 18`~`20`, `backgroundColor: '#FFFFFF'`, `borderWidth: 1`, `borderColor: '#F5F0E8'`, 가벼운 음영(`elevation: 2`)
+- **인터랙티브 배너/가이드 카드**: `borderRadius: 18`~`20`, `backgroundColor: '#FFF5F2'`, `borderColor: '#FFE8E0'`
+- **스크롤 여백**: `padding: 16`~`20`, 하단 탭 바 겹침 방지를 위해 `paddingBottom: 40` 이상 확보
+
+### 4. 버튼 및 폼 컨트롤 규격 (Buttons & Form Controls)
+- **메인 CTA 버튼**: `height: 52`, `borderRadius: 16`, `backgroundColor: '#FF6B47'`, 폰트 `fontSize: 15`~`16`, `fontWeight: '700'|'800'`, 텍스트 색상 `#FFFFFF`
+- **보조 버튼 / 선택 칩**: `borderRadius: 12`~`14`, 미선택 시 `#FAF8F3`+`#F5F0E8` 보더, 선택 시 `#FFF5F2`+`#FF6B47` 보더
+- **텍스트 인풋 필드**: `height: 48`, `borderRadius: 12`~`14`, `backgroundColor: '#FAF8F3'`, `borderWidth: 1`, `borderColor: '#F5F0E8'`, 텍스트 색상 `#1C1917`
+- **모달 바텀시트**: `commonStyles.modalBottomSheet` 사용 (`borderTopLeftRadius: 24`, `borderTopRightRadius: 24`, `backgroundColor: '#FFFFFF'`)
+
+### 5. 타이포그래피 스케일 (Typography Hierarchy)
+- **화면 대제목 (Screen Title)**: 20~22px, `fontWeight: '800'`, `#1C1917`
+- **섹션 제목 (Section Title)**: 15~16px, `fontWeight: '700'`, `#1C1917`
+- **본문 / 리스트 항목 (Body Text)**: 13~14px, `fontWeight: '600'|'500'`, `#1C1917`
+- **캡션 / 메타 정보 (Caption & Tags)**: 10~12px, `fontWeight: '600'|'700'`, `#78716C` 또는 `#FF6B47`
+
 
 
 

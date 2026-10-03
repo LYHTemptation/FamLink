@@ -11,6 +11,7 @@ import {
   TextInput,
   Alert,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -39,7 +40,9 @@ import {
   ChevronUp,
 } from 'lucide-react-native';
 import FamilyStorybookModal from './FamilyStorybookModal';
-import { PREDEFINED_TOPICS } from '../utils/topics';
+import PhotobookStudioScreen from './PhotobookStudioScreen';
+import { PREDEFINED_TOPICS, getTopicForDate, getTopicForToday, stripEmojis } from '../utils/topics';
+import { fetchSmallTalkTopicsFromDB, getTopicForDateFromList } from '../services/smallTalkService';
 import { supabase } from '../lib/supabase';
 import UserAvatar from './UserAvatar';
 
@@ -64,6 +67,10 @@ export default function PhotoAlbumScreen({
   points = 0,
   onDeductPoints,
 }) {
+  const { width: windowWidth } = useWindowDimensions();
+  const screenWidth = windowWidth || Dimensions.get('window').width;
+  const isSmallScreen = screenWidth < 380;
+
   // Navigation Tabs: 'photobook' (스냅스 포토북 스튜디오) | 'smalltalk-archive' (스몰톡 아카이브) | 'photos' (전체 사진함)
   const [activeTab, setActiveTab] = useState('photobook');
 
@@ -85,7 +92,11 @@ export default function PhotoAlbumScreen({
 
   // SmallTalk Archive States (Monthly fast-jump & Accordion)
   const [dbResponses, setDbResponses] = useState([]);
-  const [selectedMonth, setSelectedMonth] = useState('2026-09'); // e.g. '2026-09' | 'all'
+  const [dbTopics, setDbTopics] = useState([]);
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }); // e.g. '2026-10' (현재 월 자동 선택) | 'all'
   const [expandedTopicIds, setExpandedTopicIds] = useState(['topic-0']); // Accordion open set
   const [archiveFilter, setArchiveFilter] = useState('all'); // 'all' | 'answered' | 'in-book'
   const [searchQuery, setSearchQuery] = useState('');
@@ -143,21 +154,27 @@ export default function PhotoAlbumScreen({
     }
   };
 
-  // Fetch all small talk responses from Supabase
+  // Fetch all small talk responses and topics from Supabase
   const fetchSmallTalkHistory = async () => {
     if (!currentUserProfile?.family_id) return;
     try {
-      const { data, error } = await supabase
-        .from('small_talk_responses')
-        .select('*')
-        .eq('family_id', currentUserProfile.family_id)
-        .order('created_at', { ascending: false });
+      const [respResult, topics] = await Promise.all([
+        supabase
+          .from('small_talk_responses')
+          .select('*')
+          .eq('family_id', currentUserProfile.family_id)
+          .order('created_at', { ascending: false }),
+        fetchSmallTalkTopicsFromDB(currentUserProfile.family_id),
+      ]);
 
-      if (!error && data) {
-        setDbResponses(data);
+      if (!respResult.error && respResult.data) {
+        setDbResponses(respResult.data);
+      }
+      if (Array.isArray(topics) && topics.length > 0) {
+        setDbTopics(topics);
       }
     } catch (e) {
-      console.warn('Failed to fetch small_talk_responses:', e);
+      console.warn('Failed to fetch small talk history from DB:', e);
     }
   };
 
@@ -207,15 +224,17 @@ export default function PhotoAlbumScreen({
     return DEFAULTS[idOrRole] || '👦';
   };
 
-  // Family creation date (lower bound for archive dates)
+  // Family creation date (lower bound for archive dates, start of creation month)
   const familyCreatedAt = useMemo(() => {
     const raw = currentUserProfile?.family_created_at || currentUserProfile?.created_at;
     if (raw) {
       const d = new Date(raw);
-      if (!isNaN(d.getTime())) return d;
+      if (!isNaN(d.getTime())) {
+        return new Date(d.getFullYear(), d.getMonth(), 1);
+      }
     }
-    // Safe fallback: 2026-07-01
-    return new Date(2026, 6, 1);
+    // Safe fallback: 2026-09-01
+    return new Date(2026, 8, 1);
   }, [currentUserProfile?.family_created_at, currentUserProfile?.created_at]);
 
   // All valid calendar months since the family group was created (current month down to creation month)
@@ -247,20 +266,21 @@ export default function PhotoAlbumScreen({
     return list;
   }, [familyCreatedAt]);
 
-  // Build the complete SmallTalk Archive list with calculated calendar dates & months
+  // Build the complete SmallTalk Archive list with all calendar daily questions + DB answers
   const smallTalkArchiveList = useMemo(() => {
     const list = [];
-    const todayTopic = smallTalkState?.topic || PREDEFINED_TOPICS[0];
+    const todayTopic = smallTalkState?.topic || getTopicForToday();
     const todayResponses = smallTalkState?.responses || {};
 
-    // 1. Group DB responses by topic
+    // 1. Group DB responses by topic (clean topic string without emojis)
     const dbTopicMap = {};
     (dbResponses || []).forEach(row => {
       if (!row.topic) return;
-      if (!dbTopicMap[row.topic]) {
-        dbTopicMap[row.topic] = [];
+      const cleanKey = stripEmojis(row.topic);
+      if (!dbTopicMap[cleanKey]) {
+        dbTopicMap[cleanKey] = [];
       }
-      dbTopicMap[row.topic].push({
+      dbTopicMap[cleanKey].push({
         id: row.id,
         profile_id: row.profile_id,
         text: row.text,
@@ -269,16 +289,28 @@ export default function PhotoAlbumScreen({
     });
 
     const now = new Date();
+    const todayYear = now.getFullYear();
+    const todayMonth = now.getMonth();
+    const todayDate = now.getDate();
 
-    // 2. Collect all unique topics that have real answers + today's active question
-    const allTopics = new Set();
-    if (todayTopic) allTopics.add(todayTopic);
-    Object.keys(dbTopicMap).forEach(t => allTopics.add(t));
+    // 2. Iterate each calendar day from today backwards to familyCreatedAt
+    const startCursor = new Date(familyCreatedAt.getFullYear(), familyCreatedAt.getMonth(), familyCreatedAt.getDate(), 0, 0, 0);
+    const curCursor = new Date(todayYear, todayMonth, todayDate, 12, 0, 0);
 
+    const coveredTopics = new Set();
     let topicIdx = 0;
-    allTopics.forEach(topic => {
-      const isToday = topic === todayTopic;
-      const dbAnswers = dbTopicMap[topic] || [];
+
+    while (curCursor >= startCursor) {
+      const y = curCursor.getFullYear();
+      const m = String(curCursor.getMonth() + 1).padStart(2, '0');
+      const d = String(curCursor.getDate()).padStart(2, '0');
+      const yearMonth = `${y}-${m}`;
+      const yearMonthLabel = `${y}년 ${parseInt(m, 10)}월`;
+
+      const isToday = y === todayYear && curCursor.getMonth() === todayMonth && curCursor.getDate() === todayDate;
+      const topic = isToday ? todayTopic : stripEmojis(getTopicForDateFromList(dbTopics, curCursor));
+      coveredTopics.add(topic);
+
       const answersList = [];
 
       // Check today's active responses from smallTalkState
@@ -297,7 +329,8 @@ export default function PhotoAlbumScreen({
         });
       }
 
-      // Merge DB answers if not already present
+      // Merge DB answers for this topic
+      const dbAnswers = dbTopicMap[topic] || [];
       dbAnswers.forEach(ans => {
         const already = answersList.some(a => a.profileId === ans.profile_id);
         if (!already) {
@@ -312,34 +345,14 @@ export default function PhotoAlbumScreen({
         }
       });
 
-      // Determine real date for this topic
-      let itemDate;
-      const latestAnsDate = answersList.find(a => a.created_at)?.created_at;
-      if (latestAnsDate) {
-        itemDate = new Date(latestAnsDate);
-      } else {
-        itemDate = new Date();
-      }
-
-      // Hard clamp so no question/answer is ever dated before family was created
-      if (itemDate < familyCreatedAt) {
-        itemDate = new Date(familyCreatedAt);
-      }
-
-      const y = itemDate.getFullYear();
-      const m = String(itemDate.getMonth() + 1).padStart(2, '0');
-      const d = String(itemDate.getDate()).padStart(2, '0');
-      const yearMonth = `${y}-${m}`;
-      const yearMonthLabel = `${y}년 ${parseInt(m, 10)}월`;
       const dateLabel = isToday ? '오늘의 질문 🌟' : `${parseInt(m, 10)}월 ${parseInt(d, 10)}일`;
-
       const totalFamily = Math.max(1, familyMembers.length || 4);
       const isAnswered = answersList.length > 0;
       const isComplete = answersList.length >= totalFamily;
-      const isInBook = includedSmallTalkTopics.includes(topic);
+      const isInBook = includedSmallTalkTopics.some(t => stripEmojis(t) === topic);
 
       list.push({
-        id: `topic-${topicIdx}`,
+        id: `topic-${y}-${m}-${d}`,
         topic,
         index: topicIdx + 1,
         isToday,
@@ -348,6 +361,53 @@ export default function PhotoAlbumScreen({
         totalFamily,
         isAnswered,
         isComplete,
+        isInBook,
+        dateLabel,
+        yearMonth,
+        yearMonthLabel,
+        itemDate: new Date(curCursor),
+      });
+
+      topicIdx++;
+      curCursor.setDate(curCursor.getDate() - 1);
+    }
+
+    // 3. Include any extra answered topics from DB that might not match getTopicForDateFromList
+    Object.keys(dbTopicMap).forEach(topic => {
+      if (coveredTopics.has(topic)) return;
+      const dbAnswers = dbTopicMap[topic] || [];
+      if (dbAnswers.length === 0) return;
+
+      const answersList = dbAnswers.map(ans => ({
+        id: ans.id,
+        profileId: ans.profile_id,
+        name: getMemberName(ans.profile_id),
+        avatar: getMemberAvatar(ans.profile_id),
+        text: ans.text,
+        created_at: ans.created_at,
+      }));
+
+      const latestAnsDate = answersList.find(a => a.created_at)?.created_at;
+      const itemDate = latestAnsDate ? new Date(latestAnsDate) : new Date(familyCreatedAt);
+      const y = itemDate.getFullYear();
+      const m = String(itemDate.getMonth() + 1).padStart(2, '0');
+      const d = String(itemDate.getDate()).padStart(2, '0');
+      const yearMonth = `${y}-${m}`;
+      const yearMonthLabel = `${y}년 ${parseInt(m, 10)}월`;
+      const dateLabel = `${parseInt(m, 10)}월 ${parseInt(d, 10)}일`;
+      const totalFamily = Math.max(1, familyMembers.length || 4);
+      const isInBook = includedSmallTalkTopics.some(t => stripEmojis(t) === topic);
+
+      list.push({
+        id: `topic-extra-${topicIdx}`,
+        topic,
+        index: topicIdx + 1,
+        isToday: false,
+        answers: answersList,
+        answeredCount: answersList.length,
+        totalFamily,
+        isAnswered: true,
+        isComplete: answersList.length >= totalFamily,
         isInBook,
         dateLabel,
         yearMonth,
@@ -366,13 +426,19 @@ export default function PhotoAlbumScreen({
     });
 
     return list;
-  }, [smallTalkState, dbResponses, familyMembers, includedSmallTalkTopics, allFamilyMonths, familyCreatedAt]);
+  }, [smallTalkState, dbResponses, dbTopics, familyMembers, includedSmallTalkTopics, familyCreatedAt]);
 
-  // Available Months for fast-jump chips (strictly bounded by familyCreatedAt)
+  // Available Months with total and answered count
   const availableMonths = useMemo(() => {
-    const monthCounts = {};
+    const monthStats = {};
     smallTalkArchiveList.forEach(item => {
-      monthCounts[item.yearMonth] = (monthCounts[item.yearMonth] || 0) + 1;
+      if (!monthStats[item.yearMonth]) {
+        monthStats[item.yearMonth] = { total: 0, answered: 0 };
+      }
+      monthStats[item.yearMonth].total += 1;
+      if (item.isAnswered) {
+        monthStats[item.yearMonth].answered += 1;
+      }
     });
 
     return allFamilyMonths.map(fm => ({
@@ -380,26 +446,68 @@ export default function PhotoAlbumScreen({
       label: fm.label,
       year: fm.year,
       month: fm.month,
-      count: monthCounts[fm.id] || 0,
+      count: monthStats[fm.id]?.total || 0,
+      answeredCount: monthStats[fm.id]?.answered || 0,
     }));
   }, [allFamilyMonths, smallTalkArchiveList]);
 
-  // Quick Jump Chips: Recent up to 3 months + any custom selected past month + "전체 보기"
+  // Quick Jump Chips: 현재 월, 전 월, (필요시 선택된 과거월), 전체
   const displayedChips = useMemo(() => {
-    const recent3 = availableMonths.slice(0, 3);
-    const chips = [...recent3];
+    const chips = [];
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth(); // 0-11
+    const curMonthId = `${curYear}-${String(curMonth + 1).padStart(2, '0')}`;
 
-    // If user selected a past month outside top 3 and not 'all', include it in chips
-    if (selectedMonth !== 'all' && !recent3.some(m => m.id === selectedMonth)) {
+    // 1. 현재 월 (년도 월 형식 + 답변/전체 비율)
+    const curMonthMatch = availableMonths.find(m => m.id === curMonthId);
+    chips.push({
+      id: curMonthId,
+      label: `${curYear}년 ${curMonth + 1}월`,
+      fullLabel: `${curYear}년 ${curMonth + 1}월`,
+      count: curMonthMatch ? curMonthMatch.count : 0,
+      answeredCount: curMonthMatch ? curMonthMatch.answeredCount : 0,
+    });
+
+    // 2. 전 월 (년도 월 형식 + 답변/전체 비율)
+    const prevDate = new Date(curYear, curMonth - 1, 1);
+    const prevYear = prevDate.getFullYear();
+    const prevMonth = prevDate.getMonth();
+    const prevMonthId = `${prevYear}-${String(prevMonth + 1).padStart(2, '0')}`;
+    const prevMonthMatch = availableMonths.find(m => m.id === prevMonthId);
+    chips.push({
+      id: prevMonthId,
+      label: `${prevYear}년 ${prevMonth + 1}월`,
+      fullLabel: `${prevYear}년 ${prevMonth + 1}월`,
+      count: prevMonthMatch ? prevMonthMatch.count : 0,
+      answeredCount: prevMonthMatch ? prevMonthMatch.answeredCount : 0,
+    });
+
+    // 3. 만약 사용자가 '연·월 선택'으로 현재월/전월이 아닌 과거 월을 선택한 경우, 칩 목록에 노출 유지
+    if (selectedMonth !== 'all' && selectedMonth !== curMonthId && selectedMonth !== prevMonthId) {
       const match = availableMonths.find(m => m.id === selectedMonth);
       if (match) {
-        chips.push(match);
+        chips.push({
+          id: match.id,
+          label: match.label,
+          fullLabel: match.label,
+          count: match.count,
+          answeredCount: match.answeredCount,
+        });
       }
     }
 
-    chips.push({ id: 'all', label: '전체 보기', count: smallTalkArchiveList.length });
+    // 4. 전체 (답변/전체 비율)
+    chips.push({
+      id: 'all',
+      label: '전체',
+      fullLabel: '전체',
+      count: smallTalkArchiveList.length,
+      answeredCount: smallTalkArchiveList.filter(i => i.isAnswered).length,
+    });
+
     return chips;
-  }, [availableMonths, selectedMonth, smallTalkArchiveList.length]);
+  }, [availableMonths, selectedMonth, smallTalkArchiveList]);
 
   // Grouped Years for multi-year month picker modal
   const groupedYears = useMemo(() => {
@@ -445,21 +553,27 @@ export default function PhotoAlbumScreen({
     return years;
   }, [familyCreatedAt, availableMonths]);
 
+  // Selected month scope list (or all)
+  const monthScopedList = useMemo(() => {
+    if (selectedMonth === 'all') return smallTalkArchiveList;
+    return smallTalkArchiveList.filter(item => item.yearMonth === selectedMonth);
+  }, [smallTalkArchiveList, selectedMonth]);
+
   // Filtered Archive List based on Monthly chip, Filter chips & Search
   const filteredArchiveList = useMemo(() => {
-    return smallTalkArchiveList.filter(item => {
-      if (selectedMonth !== 'all' && item.yearMonth !== selectedMonth) return false;
+    return monthScopedList.filter(item => {
       if (archiveFilter === 'answered' && !item.isAnswered) return false;
+      if (archiveFilter === 'unanswered' && item.isAnswered) return false;
       if (archiveFilter === 'in-book' && !item.isInBook) return false;
       if (searchQuery.trim()) {
         const query = searchQuery.trim().toLowerCase();
         const topicMatch = item.topic.toLowerCase().includes(query);
-        const ansMatch = item.answers.some(a => a.text.toLowerCase().includes(query) || a.name.toLowerCase().includes(query));
+        const ansMatch = item.answers.some(a => (a.text || '').toLowerCase().includes(query) || (a.name || '').toLowerCase().includes(query));
         return topicMatch || ansMatch;
       }
       return true;
     });
-  }, [smallTalkArchiveList, selectedMonth, archiveFilter, searchQuery]);
+  }, [monthScopedList, archiveFilter, searchQuery]);
 
   // Accordion Toggle Handlers
   const handleToggleExpand = (topicId) => {
@@ -595,31 +709,40 @@ export default function PhotoAlbumScreen({
   return (
     <View style={styles.container}>
       {/* 1. Header Bar matching Figma Home/Together Warm Style */}
-      <View style={styles.headerRow}>
+      <View style={[styles.headerRow, isSmallScreen && { paddingHorizontal: 14, paddingVertical: 12 }]}>
         <View style={styles.headerLeftCol}>
           <Text style={styles.categorySubText}>가족 추억 · PHOTOBOOK & ARCHIVE</Text>
-          <Text style={styles.headerMainTitle}>가족 앨범 & 포토북</Text>
+          <Text style={[styles.headerMainTitle, isSmallScreen && { fontSize: 18 }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+            가족 앨범 & 포토북
+          </Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.openStorybookBtn}
-          onPress={() => setStorybookVisible(true)}
-          activeOpacity={0.85}
-        >
-          <BookOpen size={16} color="#FFFFFF" strokeWidth={2.5} style={{ marginRight: 6 }} />
-          <Text style={styles.openStorybookBtnText}>포토북 펼치기</Text>
-        </TouchableOpacity>
+        {activeTab !== 'photobook' && (
+          <TouchableOpacity
+            style={[styles.openStorybookBtn, isSmallScreen && { paddingHorizontal: 12, paddingVertical: 7 }]}
+            onPress={() => setStorybookVisible(true)}
+            activeOpacity={0.85}
+          >
+            <BookOpen size={15} color="#FFFFFF" strokeWidth={2.5} style={{ marginRight: 5 }} />
+            <Text style={[styles.openStorybookBtnText, isSmallScreen && { fontSize: 12 }]}>포토북 펼치기</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* 2. Top Segmented Navigation Tabs */}
-      <View style={styles.segmentedTabContainer}>
+      <View style={[styles.segmentedTabContainer, isSmallScreen && { marginHorizontal: 14 }]}>
         <TouchableOpacity
           style={[styles.segmentBtn, activeTab === 'photobook' && styles.segmentBtnActive]}
           onPress={() => setActiveTab('photobook')}
           activeOpacity={0.8}
         >
           <BookOpen size={16} color={activeTab === 'photobook' ? '#FF6B47' : '#78716C'} strokeWidth={2.2} />
-          <Text style={[styles.segmentBtnText, activeTab === 'photobook' && styles.segmentBtnTextActive]}>
+          <Text
+            style={[styles.segmentBtnText, activeTab === 'photobook' && styles.segmentBtnTextActive, isSmallScreen && { fontSize: 12 }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.85}
+          >
             포토북 스튜디오
           </Text>
         </TouchableOpacity>
@@ -630,29 +753,38 @@ export default function PhotoAlbumScreen({
           activeOpacity={0.8}
         >
           <MessageSquare size={16} color={activeTab === 'smalltalk-archive' ? '#FF6B47' : '#78716C'} strokeWidth={2.2} />
-          <Text style={[styles.segmentBtnText, activeTab === 'smalltalk-archive' && styles.segmentBtnTextActive]}>
+          <Text
+            style={[styles.segmentBtnText, activeTab === 'smalltalk-archive' && styles.segmentBtnTextActive, isSmallScreen && { fontSize: 12 }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.85}
+          >
             스몰톡 아카이브
           </Text>
-          {includedSmallTalkTopics.length > 0 && (
-            <View style={styles.tabBadge}>
-              <Text style={styles.tabBadgeText}>{includedSmallTalkTopics.length}</Text>
-            </View>
-          )}
         </TouchableOpacity>
       </View>
 
       {/* 3. Main Content Views by Tab */}
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* ========================================================= */}
-        {/* TAB 1: 📖 포토북 스튜디오 (Snaps Photobook Maker)           */}
-        {/* ========================================================= */}
-        {activeTab === 'photobook' && (
-          <View style={styles.photobookStudioSection}>
-            {/* Snaps 3D Book Showcase Card */}
-            <View style={[styles.bookShowcaseCard, { backgroundColor: currentTheme.bg, borderColor: currentTheme.border }]}>
-              {/* Spine & Book Cover Mockup */}
-              <View style={styles.bookCoverMockup}>
-                <View style={[styles.bookSpine, { backgroundColor: currentTheme.accent }]} />
+      {activeTab === 'photobook' ? (
+        <View style={{ flex: 1 }}>
+          <PhotobookStudioScreen
+            currentUser={currentUser}
+            familyMembers={familyMembers}
+            messages={messages}
+            smallTalkState={smallTalkState}
+            currentUserProfile={currentUserProfile}
+            points={points}
+            onDeductPoints={onDeductPoints}
+            onSendOrderNotice={onSendOrderNotice}
+          />
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          {false && (
+            <View>
+              <View>
+                <View>
+                  <View style={[styles.bookSpine, { backgroundColor: currentTheme.accent }]} />
                 <View style={styles.bookCoverFace}>
                   <View style={styles.bookEmbossBorder}>
                     <Text style={[styles.bookBadgeLabel, { color: currentTheme.accent }]}>
@@ -968,7 +1100,7 @@ export default function PhotoAlbumScreen({
                         style={{ marginRight: 5 }}
                       />
                       <Text style={[styles.monthChipBtnText, isSelected && styles.monthChipBtnTextActive]}>
-                        {month.label} ({month.count})
+                        {month.label} ({month.answeredCount}/{month.count})
                       </Text>
                     </TouchableOpacity>
                   );
@@ -982,7 +1114,7 @@ export default function PhotoAlbumScreen({
                 >
                   <Calendar size={13} color="#FF6B47" style={{ marginRight: 4 }} />
                   <Text style={styles.moreMonthPickerBtnText}>
-                    🗓️ 연·월 선택 ({allFamilyMonths.length}개월)
+                    🗓️ 연·월 선택
                   </Text>
                   <ChevronDown size={13} color="#FF6B47" style={{ marginLeft: 2 }} />
                 </TouchableOpacity>
@@ -993,10 +1125,10 @@ export default function PhotoAlbumScreen({
             <View style={styles.monthSummaryRow}>
               <View style={styles.monthSummaryLeft}>
                 <Text style={styles.monthSummaryTitle}>
-                  📅 {availableMonths.find(m => m.id === selectedMonth)?.label || '전체'} 스몰톡
+                  📅 {selectedMonth === 'all' ? '전체' : (displayedChips.find(m => m.id === selectedMonth)?.fullLabel || availableMonths.find(m => m.id === selectedMonth)?.label || '전체')} 스몰톡
                 </Text>
                 <Text style={styles.monthSummarySub}>
-                  {filteredArchiveList.length}개 질문 중 {filteredArchiveList.filter(i => i.isAnswered).length}개 답변 완료
+                  총 {monthScopedList.length}개 질문 중 {monthScopedList.filter(i => i.isAnswered).length}개 답변 완료 ({monthScopedList.length > 0 ? Math.round((monthScopedList.filter(i => i.isAnswered).length / monthScopedList.length) * 100) : 0}%)
                 </Text>
               </View>
 
@@ -1048,7 +1180,7 @@ export default function PhotoAlbumScreen({
                 onPress={() => setArchiveFilter('all')}
               >
                 <Text style={[styles.archiveFilterChipText, archiveFilter === 'all' && styles.archiveFilterChipTextActive]}>
-                  전체 질문 ({smallTalkArchiveList.length})
+                  전체 질문 ({monthScopedList.length})
                 </Text>
               </TouchableOpacity>
 
@@ -1057,7 +1189,16 @@ export default function PhotoAlbumScreen({
                 onPress={() => setArchiveFilter('answered')}
               >
                 <Text style={[styles.archiveFilterChipText, archiveFilter === 'answered' && styles.archiveFilterChipTextActive]}>
-                  답변 완료 ({smallTalkArchiveList.filter(i => i.isAnswered).length})
+                  답변 완료 ({monthScopedList.filter(i => i.isAnswered).length})
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.archiveFilterChip, archiveFilter === 'unanswered' && styles.archiveFilterChipActive]}
+                onPress={() => setArchiveFilter('unanswered')}
+              >
+                <Text style={[styles.archiveFilterChipText, archiveFilter === 'unanswered' && styles.archiveFilterChipTextActive]}>
+                  미답변 ({monthScopedList.filter(i => !i.isAnswered).length})
                 </Text>
               </TouchableOpacity>
 
@@ -1066,7 +1207,7 @@ export default function PhotoAlbumScreen({
                 onPress={() => setArchiveFilter('in-book')}
               >
                 <Text style={[styles.archiveFilterChipText, archiveFilter === 'in-book' && styles.archiveFilterChipTextActive]}>
-                  📖 포토북 수록됨 ({smallTalkArchiveList.filter(i => i.isInBook).length})
+                  📖 포토북 ({monthScopedList.filter(i => i.isInBook).length})
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1207,7 +1348,8 @@ export default function PhotoAlbumScreen({
           </View>
         )}
 
-      </ScrollView>
+        </ScrollView>
+      )}
 
       {/* 4. Photobook Photo Picker & Manager Modal */}
       <Modal

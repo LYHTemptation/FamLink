@@ -445,13 +445,13 @@ export default function KeepyUppyGame({
   };
 
   const handleClaimAndClose = () => {
-    const finalPoints = Math.max(12, Math.min(120, Math.round(score / 6) + maxRally * 2));
+    const finalExp = Math.max(15, Math.min(50, Math.round(score / 12) + maxRally));
 
     if (onGameComplete) {
       onGameComplete({
         score,
         maxRally,
-        points: finalPoints,
+        exp: finalExp,
       });
     }
     if (onClose) onClose();
@@ -516,7 +516,7 @@ export default function KeepyUppyGame({
           {/* Score Counter */}
           <View style={[styles.hudPill, styles.hudPillScore]}>
             <Trophy size={16} color="#D48806" />
-            <Text style={styles.scoreText}>{score} P</Text>
+            <Text style={styles.scoreText}>{score}점</Text>
           </View>
 
           {/* Close Game Button */}
@@ -680,7 +680,7 @@ export default function KeepyUppyGame({
                 <View style={styles.instructionItem}>
                   <Gift size={18} color="#F59E0B" style={{ marginRight: 8 }} />
                   <Text style={styles.instructionText}>
-                    랠리 성공 시 등급별 풍성한 가족 포인트(P) 보상!
+                    랠리 성공 시 반려몽 성장 경험치(EXP) 보상!
                   </Text>
                 </View>
               </View>
@@ -734,7 +734,7 @@ export default function KeepyUppyGame({
                   <View style={styles.rewardPill}>
                     <Trophy size={16} color="#D48806" style={{ marginRight: 6 }} />
                     <Text style={[styles.rewardPillText, { fontWeight: '800', color: '#B45309' }]}>
-                      가족 포인트 +{Math.max(12, Math.min(120, Math.round(score / 6) + maxRally * 2))} P 적립!
+                      반려몽 성장 경험치 +{Math.max(15, Math.min(50, Math.round(score / 12) + maxRally))} EXP 획득! 🌱
                     </Text>
                   </View>
                 </View>

@@ -24,7 +24,7 @@ const EDIT_AVATAR_PRESETS = [
 ];
 
 const FAMILY_MEMBERS_STATIC = {
-  mom: { name: '엄마', avatar: '👩‍🦰', color: '#FF7E82' },
+  mom: { name: '엄마', avatar: '👩‍🦰', color: '#FF6B47' },
   dad: { name: '아빠', avatar: '👨‍💼', color: '#4A90E2' },
   son: { name: '아들', avatar: '👦', color: '#2ECC71' },
   daughter: { name: '딸', avatar: '👧', color: '#F39C12' },
@@ -153,7 +153,7 @@ export default function FamilyScreen({
       {/* Family Code Card */}
       <View style={styles.codeCard}>
         <View style={styles.cardHeader}>
-          <Users size={20} color="#FF7E82" style={{ marginRight: 6 }} />
+          <Users size={20} color="#FF6B47" style={{ marginRight: 6 }} />
           <Text style={styles.cardHeaderTitle}>우리 가족 연결 코드</Text>
         </View>
         <Text style={styles.codeText}>{familyCode}</Text>
@@ -165,12 +165,12 @@ export default function FamilyScreen({
 
         <View style={styles.actionRow}>
           <TouchableOpacity style={styles.actionButton} onPress={handleCopyCode}>
-            <IconCopy size={14} color="#FF7E82" style={{ marginRight: 4 }} />
+            <IconCopy size={14} color="#FF6B47" style={{ marginRight: 4 }} />
             <Text style={styles.actionButtonText}>코드 복사</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.actionButton} onPress={handleCopyInviteMessage}>
-            <IconShare size={14} color="#FF7E82" style={{ marginRight: 4 }} />
+            <IconShare size={14} color="#FF6B47" style={{ marginRight: 4 }} />
             <Text style={styles.actionButtonText}>초대 링크 복사</Text>
           </TouchableOpacity>
         </View>
@@ -183,14 +183,14 @@ export default function FamilyScreen({
         activeOpacity={0.85}
       >
         <View style={styles.guideIconWrap}>
-          <Award size={22} color="#FF7E82" />
+          <Award size={22} color="#FF6B47" />
         </View>
 
         <View style={styles.guideTextCol}>
           <View style={styles.guideTitleRow}>
             <Text style={styles.guideTitle}>가족 단합 미션 시작하기!</Text>
             <View style={styles.guideTag}>
-              <Sparkles size={10} color="#FF7E82" style={{ marginRight: 2 }} />
+              <Sparkles size={10} color="#FF6B47" style={{ marginRight: 2 }} />
               <Text style={styles.guideTagText}>포인트 적립</Text>
             </View>
           </View>
@@ -200,14 +200,14 @@ export default function FamilyScreen({
         </View>
 
         <View style={styles.guideActionBtn}>
-          <IconChevronRight size={16} color="#FF7E82" />
+          <IconChevronRight size={16} color="#FF6B47" />
         </View>
       </TouchableOpacity>
 
       {/* Member List Section */}
       <View style={styles.sectionCard}>
         <View style={styles.sectionHeader}>
-          <Heart size={18} color="#FF7E82" fill="#FF7E82" style={{ marginRight: 6 }} />
+          <Heart size={18} color="#FF6B47" fill="#FF6B47" style={{ marginRight: 6 }} />
           <Text style={styles.sectionTitle}>
             가입된 가족 멤버 ({familyMembersList.length} / 10명)
           </Text>
@@ -290,7 +290,7 @@ export default function FamilyScreen({
               onPress={openEditModal}
               activeOpacity={0.8}
             >
-              <Edit3 size={13} color="#FF7E82" style={{ marginRight: 4 }} />
+              <Edit3 size={13} color="#FF6B47" style={{ marginRight: 4 }} />
               <Text style={styles.accountEditBtnText}>프로필 수정</Text>
             </TouchableOpacity>
 
@@ -322,7 +322,7 @@ export default function FamilyScreen({
           <View style={[styles.modalView, { maxHeight: '88%' }]}>
             <View style={styles.modalHeaderRow}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Edit3 size={18} color="#FF7E82" />
+                <Edit3 size={18} color="#FF6B47" />
                 <Text style={styles.modalHeader}>내 프로필 설정</Text>
               </View>
               <TouchableOpacity onPress={() => setModalVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
@@ -369,7 +369,7 @@ export default function FamilyScreen({
                     onPress={handlePickProfileImage}
                     activeOpacity={0.8}
                   >
-                    <Camera size={14} color="#FF7E82" style={{ marginRight: 5 }} />
+                    <Camera size={14} color="#FF6B47" style={{ marginRight: 5 }} />
                     <Text style={styles.avatarUploadBtnText}>앨범에서 사진 선택</Text>
                   </TouchableOpacity>
 
@@ -515,11 +515,11 @@ const styles = StyleSheet.create({
   subHeaderTitle: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#1C1C1E',
+    color: '#1C1917',
   },
   subHeaderSub: {
     fontSize: 12,
-    color: '#8E8E93',
+    color: '#78716C',
     marginTop: 2,
   },
   limitFullBadge: {
@@ -545,12 +545,12 @@ const styles = StyleSheet.create({
   headerActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FF7E82',
+    backgroundColor: '#FF6B47',
     paddingHorizontal: 12,
     paddingVertical: 7,
-    borderRadius: 10,
+    borderRadius: 12,
     flexShrink: 0,
-    shadowColor: '#FF7E82',
+    shadowColor: '#FF6B47',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
@@ -571,7 +571,7 @@ const styles = StyleSheet.create({
     padding: 20,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#EBEBEB',
+    borderColor: '#F5F0E8',
     alignItems: 'center',
   },
   cardHeader: {
@@ -582,18 +582,18 @@ const styles = StyleSheet.create({
   cardHeaderTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#8E8E93',
+    color: '#78716C',
   },
   codeText: {
     fontSize: 32,
     fontWeight: '900',
-    color: '#FF7E82',
+    color: '#FF6B47',
     letterSpacing: 2,
     marginVertical: 10,
   },
   codeDesc: {
     fontSize: 12,
-    color: '#8E8E93',
+    color: '#78716C',
     textAlign: 'center',
     lineHeight: 18,
     paddingHorizontal: 20,
@@ -607,17 +607,17 @@ const styles = StyleSheet.create({
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF2F3',
+    backgroundColor: '#FFF5F2',
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 10,
+    borderRadius: 12,
     marginHorizontal: 6,
-    borderWidth: 0.5,
-    borderColor: '#FFA2A5',
+    borderWidth: 1,
+    borderColor: '#FFE8E0',
   },
   actionButtonText: {
     fontSize: 12,
-    color: '#FF7E82',
+    color: '#FF6B47',
     fontWeight: '700',
   },
   sectionCard: {
@@ -626,7 +626,7 @@ const styles = StyleSheet.create({
     padding: 18,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#EBEBEB',
+    borderColor: '#F5F0E8',
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -636,14 +636,14 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#1C1C1E',
+    color: '#1C1917',
   },
   memberItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#F2F2F7',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F0E8',
   },
   avatarBox: {
     width: 42,
@@ -671,10 +671,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   meBadge: {
-    backgroundColor: '#FF7E82',
-    borderRadius: 4,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
+    backgroundColor: '#FF6B47',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     marginLeft: 6,
   },
   meBadgeText: {
@@ -693,7 +693,7 @@ const styles = StyleSheet.create({
   },
   moodStatusText: {
     fontSize: 12,
-    color: '#8E8E93',
+    color: '#78716C',
     fontWeight: '500',
   },
   statusBox: {
@@ -709,8 +709,8 @@ const styles = StyleSheet.create({
     borderColor: '#D1F2EB',
   },
   statusBoxOffline: {
-    backgroundColor: '#F8F9FA',
-    borderColor: '#EBEBEB',
+    backgroundColor: '#FAF8F3',
+    borderColor: '#F5F0E8',
   },
   statusDot: {
     width: 6,
@@ -722,7 +722,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#2ECC71',
   },
   statusDotOffline: {
-    backgroundColor: '#AEAEB2',
+    backgroundColor: '#A8A29E',
   },
   statusText: {
     fontSize: 10,
@@ -732,14 +732,14 @@ const styles = StyleSheet.create({
     color: '#2ECC71',
   },
   statusTextOffline: {
-    color: '#8E8E93',
+    color: '#78716C',
   },
   inviteGuideCard: {
-    backgroundColor: '#FFF7F7',
+    backgroundColor: '#FFF5F2',
     borderWidth: 1,
-    borderColor: '#FFEBEB',
-    borderRadius: 18,
-    padding: 14,
+    borderColor: '#FFE8E0',
+    borderRadius: 20,
+    padding: 16,
     marginBottom: 16,
     flexDirection: 'row',
     alignItems: 'center',
@@ -748,7 +748,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: '#FFE5E7',
+    backgroundColor: '#FFE8E0',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -767,26 +767,26 @@ const styles = StyleSheet.create({
   guideTitle: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#1C1C1E',
+    color: '#1C1917',
   },
   guideTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF0F1',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: 6,
     borderWidth: 0.5,
-    borderColor: '#FFD4D7',
+    borderColor: '#FFE8E0',
   },
   guideTagText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#FF7E82',
+    color: '#FF6B47',
   },
   guideDesc: {
     fontSize: 11,
-    color: '#8E8E93',
+    color: '#78716C',
     lineHeight: 15,
   },
   guideActionBtn: {
@@ -797,15 +797,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#FFE5E7',
+    borderColor: '#FFE8E0',
   },
   accountCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
-    padding: 16,
+    padding: 18,
     marginTop: 14,
     borderWidth: 1,
-    borderColor: '#EBEBEB',
+    borderColor: '#F5F0E8',
   },
   accountHeader: {
     flexDirection: 'row',
@@ -815,7 +815,7 @@ const styles = StyleSheet.create({
   accountHeaderTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#8E8E93',
+    color: '#78716C',
   },
   accountContentRow: {
     flexDirection: 'row',
@@ -835,11 +835,11 @@ const styles = StyleSheet.create({
   accountNameText: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#1C1C1E',
+    color: '#1C1917',
   },
   accountEmailText: {
     fontSize: 11,
-    color: '#8E8E93',
+    color: '#78716C',
     marginTop: 2,
   },
   accountActionCol: {
@@ -850,32 +850,32 @@ const styles = StyleSheet.create({
   accountEditBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF2F3',
+    backgroundColor: '#FFF5F2',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#FFD4D7',
+    borderColor: '#FFE8E0',
   },
   accountEditBtnText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#FF7E82',
+    color: '#FF6B47',
   },
   accountLogoutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#FAF8F3',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#E5E5EA',
+    borderColor: '#F5F0E8',
   },
   accountLogoutBtnText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#8E8E93',
+    color: '#78716C',
   },
   modalOverlay: commonStyles.modalOverlay,
   modalView: commonStyles.modalBottomSheet,
@@ -884,17 +884,17 @@ const styles = StyleSheet.create({
   modalLabel: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#8E8E93',
+    color: '#78716C',
     marginBottom: 6,
     marginTop: 10,
   },
   avatarPreviewWrap: {
     alignItems: 'center',
     paddingVertical: 10,
-    backgroundColor: '#F8F9FA',
-    borderRadius: 16,
+    backgroundColor: '#FAF8F3',
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#EFEFEF',
+    borderColor: '#F5F0E8',
     marginBottom: 10,
   },
   avatarLargeCircleTouchable: {
@@ -909,7 +909,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#FF7E82',
+    borderColor: '#FF6B47',
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -929,7 +929,7 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: '#FF7E82',
+    backgroundColor: '#FF6B47',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
@@ -944,37 +944,39 @@ const styles = StyleSheet.create({
   avatarUploadBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF2F3',
+    backgroundColor: '#FFF5F2',
     paddingHorizontal: 12,
     paddingVertical: 7,
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#FFD4D7',
+    borderColor: '#FFE8E0',
   },
   avatarUploadBtnText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#FF7E82',
+    color: '#FF6B47',
   },
   avatarResetBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F2F2F7',
+    backgroundColor: '#FAF8F3',
     paddingHorizontal: 10,
     paddingVertical: 7,
-    borderRadius: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#F5F0E8',
   },
   avatarResetBtnText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#8E8E93',
+    color: '#78716C',
   },
   avatarLargeText: {
     fontSize: 40,
   },
   avatarSubText: {
     fontSize: 11,
-    color: '#8E8E93',
+    color: '#78716C',
     fontWeight: '500',
   },
   avatarGridWrap: {
@@ -989,15 +991,15 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: '#EBEBEB',
+    borderColor: '#F5F0E8',
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
   },
   avatarGridCellActive: {
-    borderColor: '#FF7E82',
-    backgroundColor: '#FFF2F3',
+    borderColor: '#FF6B47',
+    backgroundColor: '#FFF5F2',
   },
   avatarGridEmoji: {
     fontSize: 22,
@@ -1009,7 +1011,7 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: '#FF7E82',
+    backgroundColor: '#FF6B47',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1.5,
@@ -1030,7 +1032,7 @@ const styles = StyleSheet.create({
     height: 58,
     borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: '#EBEBEB',
+    borderColor: '#F5F0E8',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 8,
@@ -1038,28 +1040,30 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   emojiChipActive: {
-    borderColor: '#FF7E82',
-    backgroundColor: '#FFF2F3',
+    borderColor: '#FF6B47',
+    backgroundColor: '#FFF5F2',
   },
   moodChipLabel: {
     fontSize: 10,
     fontWeight: '600',
-    color: '#8E8E93',
+    color: '#78716C',
     marginTop: 3,
   },
   modalInput: {
-    backgroundColor: '#F1F2F4',
-    borderRadius: 10,
+    backgroundColor: '#FAF8F3',
+    borderRadius: 12,
     padding: 12,
     fontSize: 14,
-    color: '#1C1C1E',
+    color: '#1C1917',
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#F5F0E8',
   },
   modalConfirmBtn: {
     flexDirection: 'row',
-    backgroundColor: '#FF7E82',
+    backgroundColor: '#FF6B47',
     padding: 14,
-    borderRadius: 12,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 8,

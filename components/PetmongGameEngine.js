@@ -72,14 +72,18 @@ export default function PetmongGameEngine({
   // -------------------------------------------------------------
   // 1. 가족 대화 흡수 & 온기 지수 (Sumone Family Warmth Analysis)
   // -------------------------------------------------------------
-  const todayDateStr = new Date().toISOString().slice(0, 10);
+  const todayStart = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }, []);
+
   const todayMessages = useMemo(() => {
     return (messages || []).filter(m => {
-      if (!m.created_at && !m.timestamp) return false;
-      const dateStr = (m.created_at || m.timestamp || '').slice(0, 10);
-      return dateStr === todayDateStr;
+      const t = new Date(m.created_at || m.timestamp || Date.now()).getTime();
+      return t >= todayStart;
     });
-  }, [messages, todayDateStr]);
+  }, [messages, todayStart]);
 
   const todayResponsesCount = useMemo(() => {
     const responses = smallTalkState?.responses || {};
@@ -301,11 +305,9 @@ export default function PetmongGameEngine({
     }
 
     setHasHarvestedToday(true);
-    const expGain = 25;
-    const pointsGain = 30;
+    const expGain = 30;
 
     if (onGainExp) onGainExp(expGain);
-    if (onAwardPoints) onAwardPoints(pointsGain, '가족 대화 온기 수확');
     if (onUpdateVitals) {
       onUpdateVitals(prev => ({
         ...prev,
@@ -314,7 +316,7 @@ export default function PetmongGameEngine({
       }));
     }
 
-    spawnHeartToast(`+${expGain} EXP & +${pointsGain}P 대화 온기 수확! 💖`);
+    spawnHeartToast(`+${expGain} EXP 대화 온기 수확! 💖`);
     setDialogue(`오늘 가족들이 나눈 ${todayMessages.length}개의 대화와 스몰톡 온기를 듬뿍 먹고 쑥쑥 자랐어요! 몽글몽글 사랑해요 몽 💕✨`);
 
     Animated.sequence([
@@ -525,7 +527,6 @@ export default function PetmongGameEngine({
                   alignItems: 'center',
                   justifyContent: 'center',
                   transform: [
-                    { scaleX: petScaleX },
                     { scaleY: petScaleY },
                     {
                       rotate: petRotate.interpolate({
@@ -536,8 +537,8 @@ export default function PetmongGameEngine({
                   ],
                 }}
               >
-                {/* Character Image / Emoji */}
-                <View style={{ transform: [{ scale: stage.scale }] }}>
+                {/* Character Image / Emoji (scaleX only applied here so text badges below are never mirrored) */}
+                <Animated.View style={{ transform: [{ scaleX: petScaleX }, { scale: stage.scale }] }}>
                   {character.image_url ? (
                     Platform.OS === 'web' ? (
                       <img
@@ -563,7 +564,7 @@ export default function PetmongGameEngine({
                   ) : (
                     <Text style={styles.petEmojiSprite}>{evolvedEmoji}</Text>
                   )}
-                </View>
+                </Animated.View>
 
                 {/* Ground Contact Shadow */}
                 <View style={styles.petGroundShadow} />

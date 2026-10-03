@@ -195,9 +195,9 @@ export default function ShoppingListScreen({
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Daily Reward Progress Badge */}
         <View style={styles.dailyRewardCard}>
-          <Award size={16} color="#FF7E82" style={{ marginRight: 6 }} />
+          <Award size={16} color="#FF6B47" style={{ marginRight: 6 }} />
           <Text style={styles.dailyRewardText}>
-            오늘의 보상: {todayEarnedCount * 10} / 30 P ({todayEarnedCount}/3건 적립 완료)
+            오늘의 집안일 보상: 일일 최대 60P ({todayEarnedCount}/3건 완료)
           </Text>
         </View>
 
@@ -227,7 +227,7 @@ export default function ShoppingListScreen({
                         onPress={() => onToggleRepeat && onToggleRepeat(item)}
                         activeOpacity={0.7}
                       >
-                        <IconRepeat size={10} color="#FF7E82" style={{ marginRight: 3 }} />
+                        <IconRepeat size={10} color="#FF6B47" style={{ marginRight: 3 }} />
                         <Text style={styles.repeatBadgeText}>
                           {item.repeat_type === 'daily' ? '매일 반복' : '매주 반복'}
                         </Text>
@@ -279,7 +279,7 @@ export default function ShoppingListScreen({
                 onPress={handleClearCompletedConfirm}
                 activeOpacity={0.7}
               >
-                <Trash2 size={12} color="#FF7E82" style={{ marginRight: 4 }} />
+                <Trash2 size={12} color="#FF6B47" style={{ marginRight: 4 }} />
                 <Text style={styles.clearAllBtnText}>모두 비우기</Text>
               </TouchableOpacity>
             </View>
@@ -300,7 +300,7 @@ export default function ShoppingListScreen({
                       <View style={styles.tagRow}>
                         <Text style={styles.completedByText}>
                           {item.completed_by ? `${item.completed_by}님이 완료함` : '완료됨'}
-                          {item.points_earned ? ' (+10P)' : ''}
+                          {item.points_earned ? ` (+${item.points || 20}P)` : ''}
                         </Text>
                         {item.repeat_type && item.repeat_type !== 'none' ? (
                           <View style={styles.repeatBadgeDone}>
@@ -438,7 +438,7 @@ export default function ShoppingListScreen({
                     {opt.key !== 'none' && (
                       <IconRepeat
                         size={12}
-                        color={isSelected ? '#FF7E82' : '#8E8E93'}
+                        color={isSelected ? '#FF6B47' : '#8E8E93'}
                         style={{ marginRight: 4 }}
                       />
                     )}
@@ -465,7 +465,7 @@ export default function ShoppingListScreen({
             )}
 
             <TouchableOpacity style={styles.modalConfirmBtn} onPress={handleCreateItem}>
-              <Text style={styles.modalConfirmBtnText}>등록하기 (+10P 미션)</Text>
+              <Text style={styles.modalConfirmBtnText}>등록하기 (+20P 미션)</Text>
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
@@ -482,10 +482,10 @@ const styles = StyleSheet.create({
   subHeaderSub: commonStyles.subHeaderSub,
   addBtn: {
     flexDirection: 'row',
-    backgroundColor: '#FF7E82',
+    backgroundColor: '#FF6B47',
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 10,
+    borderRadius: 12,
     alignItems: 'center',
   },
   addBtnText: {
@@ -496,31 +496,31 @@ const styles = StyleSheet.create({
   dailyRewardCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF2F3',
+    backgroundColor: '#FFF5F2',
     paddingHorizontal: 14,
     paddingVertical: 10,
-    borderRadius: 12,
+    borderRadius: 14,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#FFE5E7',
+    borderColor: '#FFE8E0',
   },
   dailyRewardText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#FF7E82',
+    color: '#FF6B47',
   },
   sectionCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 20,
+    padding: 18,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#EBEBEB',
+    borderColor: '#F5F0E8',
   },
   sectionTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#1C1C1E',
+    color: '#1C1917',
     marginBottom: 14,
   },
   sectionTitleDone: {
@@ -531,7 +531,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 12,
-    color: '#AEAEB2',
+    color: '#A8A29E',
     textAlign: 'center',
     paddingVertical: 16,
     fontStyle: 'italic',
@@ -541,14 +541,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
+    borderBottomColor: '#F5F0E8',
   },
   itemRowDone: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
+    borderBottomColor: '#F5F0E8',
     opacity: 0.7,
   },
   checkboxTouch: {
@@ -560,12 +560,12 @@ const styles = StyleSheet.create({
   itemTitleText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1C1C1E',
+    color: '#1C1917',
     marginBottom: 2,
   },
   itemTitleTextDone: {
     fontSize: 14,
-    color: '#8E8E93',
+    color: '#78716C',
     textDecorationLine: 'line-through',
     marginBottom: 2,
   },
@@ -577,11 +577,11 @@ const styles = StyleSheet.create({
   },
   assigneeBadge: {
     fontSize: 11,
-    color: '#FF7E82',
-    backgroundColor: '#FFF2F3',
+    color: '#FF6B47',
+    backgroundColor: '#FFF5F2',
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: 6,
     fontWeight: '600',
   },
   completedByText: {
@@ -605,13 +605,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: '#FFF2F3',
+    borderRadius: 8,
+    backgroundColor: '#FFF5F2',
   },
   clearAllBtnText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#FF7E82',
+    color: '#FF6B47',
   },
   metaTimeRow: {
     flexDirection: 'row',
@@ -619,37 +619,39 @@ const styles = StyleSheet.create({
   },
   metaTimeText: {
     fontSize: 11,
-    color: '#8E8E93',
+    color: '#A8A29E',
   },
   metaTimeTextDone: {
     fontSize: 11,
-    color: '#A0A0A5',
+    color: '#A8A29E',
   },
   showMoreBtn: {
     paddingVertical: 10,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 8,
-    backgroundColor: '#F8F9FA',
-    borderRadius: 8,
+    backgroundColor: '#FAF8F3',
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#EFEFF4',
+    borderColor: '#F5F0E8',
   },
   showMoreBtnText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#636366',
+    color: '#78716C',
   },
   collapsedSummaryTouch: {
     paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 8,
+    backgroundColor: '#FAF8F3',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#F5F0E8',
   },
   collapsedSummaryText: {
     fontSize: 12,
-    color: '#8E8E93',
+    color: '#78716C',
     fontWeight: '600',
   },
   deleteBtn: {
@@ -658,7 +660,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#FAF8F3',
   },
   modalOverlay: commonStyles.modalOverlay,
   modalView: commonStyles.modalBottomSheet,
@@ -667,17 +669,19 @@ const styles = StyleSheet.create({
   modalLabel: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#8E8E93',
+    color: '#78716C',
     marginBottom: 6,
     marginTop: 10,
   },
   modalInput: {
-    backgroundColor: '#F1F2F4',
-    borderRadius: 10,
+    backgroundColor: '#FAF8F3',
+    borderRadius: 12,
     padding: 12,
     fontSize: 14,
-    color: '#1C1C1E',
+    color: '#1C1917',
     marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#F5F0E8',
   },
   assigneeScroll: {
     flexDirection: 'row',
@@ -689,9 +693,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 11,
     paddingVertical: 7,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#EBEBEB',
+    borderColor: '#F5F0E8',
     marginRight: 8,
     backgroundColor: '#FFFFFF',
   },
@@ -700,22 +704,22 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   assigneeChipActive: {
-    borderColor: '#FF7E82',
-    backgroundColor: '#FFF2F3',
+    borderColor: '#FF6B47',
+    backgroundColor: '#FFF5F2',
   },
   assigneeChipText: {
     fontSize: 12,
-    color: '#8E8E93',
+    color: '#78716C',
     fontWeight: '600',
   },
   assigneeChipTextActive: {
-    color: '#FF7E82',
+    color: '#FF6B47',
     fontWeight: '700',
   },
   modalConfirmBtn: {
-    backgroundColor: '#FF7E82',
+    backgroundColor: '#FF6B47',
     padding: 14,
-    borderRadius: 12,
+    borderRadius: 16,
     alignItems: 'center',
     marginTop: 10,
   },
@@ -734,23 +738,23 @@ const styles = StyleSheet.create({
   },
   embeddedHeaderCount: {
     fontSize: 13,
-    color: '#8E8E93',
+    color: '#78716C',
     fontWeight: '600',
   },
   repeatBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF2F3',
+    backgroundColor: '#FFF5F2',
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: 6,
     borderWidth: 0.5,
-    borderColor: '#FFE0E3',
+    borderColor: '#FFE8E0',
   },
   repeatBadgeText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#FF7E82',
+    color: '#FF6B47',
   },
   repeatBadgeDone: {
     flexDirection: 'row',
@@ -758,7 +762,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#EDFAF1',
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: 6,
     borderWidth: 0.5,
     borderColor: '#D4F5DE',
   },
@@ -778,35 +782,35 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 9,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#EBEBEB',
-    backgroundColor: '#F8F9FA',
+    borderColor: '#F5F0E8',
+    backgroundColor: '#FAF8F3',
   },
   repeatOptionChipActive: {
-    borderColor: '#FF7E82',
-    backgroundColor: '#FFF2F3',
+    borderColor: '#FF6B47',
+    backgroundColor: '#FFF5F2',
   },
   repeatOptionText: {
     fontSize: 12,
-    color: '#8E8E93',
+    color: '#78716C',
     fontWeight: '600',
   },
   repeatOptionTextActive: {
-    color: '#FF7E82',
+    color: '#FF6B47',
     fontWeight: '700',
   },
   repeatHintBox: {
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
+    backgroundColor: '#FAF8F3',
+    borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 6,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#EFEFF4',
+    borderColor: '#F5F0E8',
   },
   repeatHintText: {
     fontSize: 11,
-    color: '#8E8E93',
+    color: '#78716C',
   },
 });

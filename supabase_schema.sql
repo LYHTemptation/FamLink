@@ -63,7 +63,18 @@ CREATE TABLE IF NOT EXISTS events (
 
 ALTER TABLE events ADD COLUMN IF NOT EXISTS end_date TEXT;
 
--- 6. 스몰톡 답변 테이블 (small_talk_responses)
+-- 6. 스몰톡 질문 리스트 테이블 (small_talk_topics)
+CREATE TABLE IF NOT EXISTS small_talk_topics (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id UUID REFERENCES families(id) ON DELETE CASCADE, -- NULL이면 모든 가족 공용 질문, 특정 ID면 가족 맞춤 질문
+  question TEXT NOT NULL,
+  category TEXT DEFAULT '일상' NOT NULL,
+  assigned_date TEXT, -- 특정 일자 배정 시 (예: '2026-10-02')
+  order_index INTEGER DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 6-1. 스몰톡 답변 테이블 (small_talk_responses)
 CREATE TABLE IF NOT EXISTS small_talk_responses (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   family_id UUID REFERENCES families(id) ON DELETE CASCADE NOT NULL,
@@ -141,6 +152,7 @@ ALTER TABLE family_points DISABLE ROW LEVEL SECURITY;
 ALTER TABLE profiles DISABLE ROW LEVEL SECURITY;
 ALTER TABLE messages DISABLE ROW LEVEL SECURITY;
 ALTER TABLE events DISABLE ROW LEVEL SECURITY;
+ALTER TABLE small_talk_topics DISABLE ROW LEVEL SECURITY;
 ALTER TABLE small_talk_responses DISABLE ROW LEVEL SECURITY;
 ALTER TABLE rewards DISABLE ROW LEVEL SECURITY;
 ALTER TABLE user_coupons DISABLE ROW LEVEL SECURITY;
@@ -151,6 +163,7 @@ DO $$
 BEGIN
   BEGIN alter publication supabase_realtime add table messages; EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN alter publication supabase_realtime add table events; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN alter publication supabase_realtime add table small_talk_topics; EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN alter publication supabase_realtime add table small_talk_responses; EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN alter publication supabase_realtime add table family_points; EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN alter publication supabase_realtime add table profiles; EXCEPTION WHEN OTHERS THEN NULL; END;

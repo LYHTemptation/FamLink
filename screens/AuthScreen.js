@@ -17,13 +17,13 @@ import { User, Lock, Mail, Heart, ArrowRight, ShieldAlert, Sparkles, Check } fro
 import { colors, typography } from '../theme';
 
 const ROLE_PRESETS = [
-  { label: '엄마', avatar: '👩‍🦰', color: '#FF7E82' },
+  { label: '엄마', avatar: '👩‍🦰', color: '#FF6B47' },
   { label: '아빠', avatar: '👨‍💼', color: '#4A90E2' },
   { label: '아들', avatar: '👦', color: '#2ECC71' },
   { label: '딸', avatar: '👧', color: '#F39C12' },
   { label: '할머니', avatar: '👵', color: '#9B59B6' },
   { label: '할아버지', avatar: '👴', color: '#34495E' },
-  { label: '직접 입력', avatar: '🧑', color: '#FF7E82' },
+  { label: '직접 입력', avatar: '🧑', color: '#FF6B47' },
 ];
 
 export default function AuthScreen({ onAuthComplete }) {
@@ -38,7 +38,7 @@ export default function AuthScreen({ onAuthComplete }) {
   const [roleName, setRoleName] = useState('엄마');
   const [isCustomRole, setIsCustomRole] = useState(false);
   const [selectedAvatar, setSelectedAvatar] = useState('👩‍🦰');
-  const [selectedColor, setSelectedColor] = useState('#FF7E82');
+  const [selectedColor, setSelectedColor] = useState('#FF6B47');
   const [familyOption, setFamilyOption] = useState('create'); // 'create' or 'join'
   const [familyCode, setFamilyCode] = useState('');
 
@@ -55,7 +55,7 @@ export default function AuthScreen({ onAuthComplete }) {
       const mockProfile = {
         name: isLogin ? '엄마' : name || roleName,
         avatar: isLogin ? '👩‍🦰' : selectedAvatar,
-        color: isLogin ? '#FF7E82' : selectedColor,
+        color: isLogin ? '#FF6B47' : selectedColor,
         role: isLogin ? 'mom' : roleName.trim(),
         family_code: familyOption === 'join' ? familyCode.toUpperCase() : `FAM-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
       };
@@ -214,7 +214,7 @@ export default function AuthScreen({ onAuthComplete }) {
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         {/* App Logo/Header */}
         <View style={styles.headerBox}>
-          <Heart size={44} color="#FF7E82" fill="#FF7E82" style={{ marginBottom: 12 }} />
+          <Heart size={44} color="#FF6B47" fill="#FF6B47" style={{ marginBottom: 12 }} />
           <Text style={styles.logoTitle}>FamLink</Text>
           <Text style={styles.logoSub}>사랑하는 우리 가족을 위한 프라이빗 소통 공간</Text>
         </View>
@@ -296,7 +296,7 @@ export default function AuthScreen({ onAuthComplete }) {
                           setIsCustomRole(true);
                           setRoleName('');
                           setSelectedAvatar('🧑');
-                          setSelectedColor('#FF7E82');
+                          setSelectedColor('#FF6B47');
                         } else {
                           setIsCustomRole(false);
                           setRoleName(preset.label);
@@ -310,7 +310,7 @@ export default function AuthScreen({ onAuthComplete }) {
                       <Text style={[styles.roleChipLabel, isSelected && styles.roleChipLabelActive]}>
                         {preset.label}
                       </Text>
-                      {isSelected && <Check size={12} color="#FF7E82" style={{ marginLeft: 2 }} />}
+                      {isSelected && <Check size={12} color="#FF6B47" style={{ marginLeft: 2 }} />}
                     </TouchableOpacity>
                   );
                 })}
@@ -319,7 +319,7 @@ export default function AuthScreen({ onAuthComplete }) {
               {/* Custom Role Input if '직접 입력' selected */}
               {isCustomRole && (
                 <View style={[styles.inputWrapper, { marginTop: 8 }]}>
-                  <Heart size={16} color="#FF7E82" style={{ marginRight: 10 }} />
+                  <Heart size={16} color="#FF6B47" style={{ marginRight: 10 }} />
                   <TextInput
                     style={styles.input}
                     placeholder="호칭을 입력해 주세요 (예: 큰딸, 삼촌, 이모)"
@@ -332,7 +332,7 @@ export default function AuthScreen({ onAuthComplete }) {
 
               {/* UX Hint Banner: Avatar can be changed after signup */}
               <View style={styles.signupHintBanner}>
-                <Sparkles size={14} color="#FF7E82" style={{ marginRight: 6 }} />
+                <Sparkles size={14} color="#FF6B47" style={{ marginRight: 6 }} />
                 <Text style={styles.signupHintText}>
                   프로필 아바타와 닉네임은 가입 후 [가족] 탭에서 언제든지 자유롭게 변경할 수 있어요!
                 </Text>
@@ -459,7 +459,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#EBEBEB',
+    borderColor: '#F5F0E8',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.03,
@@ -469,30 +469,30 @@ const styles = StyleSheet.create({
   formTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#1C1C1E',
+    color: '#1C1917',
     marginBottom: 20,
   },
   label: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#8E8E93',
+    color: '#78716C',
     marginBottom: 6,
     marginTop: 14,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F1F2F4',
-    borderRadius: 12,
+    backgroundColor: '#FAF8F3',
+    borderRadius: 14,
     paddingHorizontal: 14,
     height: 48,
     borderWidth: 1,
-    borderColor: '#EBEBEB',
+    borderColor: '#F5F0E8',
   },
   input: {
     flex: 1,
     fontSize: 14,
-    color: '#1C1C1E',
+    color: '#1C1917',
   },
   roleChipsWrap: {
     flexDirection: 'row',
@@ -508,12 +508,12 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: '#EBEBEB',
-    backgroundColor: '#F8F9FA',
+    borderColor: '#F5F0E8',
+    backgroundColor: '#FAF8F3',
   },
   roleChipItemActive: {
-    borderColor: '#FF7E82',
-    backgroundColor: '#FFF2F3',
+    borderColor: '#FF6B47',
+    backgroundColor: '#FFF5F2',
   },
   roleChipEmoji: {
     fontSize: 16,
@@ -522,28 +522,28 @@ const styles = StyleSheet.create({
   roleChipLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#636366',
+    color: '#78716C',
   },
   roleChipLabelActive: {
-    color: '#FF7E82',
+    color: '#FF6B47',
     fontWeight: '800',
   },
   signupHintBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#FAF8F3',
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#EFEFEF',
+    borderColor: '#F5F0E8',
     marginTop: 14,
     marginBottom: 4,
   },
   signupHintText: {
     flex: 1,
     fontSize: 11,
-    color: '#8E8E93',
+    color: '#78716C',
     lineHeight: 15,
     fontWeight: '500',
   },
@@ -556,36 +556,36 @@ const styles = StyleSheet.create({
   familyOptButton: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#EBEBEB',
-    borderRadius: 10,
+    borderColor: '#F5F0E8',
+    borderRadius: 12,
     paddingVertical: 10,
     alignItems: 'center',
     marginRight: 6,
     backgroundColor: '#FFFFFF',
   },
   familyOptActive: {
-    borderColor: '#FF7E82',
-    backgroundColor: '#FFF2F3',
+    borderColor: '#FF6B47',
+    backgroundColor: '#FFF5F2',
   },
   familyOptText: {
     fontSize: 12,
-    color: '#8E8E93',
+    color: '#78716C',
     fontWeight: '600',
   },
   familyOptTextActive: {
-    color: '#FF7E82',
+    color: '#FF6B47',
     fontWeight: '700',
   },
   submitButton: {
-    backgroundColor: '#FF7E82',
-    borderRadius: 14,
+    backgroundColor: '#FF6B47',
+    borderRadius: 16,
     height: 52,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 24,
   },
   submitButtonDisabled: {
-    backgroundColor: '#FFA2A5',
+    backgroundColor: '#FFA48F',
   },
   submitRow: {
     flexDirection: 'row',
@@ -603,7 +603,7 @@ const styles = StyleSheet.create({
   },
   toggleText: {
     fontSize: 12,
-    color: '#8E8E93',
+    color: '#78716C',
     fontWeight: '600',
   },
 });

@@ -39,7 +39,9 @@ function getFiles(dir, exts = ['.js', '.jsx', '.ts', '.tsx']) {
 const filesToCheck = [
   'App.js',
   ...getFiles('components'),
-  ...getFiles('lib')
+  ...getFiles('lib'),
+  ...getFiles('services'),
+  ...getFiles('utils')
 ];
 
 let hasErrors = false;

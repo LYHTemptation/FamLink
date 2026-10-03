@@ -30,8 +30,12 @@ import {
 } from 'lucide-react-native';
 import { colors, typography, commonStyles } from '../theme';
 import UserAvatar from './UserAvatar';
+import { stripEmojis } from '../utils/topics';
 
 const { width } = Dimensions.get('window');
+
+// 6개월 꾸준한 가족 활동(스몰톡+집안일 일일 ~80P) 기준 실물 포토북 발주 포인트 (12,000 P)
+const PHOTOBOOK_REQUIRED_POINTS = 12000;
 
 // Available book cover theme presets
 const COVER_THEMES = [
@@ -98,7 +102,8 @@ export default function FamilyStorybookModal({
       return customSmallTalks;
     }
 
-    const topic = smallTalkState?.topic || '오늘 우리 가족에게 가장 고마웠던 순간은?';
+    const rawTopic = smallTalkState?.topic || '오늘 우리 가족에게 가장 고마웠던 순간은?';
+    const topic = stripEmojis(typeof rawTopic === 'string' ? rawTopic : (rawTopic.text || rawTopic.title || '오늘 우리 가족에게 가장 고마웠던 순간은?'));
     const responses = smallTalkState?.responses || {};
 
     const items = [];
@@ -198,24 +203,24 @@ ${answersText || '아직 답변이 많지 않지만, 언제나 서로를 아끼�
     }
   };
 
-  // POD Order Submit (Requires 2,500 Family Points for 6-month cycle)
+  // POD Order Submit (Requires 12,000 Family Points for 6-month cycle)
   const handlePlaceOrder = () => {
     if (!shippingAddress.trim()) {
       Alert.alert('알림', '배송받으실 주소를 입력해주세요.');
       return;
     }
 
-    if ((points || 0) < 2500) {
+    if ((points || 0) < PHOTOBOOK_REQUIRED_POINTS) {
       Alert.alert(
         '포인트 확인',
-        `실물 이야기책 제작에는 가족 포인트 2,500 P가 필요합니다.\n현재 보유: ${(points || 0).toLocaleString()} P (부족: ${(2500 - (points || 0)).toLocaleString()} P)\n\n매일 스몰톡과 집안일을 함께하며 포인트를 모아보세요!`,
+        `실물 포토북 이야기책 제작에는 가족 포인트 ${PHOTOBOOK_REQUIRED_POINTS.toLocaleString()} P가 필요합니다.\n현재 보유: ${(points || 0).toLocaleString()} P (부족: ${(PHOTOBOOK_REQUIRED_POINTS - (points || 0)).toLocaleString()} P)\n\n매일 스몰톡과 집안일을 함께하며 포인트를 모아보세요!`,
         [{ text: '확인' }]
       );
       return;
     }
 
     if (onDeductPoints) {
-      onDeductPoints(2500, `실물 이야기책 양장본 POD 발주 ("${bookTitle}")`);
+      onDeductPoints(PHOTOBOOK_REQUIRED_POINTS, `실물 포토북 이야기책 양장본 POD 발주 ("${bookTitle}")`);
     }
 
     const orderId = 'FL-' + Date.now().toString().slice(-6);
@@ -223,13 +228,13 @@ ${answersText || '아직 답변이 많지 않지만, 언제나 서로를 아끼�
 
     if (onSendOrderNotice) {
       onSendOrderNotice(
-        `📦 [실물 이야기책 양장본 발주 완료]\n` +
+        `📦 [실물 포토북 양장본 발주 완료]\n` +
           `• 주문번호: ${orderId}\n` +
-          `• 사용 포인트: 2,500 P (잔여: ${Math.max(0, (points || 0) - 2500).toLocaleString()} P)\n` +
+          `• 사용 포인트: ${PHOTOBOOK_REQUIRED_POINTS.toLocaleString()} P (잔여: ${Math.max(0, (points || 0) - PHOTOBOOK_REQUIRED_POINTS).toLocaleString()} P)\n` +
           `• 제목: "${bookTitle}" (${coverType === 'hardcover' ? '고급 양장 하드커버' : '소프트커버'})\n` +
           `• 수령인: ${recipientName}님\n` +
           `• 배송지: ${shippingAddress}\n` +
-          `온 가족이 6개월 동안 모은 포인트로 세상에 단 한 권뿐인 실물 책이 정성껏 제작됩니다! 🎉`
+          `온 가족이 6개월 동안 모은 포인트(${PHOTOBOOK_REQUIRED_POINTS.toLocaleString()} P)로 세상에 단 한 권뿐인 실물 포토북이 정성껏 제작됩니다! 🎉`
       );
     }
   };
@@ -430,7 +435,7 @@ ${answersText || '아직 답변이 많지 않지만, 언제나 서로를 아끼�
 
                     <View style={styles.interviewTopicBox}>
                       <Award size={18} color="#FF6B47" style={{ marginRight: 6 }} />
-                      <Text style={styles.interviewTopicTitle}>"{activeTopicObj?.topic || '가족의 따뜻한 대화'}"</Text>
+                      <Text style={styles.interviewTopicTitle}>"{stripEmojis(activeTopicObj?.topic || '가족의 따뜻한 대화')}"</Text>
                     </View>
 
                     <View style={styles.interviewList}>
@@ -732,34 +737,34 @@ ${answersText || '아직 답변이 많지 않지만, 언제나 서로를 아끼�
                   {/* Point Cost & Balance Info */}
                   <View style={styles.orderPointSummaryBox}>
                     <View style={styles.orderPointRow}>
-                      <Text style={styles.orderPointLabel}>실물 이야기책 제작 비용 (6개월 분량)</Text>
-                      <Text style={styles.orderPointCost}>2,500 P</Text>
+                      <Text style={styles.orderPointLabel}>실물 포토북 이야기책 제작 비용 (6개월 분량)</Text>
+                      <Text style={styles.orderPointCost}>{PHOTOBOOK_REQUIRED_POINTS.toLocaleString()} P</Text>
                     </View>
                     <View style={styles.orderPointRow}>
                       <Text style={styles.orderPointLabel}>우리 가족 보유 포인트</Text>
-                      <Text style={[styles.orderPointBalance, (points || 0) < 2500 && { color: '#DC2626' }]}>
+                      <Text style={[styles.orderPointBalance, (points || 0) < PHOTOBOOK_REQUIRED_POINTS && { color: '#DC2626' }]}>
                         {(points || 0).toLocaleString()} P
                       </Text>
                     </View>
-                    {(points || 0) < 2500 ? (
+                    {(points || 0) < PHOTOBOOK_REQUIRED_POINTS ? (
                       <Text style={styles.orderPointWarn}>
-                        * 2,500 P 달성 시 발주가 가능합니다. (부족: {(2500 - (points || 0)).toLocaleString()} P)
+                        * {PHOTOBOOK_REQUIRED_POINTS.toLocaleString()} P 달성 시 발주가 가능합니다. (부족: {(PHOTOBOOK_REQUIRED_POINTS - (points || 0)).toLocaleString()} P)
                       </Text>
                     ) : (
                       <Text style={styles.orderPointSuccess}>
-                        * 발주 시 2,500 P가 자동으로 차감됩니다.
+                        * 발주 시 {PHOTOBOOK_REQUIRED_POINTS.toLocaleString()} P가 자동으로 차감됩니다.
                       </Text>
                     )}
                   </View>
 
                   <TouchableOpacity
-                    style={[styles.submitOrderBtn, (points || 0) < 2500 && styles.submitOrderBtnDisabled]}
+                    style={[styles.submitOrderBtn, (points || 0) < PHOTOBOOK_REQUIRED_POINTS && styles.submitOrderBtnDisabled]}
                     onPress={handlePlaceOrder}
                   >
                     <Text style={styles.submitOrderBtnText}>
-                      {(points || 0) >= 2500
-                        ? '2,500 P로 실물책 주문 신청하기'
-                        : `포인트 모으고 발주하기 (${(2500 - (points || 0)).toLocaleString()} P 부족)`}
+                      {(points || 0) >= PHOTOBOOK_REQUIRED_POINTS
+                        ? `${PHOTOBOOK_REQUIRED_POINTS.toLocaleString()} P로 실물 포토북 주문 신청하기`
+                        : `포인트 모으고 발주하기 (${(PHOTOBOOK_REQUIRED_POINTS - (points || 0)).toLocaleString()} P 부족)`}
                     </Text>
                   </TouchableOpacity>
                 </ScrollView>
