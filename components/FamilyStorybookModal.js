@@ -559,7 +559,7 @@ ${answersText || '아직 답변이 많지 않지만, 언제나 서로를 아끼�
                     </View>
                     <View style={styles.colophonRow}>
                       <Text style={styles.colophonLabel}>판형 규격:</Text>
-                      <Text style={styles.colophonVal}>A5 판형 (148 × 210mm) / 300 DPI</Text>
+                      <Text style={styles.colophonVal}>150 × 150mm 코지 스퀘어 / 300 DPI</Text>
                     </View>
                     <View style={styles.colophonRow}>
                       <Text style={styles.colophonLabel}>표지 사양:</Text>

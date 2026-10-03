@@ -1028,7 +1028,7 @@ export default function PhotoAlbumScreen({
                   </View>
                   <View style={styles.pageItemInfo}>
                     <Text style={styles.pageItemTitle}>에필로그 & 도서 판권지 (Colophon)</Text>
-                    <Text style={styles.pageItemDesc}>A5 양장 하드커버 300DPI 인쇄 사양 및 가족 완독 도장</Text>
+                    <Text style={styles.pageItemDesc}>150×150mm 코지 스퀘어 양장 300DPI 인쇄 사양 및 가족 완독 도장</Text>
                   </View>
                   <Check size={18} color="#10B981" />
                 </View>

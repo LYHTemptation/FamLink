@@ -111,9 +111,11 @@ export default function PhotobookStudioScreen({
   // 4. 현재 작업 중인 펼침면 (스프레드 0~15, 총 16개 펼침면 = 32페이지)
   const [currentSpreadIndex, setCurrentSpreadIndex] = useState(0);
 
-  // 가용 높이에 맞춘 캔버스 높이 동적 계산 (화면에 쏙 들어오도록 맞춤)
+  // 150×150mm 정방형 스퀘어북 비율에 맞춘 캔버스 높이 동적 계산 (양면 2:1 가로 와이드, 1페이지 1:1 정방형)
   const availableHeight = windowHeight || Dimensions.get('window').height || 750;
-  const canvasHeight = Math.max(250, Math.min(340, availableHeight - 430));
+  const canvasHeight = viewMode === 'dual'
+    ? Math.max(220, Math.min(270, availableHeight - 460))
+    : Math.max(260, Math.min(330, availableHeight - 420));
 
   // 4. 단톡방 사진 목록 추출
   const chatPhotos = useMemo(() => {
@@ -149,17 +151,17 @@ export default function PhotobookStudioScreen({
   const [orderName, setOrderName] = useState(currentUserProfile?.name || '가족 대표');
   const [orderPhone, setOrderPhone] = useState('010-1234-5678');
   const [orderAddress, setOrderAddress] = useState('서울시 강남구 테헤란로 123');
-  const [orderAddCopy, setOrderAddCopy] = useState(true); // 조부모님 선물용 추가 1권 (+19,000원)
+  const [orderAddCopy, setOrderAddCopy] = useState(true); // 조부모님 선물용 추가 1권 (+14,000원 특가)
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
 
-  // 하이브리드 결제 토크노믹스 상태 (정가 32,000원 중 최대 15,000P까지 1P=1원 할인 지원)
+  // 하이브리드 결제 토크노믹스 상태 (15×15cm 스퀘어북 정가 24,000원 중 최대 12,000P까지 1P=1원 할인 지원)
   const [usePointsDiscount, setUsePointsDiscount] = useState(true);
-  const maxPointDiscount = 15000;
+  const maxPointDiscount = 12000;
   const availablePointsToUse = Math.min(points || 0, maxPointDiscount);
   const appliedPoints = usePointsDiscount ? availablePointsToUse : 0;
 
-  const basePrice = 32000;
-  const addPrice = orderAddCopy ? 19000 : 0;
+  const basePrice = 24000;
+  const addPrice = orderAddCopy ? 14000 : 0;
   const finalCashPrice = Math.max(0, basePrice - appliedPoints + addPrice);
 
   // 6. 현재 스프레드 정보 계산
@@ -310,7 +312,7 @@ export default function PhotobookStudioScreen({
 
       Alert.alert(
         '양장본 인쇄 주문 접수 완료! 📦',
-        `[${bookTitle}] 총 ${orderAddCopy ? '2권 (선물용 1권 포함)' : '1권'}이 인쇄 제작에 들어갑니다.\n\n• 가족 포인트: -${appliedPoints.toLocaleString()} P 할인 적용\n• 최종 결제액: ${finalCashPrice.toLocaleString()}원\n• 정밀 POD 인쇄 (A5 하드커버 32P 랑데뷰 160g)\n• 예상 배송일: 영업일 기준 3~4일 이내`,
+        `[${bookTitle}] 총 ${orderAddCopy ? '2권 (선물용 1권 포함)' : '1권'}이 인쇄 제작에 들어갑니다.\n\n• 가족 포인트: -${appliedPoints.toLocaleString()} P 할인 적용\n• 최종 결제액: ${finalCashPrice.toLocaleString()}원\n• 정밀 POD 인쇄 (150×150mm 코지 스퀘어 32P 랑데뷰 160g 양장본)\n• 예상 배송일: 영업일 기준 3~4일 이내`,
         [{ text: '확인' }]
       );
     }, 1200);
@@ -512,7 +514,7 @@ export default function PhotobookStudioScreen({
           <View style={[styles.colophonBox, isFull && { padding: 8 }]}>
             <Text style={[styles.colophonText, isFull && { fontSize: 10 }]}>기록 기간: 1~6개월 차 (180일간의 발자취)</Text>
             <Text style={[styles.colophonText, isFull && { fontSize: 10 }]}>발행처: FamLink Family Press (POD Standard)</Text>
-            <Text style={[styles.colophonText, isFull && { fontSize: 10 }]}>판형: A5 Hardcover 32 Pages / 랑데뷰 160g</Text>
+            <Text style={[styles.colophonText, isFull && { fontSize: 10 }]}>판형: 150 × 150mm 코지 스퀘어 32P / 랑데뷰 160g 양장</Text>
           </View>
           <Text style={styles.pageNumberFootnote}>- {currentSpread.rightPage} -</Text>
         </View>
@@ -607,7 +609,7 @@ export default function PhotobookStudioScreen({
             스토리북
           </Text>
           <View style={styles.slimHeaderSpecBadge}>
-            <Text style={styles.slimHeaderSpecText}>A5 32P</Text>
+            <Text style={styles.slimHeaderSpecText}>15×15 스퀘어</Text>
           </View>
         </View>
 
@@ -949,12 +951,12 @@ export default function PhotobookStudioScreen({
               <View style={styles.orderSummaryCard}>
                 <Text style={styles.orderBookTitle}>{bookTitle}</Text>
                 <Text style={styles.orderBookSub}>
-                  A5 판형 · 32페이지 · 무광 하드커버 양장제본 · 세네카 책등 6mm 인쇄
+                  150×150mm 코지 스퀘어 · 32페이지 · 무광 하드커버 양장제본 · 세네카 책등 5mm 인쇄
                 </Text>
                 <View style={styles.priceDivider} />
                 <View style={styles.priceRow}>
                   <Text style={styles.priceLabel}>기본 1권 인쇄비:</Text>
-                  <Text style={styles.priceVal}>32,000원</Text>
+                  <Text style={styles.priceVal}>24,000원</Text>
                 </View>
               </View>
 
@@ -986,7 +988,7 @@ export default function PhotobookStudioScreen({
                         포인트로 -{availablePointsToUse.toLocaleString()}원 즉시 할인
                       </Text>
                       <Text style={styles.pointsApplySub}>
-                        지난 6개월간 매일 대화하며 모은 온기 포인트로 인쇄비를 지원해 드려요! (최대 15,000P)
+                        지난 6개월간 매일 대화하며 모은 온기 포인트로 인쇄비를 지원해 드려요! (최대 12,000P)
                       </Text>
                     </View>
                     <Text style={[styles.pointsDiscountAmt, usePointsDiscount && styles.pointsDiscountAmtActive]}>
@@ -996,7 +998,7 @@ export default function PhotobookStudioScreen({
                 ) : (
                   <View style={styles.noPointsNotice}>
                     <Text style={styles.noPointsNoticeText}>
-                      💡 매일 스몰톡과 집안일 미션으로 포인트를 모으면 다음 권 인쇄비를 최대 15,000원 할인받을 수 있어요!
+                      💡 매일 스몰톡과 집안일 미션으로 포인트를 모으면 다음 권 인쇄비를 최대 12,000원 할인받을 수 있어요!
                     </Text>
                   </View>
                 )}
@@ -1015,12 +1017,12 @@ export default function PhotobookStudioScreen({
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <Text style={styles.addCopyTitle}>부모님/조부모님 선물용 +1권 추가</Text>
                     <View style={styles.discountBadge}>
-                      <Text style={styles.discountBadgeText}>40% 파격 특가</Text>
+                      <Text style={styles.discountBadgeText}>42% 파격 특가</Text>
                     </View>
                   </View>
-                  <Text style={styles.addCopySub}>할인가 +19,000원에 한 권 더 제작해 선물하세요!</Text>
+                  <Text style={styles.addCopySub}>할인가 +14,000원에 한 권 더 제작해 선물하세요!</Text>
                 </View>
-                <Text style={styles.addCopyPriceText}>+19,000원</Text>
+                <Text style={styles.addCopyPriceText}>+14,000원</Text>
               </TouchableOpacity>
 
               {/* 총 결제 예정 금액 (하이브리드 명세) */}
