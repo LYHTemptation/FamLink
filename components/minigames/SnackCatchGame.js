@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
-import Svg, { Path, Circle, Rect } from 'react-native-svg';
+import Svg, { Circle, Path, Defs, RadialGradient, Stop, Polyline, G, Rect } from 'react-native-svg';
 import {
   Trophy,
   Sparkles,
@@ -21,84 +21,249 @@ import {
   RotateCcw,
   Check,
   Clock,
-  Apple,
-  Beef,
-  Cake,
-  Star,
   Play,
-  PartyPopper,
+  Gamepad2,
+  Sword,
+  Zap,
+  Bomb as BombLucide,
 } from 'lucide-react-native';
 
 const { width: INITIAL_WIDTH, height: INITIAL_HEIGHT } = Dimensions.get('window');
 
-// Custom Vector Icons for items without standard library equivalents
-function ChiliPepperIcon({ size = 26 }) {
+// -----------------------------------------------------------------
+// Beautiful Vector Fruit Icons (Whole & Sliced Halves)
+// -----------------------------------------------------------------
+
+// 1. Watermelon
+function WatermelonWhole({ size = 58 }) {
+  const r = size / 2;
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Svg width={size} height={size} viewBox="0 0 60 60">
+      <Circle cx="30" cy="30" r="27" fill="#15803D" stroke="#14532D" strokeWidth="2.5" />
+      {/* Dark Green Stripes */}
+      <Path d="M12 12 Q 30 25 18 48" stroke="#14532D" strokeWidth="3" fill="none" />
+      <Path d="M26 6 Q 30 30 32 54" stroke="#14532D" strokeWidth="3.5" fill="none" />
+      <Path d="M42 10 Q 32 30 46 48" stroke="#14532D" strokeWidth="3" fill="none" />
+      {/* Specular Highlight */}
+      <Circle cx="20" cy="18" r="4" fill="#86EFAC" opacity="0.6" />
+    </Svg>
+  );
+}
+
+function WatermelonHalf({ size = 58, isLeft = true }) {
+  return (
+    <Svg width={size * 0.65} height={size} viewBox="0 0 35 60">
+      {isLeft ? (
+        <G>
+          <Path d="M32 5 A 26 26 0 0 0 32 55 Z" fill="#15803D" stroke="#14532D" strokeWidth="2" />
+          <Path d="M30 8 A 22 22 0 0 0 30 52 Z" fill="#EF4444" />
+          {/* Seeds */}
+          <Circle cx="22" cy="22" r="2" fill="#1E293B" />
+          <Circle cx="18" cy="30" r="2" fill="#1E293B" />
+          <Circle cx="22" cy="38" r="2" fill="#1E293B" />
+        </G>
+      ) : (
+        <G>
+          <Path d="M3 5 A 26 26 0 0 1 3 55 Z" fill="#15803D" stroke="#14532D" strokeWidth="2" />
+          <Path d="M5 8 A 22 22 0 0 1 5 52 Z" fill="#EF4444" />
+          {/* Seeds */}
+          <Circle cx="13" cy="22" r="2" fill="#1E293B" />
+          <Circle cx="17" cy="30" r="2" fill="#1E293B" />
+          <Circle cx="13" cy="38" r="2" fill="#1E293B" />
+        </G>
+      )}
+    </Svg>
+  );
+}
+
+// 2. Apple
+function AppleWhole({ size = 52 }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 54 54">
+      {/* Stem & Leaf */}
+      <Path d="M27 6 Q 28 14 27 16" stroke="#78350F" strokeWidth="3" fill="none" strokeLinecap="round" />
+      <Path d="M28 10 Q 36 6 38 12 Q 32 14 28 10" fill="#22C55E" />
+      {/* Apple Body */}
       <Path
-        d="M18 4C16.5 4 15.5 5 15 6C13.5 4.5 11 4 9 5.5C6 7.5 5 12 6.5 16C7.5 18.5 9.5 20.5 12 21C13.5 21.3 15 20.8 16 19.5C18.5 16.5 19.5 11 18.5 7C19.5 6.5 20.5 5.5 20 4C19.5 3.5 18.5 3.5 18 4Z"
+        d="M27 16 C 18 13 8 20 10 32 C 12 44 24 50 27 48 C 30 50 42 44 44 32 C 46 20 36 13 27 16 Z"
         fill="#DC2626"
         stroke="#991B1B"
+        strokeWidth="2"
+      />
+      {/* Highlight */}
+      <Circle cx="18" cy="24" r="3.5" fill="#FCA5A5" opacity="0.8" />
+    </Svg>
+  );
+}
+
+function AppleHalf({ size = 52, isLeft = true }) {
+  return (
+    <Svg width={size * 0.6} height={size} viewBox="0 0 30 54">
+      {isLeft ? (
+        <G>
+          <Path d="M28 16 C 16 13 8 22 10 34 C 12 46 24 49 28 48 Z" fill="#DC2626" stroke="#991B1B" strokeWidth="1.5" />
+          <Path d="M26 18 C 16 16 12 24 13 34 C 14 44 23 46 26 45 Z" fill="#FEF08A" />
+          <Circle cx="22" cy="32" r="2" fill="#78350F" />
+        </G>
+      ) : (
+        <G>
+          <Path d="M2 16 C 14 13 22 22 20 34 C 18 46 6 49 2 48 Z" fill="#DC2626" stroke="#991B1B" strokeWidth="1.5" />
+          <Path d="M4 18 C 14 16 18 24 17 34 C 16 44 7 46 4 45 Z" fill="#FEF08A" />
+          <Circle cx="8" cy="32" r="2" fill="#78350F" />
+        </G>
+      )}
+    </Svg>
+  );
+}
+
+// 3. Banana
+function BananaWhole({ size = 54 }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 56 56">
+      <Path
+        d="M10 42 C 16 48 38 48 48 24 C 49 20 45 16 42 18 C 34 36 18 36 10 42 Z"
+        fill="#FACC15"
+        stroke="#CA8A04"
+        strokeWidth="2"
+      />
+      {/* Banana Tip */}
+      <Circle cx="47" cy="20" r="2.5" fill="#713F12" />
+      <Circle cx="11" cy="41" r="2" fill="#854D0E" />
+    </Svg>
+  );
+}
+
+function BananaHalf({ size = 54, isLeft = true }) {
+  return (
+    <Svg width={size * 0.55} height={size} viewBox="0 0 30 56">
+      <Path
+        d={isLeft ? "M8 42 C 14 46 26 44 28 32 L 28 30 C 18 36 12 38 8 42 Z" : "M2 30 C 12 36 22 34 26 18 C 24 16 20 20 2 30 Z"}
+        fill="#FACC15"
+        stroke="#CA8A04"
         strokeWidth="1.5"
       />
-      <Path
-        d="M15 6C15.5 3.5 17 2 19 2"
-        stroke="#16A34A"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
     </Svg>
   );
 }
 
-function BombIcon({ size = 26 }) {
+// 4. Strawberry
+function StrawberryWhole({ size = 50 }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Circle cx="11" cy="13" r="8" fill="#1E293B" stroke="#0F172A" strokeWidth="1.5" />
-      <Path d="M11 9A4 4 0 0 1 15 13" stroke="#64748B" strokeWidth="1.5" strokeLinecap="round" />
-      <Rect x="15" y="6" width="3" height="3" rx="0.5" fill="#475569" transform="rotate(25 15 6)" />
-      <Path d="M17 7C18.5 5.5 19 4 21 4" stroke="#D97706" strokeWidth="1.5" strokeLinecap="round" />
-      <Circle cx="21" cy="4" r="1.5" fill="#F59E0B" />
+    <Svg width={size} height={size} viewBox="0 0 50 50">
+      <Path d="M25 8 Q 20 2 16 8 Q 25 11 25 8" fill="#16A34A" />
+      <Path d="M25 8 Q 30 2 34 8 Q 25 11 25 8" fill="#16A34A" />
+      <Path
+        d="M14 14 C 10 24 16 40 25 44 C 34 40 40 24 36 14 C 30 10 20 10 14 14 Z"
+        fill="#E11D48"
+        stroke="#9F1239"
+        strokeWidth="1.5"
+      />
+      {/* Seeds */}
+      <Circle cx="20" cy="22" r="1.5" fill="#FEF08A" />
+      <Circle cx="28" cy="20" r="1.5" fill="#FEF08A" />
+      <Circle cx="24" cy="30" r="1.5" fill="#FEF08A" />
+      <Circle cx="18" cy="32" r="1.5" fill="#FEF08A" />
+      <Circle cx="30" cy="32" r="1.5" fill="#FEF08A" />
     </Svg>
   );
 }
 
-function SnackItemIcon({ type, size = 26 }) {
+// 5. Golden Pineapple
+function PineappleWhole({ size = 58 }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 60 60">
+      {/* Crown Leaves */}
+      <Path d="M30 4 L 26 18 L 30 14 L 34 18 Z" fill="#15803D" />
+      <Path d="M22 8 L 24 18 L 28 15 Z" fill="#16A34A" />
+      <Path d="M38 8 L 32 15 L 36 18 Z" fill="#16A34A" />
+      {/* Pineapple Oval */}
+      <Path
+        d="M20 20 C 14 28 14 44 22 52 C 30 56 38 54 42 46 C 46 38 44 24 38 18 C 30 14 24 16 20 20 Z"
+        fill="#F59E0B"
+        stroke="#B45309"
+        strokeWidth="2"
+      />
+      {/* Diamond Texture */}
+      <Path d="M20 30 L 40 38" stroke="#D97706" strokeWidth="2" />
+      <Path d="M18 42 L 38 24" stroke="#D97706" strokeWidth="2" />
+      <Circle cx="30" cy="34" r="3" fill="#FDE68A" opacity="0.8" />
+    </Svg>
+  );
+}
+
+// 6. Ticking Bomb
+function TickingBombIcon({ size = 56 }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 60 60">
+      {/* Spark Fuse */}
+      <Path d="M38 12 Q 44 8 46 4" stroke="#92400E" strokeWidth="3" fill="none" strokeLinecap="round" />
+      {/* Burning Spark */}
+      <Circle cx="48" cy="4" r="4" fill="#F59E0B" />
+      <Circle cx="48" cy="4" r="2" fill="#EF4444" />
+      {/* Bomb Cap */}
+      <Rect x="26" y="10" width="12" height="6" rx="2" fill="#475569" transform="rotate(-15 32 13)" />
+      {/* Bomb Shell */}
+      <Circle cx="28" cy="34" r="22" fill="#0F172A" stroke="#334155" strokeWidth="2.5" />
+      {/* Highlight */}
+      <Circle cx="20" cy="24" r="4.5" fill="#64748B" opacity="0.7" />
+    </Svg>
+  );
+}
+
+function FruitWholeRenderer({ type, size = 56 }) {
   switch (type) {
-    case 'apple':
-      return <Apple size={size} color="#EF4444" fill="#FCA5A5" />;
-    case 'meat':
-      return <Beef size={size} color="#B45309" fill="#FCD34D" />;
-    case 'cake':
-      return <Cake size={size} color="#EC4899" fill="#FBCFE8" />;
-    case 'star':
-      return <Star size={size} color="#F59E0B" fill="#FDE68A" />;
-    case 'pepper':
-      return <ChiliPepperIcon size={size} />;
-    case 'bomb':
-      return <BombIcon size={size} />;
-    default:
-      return <Star size={size} color="#F59E0B" fill="#FDE68A" />;
+    case 'watermelon': return <WatermelonWhole size={size} />;
+    case 'apple': return <AppleWhole size={size} />;
+    case 'banana': return <BananaWhole size={size} />;
+    case 'strawberry': return <StrawberryWhole size={size} />;
+    case 'pineapple': return <PineappleWhole size={size} />;
+    case 'bomb': return <TickingBombIcon size={size} />;
+    default: return <AppleWhole size={size} />;
   }
 }
 
-// Game Configuration
-const GAME_DURATION = 30; // 30 seconds
-const PET_WIDTH = 84;
-const PET_HEIGHT = 84;
-const ITEM_SIZE = 44;
-const FLOOR_HEIGHT = 110; // Bottom stage floor height
-const SPAWN_INTERVAL = 550; // ms between items
+function FruitHalfRenderer({ type, size = 56, isLeft = true }) {
+  switch (type) {
+    case 'watermelon': return <WatermelonHalf size={size} isLeft={isLeft} />;
+    case 'apple': return <AppleHalf size={size} isLeft={isLeft} />;
+    case 'banana': return <BananaHalf size={size} isLeft={isLeft} />;
+    default: return <AppleHalf size={size} isLeft={isLeft} />;
+  }
+}
 
-// Falling Items Table with Vector Icons & Color Palettes
-const ITEMS_TABLE = [
-  { type: 'apple', name: '사과', score: 10, isHazard: false, color: '#EF4444', bgColor: 'rgba(239, 68, 68, 0.15)' },
-  { type: 'meat', name: '고기', score: 20, isHazard: false, color: '#B45309', bgColor: 'rgba(180, 83, 9, 0.15)' },
-  { type: 'cake', name: '케이크', score: 30, isHazard: false, color: '#EC4899', bgColor: 'rgba(236, 72, 153, 0.15)' },
-  { type: 'star', name: '별사탕', score: 50, isHazard: false, color: '#F59E0B', bgColor: 'rgba(245, 158, 11, 0.15)' },
-  { type: 'pepper', name: '매운고추', score: -15, isHazard: true, color: '#DC2626', bgColor: 'rgba(220, 38, 38, 0.15)' },
-  { type: 'bomb', name: '폭탄', score: -25, isHazard: true, color: '#334155', bgColor: 'rgba(51, 65, 85, 0.2)' },
+// -----------------------------------------------------------------
+// Game Configuration
+// -----------------------------------------------------------------
+const GAME_DURATION = 30; // 30 seconds
+const GRAVITY = 0.36; // Physics gravity (smooth and floaty high arc)
+
+const FRUIT_TABLE = [
+  { type: 'watermelon', name: '수박', points: 30, size: 64, color: '#EF4444', splashColor: '#DC2626' },
+  { type: 'apple', name: '사과', points: 15, size: 54, color: '#EF4444', splashColor: '#B91C1C' },
+  { type: 'banana', name: '바나나', points: 20, size: 56, color: '#FACC15', splashColor: '#F59E0B' },
+  { type: 'strawberry', name: '딸기', points: 25, size: 48, color: '#E11D48', splashColor: '#BE123C' },
+  { type: 'pineapple', name: '황금 파인애플', points: 50, size: 62, color: '#F59E0B', splashColor: '#D97706', isRare: true },
 ];
+
+const GAME_CONFIG = {
+  tossInterval: 1100,
+  batchSize: [2, 3],
+  bombChance: 0.18, // 18% chance of bombs
+  apexRatioMin: 0.18,
+  apexRatioMax: 0.36,
+};
+
+// Distance from point to line segment
+function distToSegment(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return Math.hypot(px - x1, py - y1);
+  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lenSq));
+  const projX = x1 + t * dx;
+  const projY = y1 + t * dy;
+  return Math.hypot(px - projX, py - projY);
+}
 
 export default function SnackCatchGame({
   visible,
@@ -106,8 +271,9 @@ export default function SnackCatchGame({
   transparentUrl,
   onClose,
   onGameComplete,
+  canEarnReward = true,
+  remainingRewards = 1,
 }) {
-  // Screen Dimensions with live listener
   const [dimensions, setDimensions] = useState(Dimensions.get('window'));
   const screenWidth = dimensions.width;
   const screenHeight = dimensions.height;
@@ -119,35 +285,33 @@ export default function SnackCatchGame({
     return () => sub?.remove?.();
   }, []);
 
-  // Game Lifecycle States
-  const [gameState, setGameState] = useState('ready'); // 'ready' | 'playing' | 'gameover'
+  // Game Lifecycle States: 'ready' | 'playing' | 'gameover'
+  const [gameState, setGameState] = useState('ready');
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
   const [score, setScore] = useState(0);
+  const [slicedCount, setSlicedCount] = useState(0);
   const [combo, setCombo] = useState(0);
   const [maxCombo, setMaxCombo] = useState(0);
-  const [isFever, setIsFever] = useState(false);
-  const [items, setItems] = useState([]);
+  const [lives, setLives] = useState(3);
+  const [fullness, setFullness] = useState(0); // 0% ~ 100%
+
+  // Active Flying Fruits & Sliced Halves
+  const [fruits, setFruits] = useState([]);
+  const [halves, setHalves] = useState([]);
+  const [splashes, setSplashes] = useState([]);
   const [toasts, setToasts] = useState([]);
-  const [isStunned, setIsStunned] = useState(false);
 
-  // Bulletproof Character Position via React State (100% reliable on iOS/Android/Web)
-  const [petX, setPetX] = useState((INITIAL_WIDTH - PET_WIDTH) / 2);
-  const [petDirection, setPetDirection] = useState(1); // 1 = right, -1 = left
-  const currentPetX = useRef((INITIAL_WIDTH - PET_WIDTH) / 2);
+  // Blade Slash Trail
+  const [slashPoints, setSlashPoints] = useState([]);
+  const lastTouchPosRef = useRef(null);
 
-  // Animation values for squish bite and fever pulse
+  // Animations
   const petBounce = useRef(new Animated.Value(1)).current;
-  const feverPulse = useRef(new Animated.Value(1)).current;
+  const screenShake = useRef(new Animated.Value(0)).current;
 
-  // State Refs for physics and callbacks
+  // State Refs for 60fps loop
   const gameStateRef = useRef(gameState);
   gameStateRef.current = gameState;
-
-  const isStunnedRef = useRef(isStunned);
-  isStunnedRef.current = isStunned;
-
-  const isFeverRef = useRef(isFever);
-  isFeverRef.current = isFever;
 
   const screenWidthRef = useRef(screenWidth);
   screenWidthRef.current = screenWidth;
@@ -155,159 +319,331 @@ export default function SnackCatchGame({
   const screenHeightRef = useRef(screenHeight);
   screenHeightRef.current = screenHeight;
 
-  const itemsRef = useRef([]);
+  const fruitsRef = useRef([]);
+  const halvesRef = useRef([]);
+  const comboRef = useRef(0);
+  const lastSliceTimeRef = useRef(0);
 
-  // Timers & Loop Refs
+  // Timers
   const gameTimerRef = useRef(null);
-  const spawnTimerRef = useRef(null);
+  const tossTimerRef = useRef(null);
   const animFrameRef = useRef(null);
-  const feverTimerRef = useRef(null);
-  const stunTimerRef = useRef(null);
+  const slashClearTimerRef = useRef(null);
+
+  // Trigger Score / Message Toast
+  const triggerToast = useCallback((text, color = '#F59E0B', x = null, y = null) => {
+    const id = `toast_${Date.now()}_${Math.random()}`;
+    const toastX = x !== null ? Math.max(20, Math.min(screenWidthRef.current - 140, x - 50)) : screenWidthRef.current / 2 - 60;
+    const toastY = y !== null ? Math.max(90, Math.min(screenHeightRef.current - 180, y - 30)) : screenHeightRef.current / 2;
+
+    setToasts(prev => [...prev.slice(-4), { id, text, color, x: toastX, y: toastY }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 850);
+  }, []);
+
+  // Screen Shake (on bomb hit)
+  const triggerShake = useCallback(() => {
+    Animated.sequence([
+      Animated.timing(screenShake, { toValue: 12, duration: 40, useNativeDriver: true }),
+      Animated.timing(screenShake, { toValue: -12, duration: 40, useNativeDriver: true }),
+      Animated.timing(screenShake, { toValue: 8, duration: 40, useNativeDriver: true }),
+      Animated.timing(screenShake, { toValue: -8, duration: 40, useNativeDriver: true }),
+      Animated.timing(screenShake, { toValue: 0, duration: 40, useNativeDriver: true }),
+    ]).start();
+  }, [screenShake]);
+
+  // Reset to Ready
+  const resetToReady = useCallback(() => {
+    if (gameTimerRef.current) clearInterval(gameTimerRef.current);
+    if (tossTimerRef.current) clearInterval(tossTimerRef.current);
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    if (slashClearTimerRef.current) clearTimeout(slashClearTimerRef.current);
+
+    fruitsRef.current = [];
+    halvesRef.current = [];
+    setFruits([]);
+    setHalves([]);
+    setSplashes([]);
+    setToasts([]);
+    setSlashPoints([]);
+    lastTouchPosRef.current = null;
+    setGameState('ready');
+  }, []);
+
+  const handleExitPress = useCallback(() => {
+    if (gameState === 'playing') {
+      Alert.alert(
+        '게임 중단 🍉',
+        '후르츠 닌자를 그만두시겠습니까?\n지금 나가면 보상이 저장되지 않습니다.',
+        [
+          { text: '계속하기', style: 'cancel' },
+          {
+            text: '나가기',
+            style: 'destructive',
+            onPress: () => {
+              resetToReady();
+              if (onClose) onClose();
+            },
+          },
+        ]
+      );
+    } else {
+      resetToReady();
+      if (onClose) onClose();
+    }
+  }, [gameState, resetToReady, onClose]);
 
   // -----------------------------------------------------------------
-  // Move Pet to Target X (Direct Finger Tracking with 0ms Lag)
+  // Toss Fruit Wave (Arc Projectile Physics)
   // -----------------------------------------------------------------
-  const movePetTo = useCallback((touchX) => {
-    if (typeof touchX !== 'number' || isNaN(touchX)) return;
+  const tossWave = useCallback(() => {
+    if (gameStateRef.current !== 'playing') return;
     const stageWidth = screenWidthRef.current;
-    const targetX = Math.max(10, Math.min(stageWidth - PET_WIDTH - 10, touchX - PET_WIDTH / 2));
+    const stageHeight = screenHeightRef.current;
+    const cfg = GAME_CONFIG;
 
-    if (targetX < currentPetX.current - 2) {
-      setPetDirection(-1);
-    } else if (targetX > currentPetX.current + 2) {
-      setPetDirection(1);
+    const count = Math.floor(Math.random() * (cfg.batchSize[1] - cfg.batchSize[0] + 1)) + cfg.batchSize[0];
+
+    for (let i = 0; i < count; i++) {
+      const isBomb = Math.random() < cfg.bombChance;
+
+      let fruitData;
+      if (isBomb) {
+        fruitData = { type: 'bomb', name: '시한폭탄', points: -50, size: 56, color: '#0F172A', isBomb: true };
+      } else {
+        const randIndex = Math.floor(Math.random() * FRUIT_TABLE.length);
+        fruitData = FRUIT_TABLE[randIndex];
+      }
+
+      // Starting X position: somewhere across the bottom width
+      const startX = 40 + Math.random() * (stageWidth - 80 - fruitData.size);
+      const startY = stageHeight + 10; // below screen
+
+      // Calculate vertical launch velocity so the fruit reaches high up into the screen
+      // Target apex Y is between apexRatioMin and apexRatioMax of screen height (e.g. 18% ~ 35% from the top)
+      const targetRatio = cfg.apexRatioMin + Math.random() * (cfg.apexRatioMax - cfg.apexRatioMin);
+      const targetApexY = stageHeight * targetRatio;
+      const targetRise = Math.max(250, startY - targetApexY);
+      const speedY = Math.sqrt(2 * GRAVITY * targetRise);
+
+      // Horizontal velocity: curve inward toward screen center
+      const centerX = stageWidth / 2;
+      const dirX = (centerX - startX) / (stageWidth / 2);
+      const speedX = dirX * (2.2 + Math.random() * 2.6);
+
+      const rotationSpeed = (Math.random() - 0.5) * 8.0;
+
+      const newFruit = {
+        id: `fruit_${Date.now()}_${Math.random()}`,
+        x: startX,
+        y: startY,
+        vx: speedX,
+        vy: -speedY,
+        rotation: Math.random() * 360,
+        rotationSpeed,
+        ...fruitData,
+      };
+
+      fruitsRef.current.push(newFruit);
     }
 
-    currentPetX.current = targetX;
-    setPetX(targetX);
+    setFruits([...fruitsRef.current]);
   }, []);
 
   // -----------------------------------------------------------------
-  // Start / Reset Game
+  // Slice Single Fruit
   // -----------------------------------------------------------------
-  const startGame = useCallback(() => {
-    const stageWidth = screenWidthRef.current;
-    const initialPetX = (stageWidth - PET_WIDTH) / 2;
+  const sliceFruit = useCallback((fruit, sliceX, sliceY, sliceAngle) => {
+    // 1. Bomb Explosion
+    if (fruit.isBomb) {
+      triggerShake();
+      triggerToast('💥 콰광! 폭탄 폭발!', '#EF4444', sliceX, sliceY);
+      setScore(s => Math.max(0, s - 50));
+      comboRef.current = 0;
+      setCombo(0);
+      setLives(l => {
+        const next = l - 1;
+        if (next <= 0) {
+          finishGame();
+        }
+        return Math.max(0, next);
+      });
+      return;
+    }
 
+    // 2. Pet Joy React & Eat
+    Animated.sequence([
+      Animated.timing(petBounce, { toValue: 1.25, duration: 60, useNativeDriver: false }),
+      Animated.timing(petBounce, { toValue: 0.95, duration: 70, useNativeDriver: false }),
+      Animated.timing(petBounce, { toValue: 1.0, duration: 60, useNativeDriver: false }),
+    ]).start();
+
+    // 3. Juice Splatter on Background
+    const splashId = `splash_${Date.now()}_${Math.random()}`;
+    setSplashes(prev => [
+      ...prev.slice(-6),
+      {
+        id: splashId,
+        x: sliceX,
+        y: sliceY,
+        color: fruit.splashColor || '#EF4444',
+      },
+    ]);
+    setTimeout(() => {
+      setSplashes(prev => prev.filter(s => s.id !== splashId));
+    }, 1200);
+
+    // 4. Create Sliced Halves flying apart
+    const halfLeftId = `half_L_${Date.now()}_${Math.random()}`;
+    const halfRightId = `half_R_${Date.now()}_${Math.random()}`;
+
+    const halfLeft = {
+      id: halfLeftId,
+      type: fruit.type,
+      size: fruit.size,
+      isLeft: true,
+      x: sliceX - fruit.size / 2,
+      y: sliceY - fruit.size / 2,
+      vx: -3.5 - Math.random() * 2.5,
+      vy: -2.5 - Math.random() * 2,
+      rotation: sliceAngle,
+      rotSpeed: -14,
+    };
+
+    const halfRight = {
+      id: halfRightId,
+      type: fruit.type,
+      size: fruit.size,
+      isLeft: false,
+      x: sliceX,
+      y: sliceY - fruit.size / 2,
+      vx: 3.5 + Math.random() * 2.5,
+      vy: -2.5 - Math.random() * 2,
+      rotation: sliceAngle,
+      rotSpeed: 14,
+    };
+
+    halvesRef.current.push(halfLeft, halfRight);
+    setHalves([...halvesRef.current]);
+
+    // 5. Score & Stats
+    setScore(s => s + fruit.points);
+    setSlicedCount(c => c + 1);
+    setFullness(f => Math.min(100, f + 4));
+  }, [petBounce, triggerShake, triggerToast]);
+
+  // -----------------------------------------------------------------
+  // Process Continuous Blade Slash
+  // -----------------------------------------------------------------
+  const processBladeSlash = useCallback((currentX, currentY) => {
+    if (gameStateRef.current !== 'playing') return;
+    if (typeof currentX !== 'number' || typeof currentY !== 'number') return;
+
+    // Track Blade Line Points
+    const newPoint = { x: currentX, y: currentY, time: Date.now() };
+    setSlashPoints(prev => [...prev.slice(-8), newPoint]);
+
+    if (slashClearTimerRef.current) clearTimeout(slashClearTimerRef.current);
+    slashClearTimerRef.current = setTimeout(() => {
+      setSlashPoints([]);
+      lastTouchPosRef.current = null;
+    }, 160);
+
+    const prevPos = lastTouchPosRef.current;
+    lastTouchPosRef.current = { x: currentX, y: currentY };
+
+    if (!prevPos) return;
+
+    const dx = currentX - prevPos.x;
+    const dy = currentY - prevPos.y;
+    const moveDist = Math.hypot(dx, dy);
+    if (moveDist < 6) return;
+
+    const sliceAngle = Math.atan2(dy, dx) * (180 / Math.PI);
+
+    // Collision Detection against active flying fruits
+    const activeList = fruitsRef.current;
+    const sliced = [];
+    const remaining = [];
+
+    for (let i = 0; i < activeList.length; i++) {
+      const f = activeList[i];
+      const cx = f.x + f.size / 2;
+      const cy = f.y + f.size / 2;
+      const dist = distToSegment(cx, cy, prevPos.x, prevPos.y, currentX, currentY);
+
+      if (dist <= f.size * 0.6) {
+        sliced.push(f);
+      } else {
+        remaining.push(f);
+      }
+    }
+
+    if (sliced.length > 0) {
+      fruitsRef.current = remaining;
+      setFruits([...remaining]);
+
+      // Combo Tracking
+      const now = Date.now();
+      const isQuick = now - lastSliceTimeRef.current < 900;
+      lastSliceTimeRef.current = now;
+
+      const nextCombo = isQuick ? comboRef.current + sliced.length : sliced.length;
+      comboRef.current = nextCombo;
+      setCombo(nextCombo);
+      setMaxCombo(mc => Math.max(mc, nextCombo));
+
+      // Multi-Slice Feedback
+      if (sliced.length >= 3) {
+        triggerToast(`🔥 COMBO x${sliced.length}! +50점`, '#EC4899', currentX, currentY);
+        setScore(s => s + 50);
+      } else if (sliced.length === 2) {
+        triggerToast('⚡ DOUBLE SLICE! +20점', '#8B5CF6', currentX, currentY);
+        setScore(s => s + 20);
+      }
+
+      // Slice each fruit
+      sliced.forEach(f => {
+        sliceFruit(f, f.x + f.size / 2, f.y + f.size / 2, sliceAngle);
+      });
+    }
+  }, [sliceFruit, triggerToast]);
+
+  // -----------------------------------------------------------------
+  // Start / Finish Game
+  // -----------------------------------------------------------------
+  const finishGame = useCallback(() => {
+    setGameState('gameover');
+    if (gameTimerRef.current) clearInterval(gameTimerRef.current);
+    if (tossTimerRef.current) clearInterval(tossTimerRef.current);
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+  }, []);
+
+  const startGame = useCallback(() => {
     setScore(0);
+    setSlicedCount(0);
     setCombo(0);
     setMaxCombo(0);
+    setLives(3);
+    setFullness(0);
+    comboRef.current = 0;
     setTimeLeft(GAME_DURATION);
-    setIsFever(false);
-    setIsStunned(false);
-    setItems([]);
+    setFruits([]);
+    setHalves([]);
+    setSplashes([]);
     setToasts([]);
-    itemsRef.current = [];
+    setSlashPoints([]);
+    fruitsRef.current = [];
+    halvesRef.current = [];
+    lastSliceTimeRef.current = 0;
+    lastTouchPosRef.current = null;
 
-    setPetX(initialPetX);
-    currentPetX.current = initialPetX;
-    setPetDirection(1);
     setGameState('playing');
   }, []);
 
   // -----------------------------------------------------------------
-  // Fever Mode Controller
-  // -----------------------------------------------------------------
-  const activateFeverMode = useCallback(() => {
-    setIsFever(true);
-    triggerToast('FEVER TIME! 2배 점수!', '#FF6B00');
-
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(feverPulse, { toValue: 1.08, duration: 250, useNativeDriver: false }),
-        Animated.timing(feverPulse, { toValue: 1.0, duration: 250, useNativeDriver: false }),
-      ])
-    ).start();
-
-    if (feverTimerRef.current) clearTimeout(feverTimerRef.current);
-    feverTimerRef.current = setTimeout(() => {
-      setIsFever(false);
-      feverPulse.setValue(1);
-    }, 6000);
-  }, [feverPulse]);
-
-  // Floating Toast Notification
-  const triggerToast = (text, color = '#FF4D6D') => {
-    const id = `toast_${Date.now()}_${Math.random()}`;
-    const x = Math.max(30, Math.min(screenWidthRef.current - 120, currentPetX.current + 8));
-    const y = screenHeightRef.current - FLOOR_HEIGHT - 65;
-    setToasts(prev => [...prev.slice(-4), { id, text, color, x, y }]);
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
-    }, 850);
-  };
-
-  // -----------------------------------------------------------------
-  // Spawn Falling Item
-  // -----------------------------------------------------------------
-  const spawnItem = useCallback(() => {
-    if (gameStateRef.current !== 'playing') return;
-
-    const stageWidth = screenWidthRef.current;
-    let pool = ITEMS_TABLE;
-    if (isFeverRef.current) {
-      pool = ITEMS_TABLE.filter(i => !i.isHazard);
-    }
-
-    const template = pool[Math.floor(Math.random() * pool.length)];
-    const startX = Math.max(20, Math.min(stageWidth - ITEM_SIZE - 20, Math.random() * (stageWidth - ITEM_SIZE)));
-    const speed = isFeverRef.current ? 6.2 + Math.random() * 2.0 : 4.8 + Math.random() * 1.8;
-
-    const newItem = {
-      id: `item_${Date.now()}_${Math.random()}`,
-      ...template,
-      x: startX,
-      y: 75,
-      speed,
-    };
-
-    itemsRef.current.push(newItem);
-    setItems([...itemsRef.current]);
-  }, []);
-
-  // -----------------------------------------------------------------
-  // Item Collected Handler
-  // -----------------------------------------------------------------
-  const handleItemCollected = useCallback((item) => {
-    // 1. Pet Squish Bounce
-    Animated.sequence([
-      Animated.timing(petBounce, { toValue: 0.78, duration: 70, useNativeDriver: false }),
-      Animated.timing(petBounce, { toValue: 1.22, duration: 90, useNativeDriver: false }),
-      Animated.timing(petBounce, { toValue: 1.0, duration: 80, useNativeDriver: false }),
-    ]).start();
-
-    if (item.isHazard) {
-      // Penalty & Stun
-      setCombo(0);
-      setScore(s => Math.max(0, s + item.score));
-      triggerToast(`${item.name}! ${item.score} (기절)`, '#DC2626');
-      setIsStunned(true);
-
-      if (stunTimerRef.current) clearTimeout(stunTimerRef.current);
-      stunTimerRef.current = setTimeout(() => {
-        setIsStunned(false);
-      }, 700);
-    } else {
-      // Food Catch Success
-      const multiplier = isFeverRef.current ? 2 : 1;
-      const pointsGained = item.score * multiplier;
-      setScore(s => s + pointsGained);
-
-      setCombo(c => {
-        const nextCombo = c + 1;
-        setMaxCombo(m => Math.max(m, nextCombo));
-        if (nextCombo === 8 && !isFeverRef.current) {
-          activateFeverMode();
-        }
-        return nextCombo;
-      });
-
-      triggerToast(`+${pointsGained} 냠냠!`, '#10B981');
-    }
-  }, [activateFeverMode, petBounce]);
-
-  // -----------------------------------------------------------------
-  // Main Physics & Collision Detection Loop
+  // 60FPS Arc Physics Loop
   // -----------------------------------------------------------------
   useEffect(() => {
     if (gameState !== 'playing') return;
@@ -318,37 +654,45 @@ export default function SnackCatchGame({
       if (!isRunning || gameStateRef.current !== 'playing') return;
 
       const stageHeight = screenHeightRef.current;
-      const petHitY = stageHeight - FLOOR_HEIGHT - PET_HEIGHT + 10;
-      const nextActiveItems = [];
 
-      for (let i = 0; i < itemsRef.current.length; i++) {
-        const item = itemsRef.current[i];
-        const nextY = item.y + item.speed;
+      // 1. Update whole fruits (gravity + arc + rotation)
+      const currentFruits = fruitsRef.current;
+      const remainingFruits = [];
 
-        // Collision Check
-        const isCollidingY = nextY + ITEM_SIZE >= petHitY && nextY <= petHitY + PET_HEIGHT * 0.75;
-        const isCollidingX =
-          item.x + ITEM_SIZE >= currentPetX.current - 14 &&
-          item.x <= currentPetX.current + PET_WIDTH + 14;
+      for (let i = 0; i < currentFruits.length; i++) {
+        const f = currentFruits[i];
+        f.x += f.vx;
+        f.y += f.vy;
+        f.vy += GRAVITY;
+        f.rotation += f.rotationSpeed;
 
-        if (isCollidingY && isCollidingX) {
-          handleItemCollected(item);
-          continue; // Consumed
+        // Keep until falls below screen bottom
+        if (f.y < stageHeight + 60) {
+          remainingFruits.push(f);
         }
-
-        // Off-screen bottom
-        if (nextY > stageHeight - FLOOR_HEIGHT + 20) {
-          if (!item.isHazard) {
-            setCombo(0);
-          }
-          continue;
-        }
-
-        nextActiveItems.push({ ...item, y: nextY });
       }
 
-      itemsRef.current = nextActiveItems;
-      setItems(nextActiveItems);
+      fruitsRef.current = remainingFruits;
+      setFruits([...remainingFruits]);
+
+      // 2. Update sliced halves (flying apart + spinning)
+      const currentHalves = halvesRef.current;
+      const remainingHalves = [];
+
+      for (let i = 0; i < currentHalves.length; i++) {
+        const h = currentHalves[i];
+        h.x += h.vx;
+        h.y += h.vy;
+        h.vy += GRAVITY * 1.1;
+        h.rotation += h.rotSpeed;
+
+        if (h.y < stageHeight + 60) {
+          remainingHalves.push(h);
+        }
+      }
+
+      halvesRef.current = remainingHalves;
+      setHalves([...remainingHalves]);
 
       animFrameRef.current = requestAnimationFrame(updatePhysics);
     };
@@ -359,135 +703,65 @@ export default function SnackCatchGame({
       isRunning = false;
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-  }, [gameState, handleItemCollected]);
+  }, [gameState]);
 
-  // Finish Game
-  const finishGame = useCallback(() => {
-    setGameState('gameover');
-    if (gameTimerRef.current) clearInterval(gameTimerRef.current);
-    if (spawnTimerRef.current) clearInterval(spawnTimerRef.current);
-    if (feverTimerRef.current) clearTimeout(feverTimerRef.current);
-    if (stunTimerRef.current) clearTimeout(stunTimerRef.current);
-  }, []);
+  // -----------------------------------------------------------------
+  // Toss Waves & Countdown Timer
+  // -----------------------------------------------------------------
+  useEffect(() => {
+    if (gameState !== 'playing') return;
 
-  // Clean Reset to Ready state
-  const resetToReady = useCallback(() => {
-    if (gameTimerRef.current) {
-      clearInterval(gameTimerRef.current);
-      gameTimerRef.current = null;
-    }
-    if (spawnTimerRef.current) {
-      clearInterval(spawnTimerRef.current);
-      spawnTimerRef.current = null;
-    }
-    if (animFrameRef.current) {
-      cancelAnimationFrame(animFrameRef.current);
-      animFrameRef.current = null;
-    }
-    if (feverTimerRef.current) {
-      clearTimeout(feverTimerRef.current);
-      feverTimerRef.current = null;
-    }
-    if (stunTimerRef.current) {
-      clearTimeout(stunTimerRef.current);
-      stunTimerRef.current = null;
-    }
+    const cfg = GAME_CONFIG;
 
-    const stageWidth = screenWidthRef.current;
-    const initialPetX = (stageWidth - PET_WIDTH) / 2;
+    // Toss fruit waves periodically
+    tossWave(); // Immediate first wave
+    tossTimerRef.current = setInterval(() => {
+      tossWave();
+    }, cfg.tossInterval);
 
-    setScore(0);
-    setCombo(0);
-    setMaxCombo(0);
-    setTimeLeft(GAME_DURATION);
-    setIsFever(false);
-    setIsStunned(false);
-    setItems([]);
-    setToasts([]);
-    itemsRef.current = [];
-
-    setPetX(initialPetX);
-    currentPetX.current = initialPetX;
-    setPetDirection(1);
-    setGameState('ready');
-  }, []);
-
-  // Handle User Close / Exit Button
-  const handleExitPress = useCallback(() => {
-    if (gameStateRef.current === 'playing') {
-      const doExit = () => {
-        resetToReady();
-        if (onClose) onClose();
-      };
-
-      if (Platform.OS === 'web') {
-        if (typeof window !== 'undefined' && window.confirm('게임을 중단하고 나가시겠습니까? 진행 중인 점수는 저장되지 않습니다.')) {
-          doExit();
+    // 1-second countdown
+    gameTimerRef.current = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev <= 1) {
+          finishGame();
+          return 0;
         }
-      } else {
-        Alert.alert(
-          '게임 종료',
-          '게임을 중단하고 나가시겠습니까? 진행 중인 점수는 저장되지 않습니다.',
-          [
-            { text: '계속하기', style: 'cancel' },
-            { text: '나가기', style: 'destructive', onPress: doExit },
-          ]
-        );
-      }
-    } else {
-      resetToReady();
-      if (onClose) onClose();
-    }
-  }, [resetToReady, onClose]);
-
-  // Auto-reset when modal becomes invisible
-  useEffect(() => {
-    if (!visible) {
-      resetToReady();
-    }
-  }, [visible, resetToReady]);
-
-  // Game Loop Timers
-  useEffect(() => {
-    if (gameState === 'playing') {
-      gameTimerRef.current = setInterval(() => {
-        setTimeLeft(t => {
-          if (t <= 1) {
-            clearInterval(gameTimerRef.current);
-            finishGame();
-            return 0;
-          }
-          return t - 1;
-        });
-      }, 1000);
-
-      spawnTimerRef.current = setInterval(() => {
-        spawnItem();
-      }, isFever ? SPAWN_INTERVAL * 0.6 : SPAWN_INTERVAL);
-    }
+        return prev - 1;
+      });
+    }, 1000);
 
     return () => {
+      if (tossTimerRef.current) clearInterval(tossTimerRef.current);
       if (gameTimerRef.current) clearInterval(gameTimerRef.current);
-      if (spawnTimerRef.current) clearInterval(spawnTimerRef.current);
     };
-  }, [gameState, isFever, spawnItem, finishGame]);
+  }, [gameState, tossWave, finishGame]);
 
-  // Compute Grade & Rewards
-  const getGameGrade = (finalScore) => {
-    if (finalScore >= 750) return { grade: 'S', color: '#FAAD14', title: '간식 마스터' };
-    if (finalScore >= 500) return { grade: 'A', color: '#52C41A', title: '폭풍 먹방' };
-    if (finalScore >= 300) return { grade: 'B', color: '#1890FF', title: '배부른 몽이' };
-    return { grade: 'C', color: '#8C8C8C', title: '초보 미식가' };
+  // Evaluation Grade
+  const getGameGrade = (finalScore, finalFullness) => {
+    if (finalFullness >= 90 || finalScore >= 550) {
+      return { grade: 'S', color: '#FAAD14', title: '전설의 후르츠 닌자 마스터! 👑' };
+    }
+    if (finalFullness >= 70 || finalScore >= 380) {
+      return { grade: 'A', color: '#10B981', title: '배부른 과일 파티 🍉' };
+    }
+    if (finalFullness >= 45 || finalScore >= 220) {
+      return { grade: 'B', color: '#0284C7', title: '달콤한 과일 간식 🍎' };
+    }
+    return { grade: 'C', color: '#94A3B8', title: '과일 썰기 입문자 🌱' };
   };
 
   const handleClaimAndClose = () => {
-    const finalExp = Math.max(15, Math.min(50, Math.round(score / 15)));
+    const baseExp = Math.round(score / 12) + Math.round(fullness / 10);
+    const finalExp = canEarnReward ? Math.max(15, Math.min(50, Math.round(baseExp * 1.3))) : 0;
 
     if (onGameComplete) {
       onGameComplete({
         score,
-        maxCombo,
+        slicedCount,
+        fullness,
         exp: finalExp,
+        isPractice: !canEarnReward,
+        difficulty: 'normal',
       });
     }
     if (onClose) onClose();
@@ -495,7 +769,8 @@ export default function SnackCatchGame({
 
   if (!visible) return null;
 
-  const currentGrade = getGameGrade(score);
+  const currentGrade = getGameGrade(score, fullness);
+  const slashPolylinePoints = slashPoints.map(p => `${p.x},${p.y}`).join(' ');
 
   return (
     <Modal
@@ -505,81 +780,211 @@ export default function SnackCatchGame({
       statusBarTranslucent={true}
       onRequestClose={handleExitPress}
     >
-      <View
-        style={[styles.gameContainer, { width: screenWidth, height: screenHeight }]}
+      <Animated.View
+        style={[
+          styles.gameContainer,
+          { width: screenWidth, height: screenHeight },
+          { transform: [{ translateX: screenShake }] },
+        ]}
+        // Mobile Touch Handlers
         onTouchStart={
-          gameState === 'playing' && !isStunned
-            ? (e) => movePetTo(e.nativeEvent.pageX)
-            : undefined
+          gameState === 'playing' ? (e) => processBladeSlash(e.nativeEvent.pageX, e.nativeEvent.pageY) : undefined
         }
         onTouchMove={
-          gameState === 'playing' && !isStunned
-            ? (e) => movePetTo(e.nativeEvent.pageX)
+          gameState === 'playing' ? (e) => processBladeSlash(e.nativeEvent.pageX, e.nativeEvent.pageY) : undefined
+        }
+        onTouchEnd={() => {
+          lastTouchPosRef.current = null;
+          setSlashPoints([]);
+        }}
+        // Web Mouse Drag Handlers
+        onMouseDown={
+          gameState === 'playing'
+            ? (e) => {
+                const targetX = e.nativeEvent.pageX || e.clientX || 0;
+                const targetY = e.nativeEvent.pageY || e.clientY || 0;
+                processBladeSlash(targetX, targetY);
+              }
             : undefined
         }
+        onMouseMove={
+          gameState === 'playing'
+            ? (e) => {
+                if (e.buttons === 1 || e.nativeEvent.which === 1) {
+                  const targetX = e.nativeEvent.pageX || e.clientX || 0;
+                  const targetY = e.nativeEvent.pageY || e.clientY || 0;
+                  processBladeSlash(targetX, targetY);
+                }
+              }
+            : undefined
+        }
+        onMouseUp={() => {
+          lastTouchPosRef.current = null;
+          setSlashPoints([]);
+        }}
       >
+        {/* Japanese Dojo / Wooden Cutting Board Theme Background */}
+        <View style={styles.dojoBackgroundLayer} pointerEvents="none">
+          <View style={styles.woodTextureBoard} />
+        </View>
+
+        {/* Juice Splatters on Cutting Board */}
+        {splashes.map(sp => (
+          <View
+            key={sp.id}
+            style={[styles.juiceSplatter, { left: sp.x - 35, top: sp.y - 35 }]}
+            pointerEvents="none"
+          >
+            <Svg width="70" height="70" viewBox="0 0 70 70">
+              <Circle cx="35" cy="35" r="22" fill={sp.color} opacity="0.35" />
+              <Circle cx="20" cy="24" r="8" fill={sp.color} opacity="0.4" />
+              <Circle cx="50" cy="40" r="10" fill={sp.color} opacity="0.38" />
+              <Circle cx="44" cy="20" r="6" fill={sp.color} opacity="0.4" />
+            </Svg>
+          </View>
+        ))}
+
         {/* --------------------------------------------------------- */}
         {/* TOP STATUS HUD BAR */}
         {/* --------------------------------------------------------- */}
         <View style={styles.topHudBar} pointerEvents="box-none">
           {/* Time Counter */}
           <View style={[styles.hudPill, timeLeft <= 5 && styles.hudPillUrgent]}>
-            <Clock size={16} color={timeLeft <= 5 ? '#FF4D4F' : '#FF7E82'} />
-            <Text style={[styles.hudPillText, timeLeft <= 5 && { color: '#FF4D4F' }]}>
+            <Clock size={16} color={timeLeft <= 5 ? '#EF4444' : '#C2410C'} />
+            <Text style={[styles.hudPillText, timeLeft <= 5 && { color: '#EF4444' }]}>
               {timeLeft}초
             </Text>
           </View>
 
+          {/* Fullness Gauge */}
+          <View style={styles.fullnessPill}>
+            <Text style={styles.fullnessEmoji}>🍗</Text>
+            <Text style={styles.fullnessText}>포만감 {fullness}%</Text>
+            <View style={styles.fullnessBarBg}>
+              <View style={[styles.fullnessBarFill, { width: `${fullness}%` }]} />
+            </View>
+          </View>
+
           {/* Score Counter */}
           <View style={[styles.hudPill, styles.hudPillScore]}>
-            <Trophy size={16} color="#D48806" />
+            <Trophy size={16} color="#B45309" />
             <Text style={styles.scoreText}>{score}점</Text>
           </View>
 
           {/* Close Game Button */}
           <TouchableOpacity onPress={handleExitPress} style={styles.closeBtn} activeOpacity={0.8}>
-            <X size={18} color="#666" />
+            <X size={18} color="#475569" />
           </TouchableOpacity>
         </View>
 
-        {/* Combo & Fever Indicator */}
+        {/* Combo Badge */}
         <View style={styles.comboRow} pointerEvents="none">
           {combo >= 2 && (
-            <View style={[styles.comboBadge, isFever && styles.feverBadge]}>
-              {isFever && <Flame size={16} color="#FFF" style={{ marginRight: 4 }} />}
-              <Text style={styles.comboText}>
-                {isFever ? '🔥 FEVER TIME! 2X' : `COMBO x${combo}`}
-              </Text>
+            <View style={styles.comboBadge}>
+              <Flame size={16} color="#FFF" style={{ marginRight: 4 }} />
+              <Text style={styles.comboText}>COMBO x{combo}!</Text>
             </View>
           )}
         </View>
 
         {/* --------------------------------------------------------- */}
-        {/* PLAYING FIELD (Falling Items) */}
+        {/* ACTIVE FLYING WHOLE FRUITS */}
         {/* --------------------------------------------------------- */}
-        <View style={styles.playField} pointerEvents="none">
-          {items.map(item => (
+        <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+          {fruits.map(fruit => (
             <View
-              key={item.id}
+              key={fruit.id}
               style={[
-                styles.fallingItemBox,
+                styles.fruitWrapper,
                 {
-                  left: item.x,
-                  top: item.y,
-                  transform: [{ scale: isFever ? 1.15 : 1.0 }],
+                  left: fruit.x,
+                  top: fruit.y,
+                  width: fruit.size,
+                  height: fruit.size,
+                  transform: [{ rotate: `${fruit.rotation}deg` }],
                 },
               ]}
             >
-              <View style={[styles.fallingItemBadge, { backgroundColor: item.bgColor, borderColor: item.color }]}>
-                <SnackItemIcon type={item.type} size={24} />
-              </View>
+              <FruitWholeRenderer type={fruit.type} size={fruit.size} />
             </View>
           ))}
         </View>
 
         {/* --------------------------------------------------------- */}
-        {/* FLOATING SCORE TOASTS */}
+        {/* SLICED FRUIT HALVES (FLYING APART) */}
         {/* --------------------------------------------------------- */}
+        <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+          {halves.map(half => (
+            <View
+              key={half.id}
+              style={[
+                styles.halfWrapper,
+                {
+                  left: half.x,
+                  top: half.y,
+                  transform: [{ rotate: `${half.rotation}deg` }],
+                },
+              ]}
+            >
+              <FruitHalfRenderer type={half.type} size={half.size} isLeft={half.isLeft} />
+            </View>
+          ))}
+        </View>
+
+        {/* --------------------------------------------------------- */}
+        {/* NEON BLADE SLASH TRAIL */}
+        {/* --------------------------------------------------------- */}
+        {slashPoints.length >= 2 && (
+          <Svg style={StyleSheet.absoluteFillObject} pointerEvents="none">
+            {/* Outer Laser Glow */}
+            <Polyline
+              points={slashPolylinePoints}
+              fill="none"
+              stroke="#F59E0B"
+              strokeWidth="9"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeOpacity="0.45"
+            />
+            {/* Inner White Core Blade */}
+            <Polyline
+              points={slashPolylinePoints}
+              fill="none"
+              stroke="#FFFFFF"
+              strokeWidth="3.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeOpacity="0.95"
+            />
+          </Svg>
+        )}
+
+        {/* --------------------------------------------------------- */}
+        {/* BOTTOM PETMONG RECEIVER (EATING ANIMATION) */}
+        {/* --------------------------------------------------------- */}
+        <View style={styles.bottomPetStage} pointerEvents="none">
+          <Animated.View
+            style={[
+              styles.petBox,
+              { transform: [{ scale: petBounce }] },
+            ]}
+          >
+            {character?.image_url ? (
+              <ExpoImage
+                source={{ uri: transparentUrl || character.image_url }}
+                style={styles.petImageSprite}
+                contentFit="contain"
+              />
+            ) : (
+              <Text style={styles.petEmojiSprite}>{character?.emoji || '🐶'}</Text>
+            )}
+            <View style={styles.petBowlContainer}>
+              <Text style={styles.petBowlText}>와구와구 냠냠! 🍽️</Text>
+            </View>
+          </Animated.View>
+        </View>
+
+        {/* Floating Toasts */}
         {toasts.map(toast => (
           <View
             key={toast.id}
@@ -593,161 +998,155 @@ export default function SnackCatchGame({
         ))}
 
         {/* --------------------------------------------------------- */}
-        {/* BOTTOM STAGE PLATFORM (Grounded Room Stage) */}
-        {/* --------------------------------------------------------- */}
-        <View style={styles.bottomStageArea} pointerEvents="none">
-          <View style={styles.stageWoodFloor}>
-            <View style={styles.stageWoodHighlight} />
-            <Text style={styles.stageGuideText}>
-              손가락으로 화면을 좌우로 쓱쓱 밀어 간식을 받아먹으세요!
-            </Text>
-          </View>
-        </View>
-
-        {/* --------------------------------------------------------- */}
-        {/* PET ACTOR SPRITE (Controlled by User Swipe & Taps) */}
-        {/* --------------------------------------------------------- */}
-        <Animated.View
-          style={[
-            styles.petPlayerContainer,
-            {
-              left: petX,
-              transform: [
-                { scaleY: petBounce },
-                { scaleX: petDirection },
-                { scale: isFever ? feverPulse : 1.0 },
-              ],
-            },
-            isStunned && styles.petStunned,
-          ]}
-          pointerEvents="none"
-        >
-          {character?.image_url ? (
-            <ExpoImage
-              source={{ uri: transparentUrl || character.image_url }}
-              style={styles.petPlayerImage}
-              contentFit="contain"
-            />
-          ) : (
-            <Text style={styles.petPlayerEmoji}>{character?.emoji || '🐶'}</Text>
-          )}
-
-          {/* Stun Star Effect */}
-          {isStunned && (
-            <View style={styles.stunBadge}>
-              <Flame size={12} color="#FFF" style={{ marginRight: 3 }} />
-              <Text style={styles.stunBadgeText}>으악! 기절</Text>
-            </View>
-          )}
-
-          {/* Ground Contact Shadow */}
-          <View style={styles.playerShadow} />
-        </Animated.View>
-
-        {/* --------------------------------------------------------- */}
-        {/* READY / START OVERLAY (Full-Screen Centered Modal) */}
+        {/* 1. READY OVERLAY */}
         {/* --------------------------------------------------------- */}
         {gameState === 'ready' && (
           <View style={[styles.overlayCenter, { width: screenWidth, height: screenHeight }]}>
             <View style={styles.readyCard}>
-              <View style={styles.readyHeaderIconRow}>
-                <View style={[styles.readyMiniBadge, { backgroundColor: 'rgba(180, 83, 9, 0.15)' }]}>
-                  <Beef size={24} color="#B45309" fill="#FCD34D" />
+              <View style={styles.readyBadgeRow}>
+                <View style={styles.gameNoBadge}>
+                  <Text style={styles.gameNoBadgeText}>제1탄 미니게임</Text>
                 </View>
-                <View style={[styles.readyMiniBadge, { backgroundColor: 'rgba(245, 158, 11, 0.15)' }]}>
-                  <Sparkles size={28} color="#F59E0B" fill="#FDE68A" />
-                </View>
-                <View style={[styles.readyMiniBadge, { backgroundColor: 'rgba(239, 68, 68, 0.15)' }]}>
-                  <Apple size={24} color="#EF4444" fill="#FCA5A5" />
+                <View style={styles.categoryBadge}>
+                  <Sword size={14} color="#EA580C" style={{ marginRight: 3 }} />
+                  <Text style={styles.categoryBadgeText}>후르츠 닌자</Text>
                 </View>
               </View>
 
-              <Text style={styles.readyTitle}>와구와구 간식 캐치!</Text>
-              <Text style={styles.readyDesc}>
-                하늘에서 떨어지는 맛있는 간식을{'\n'}
-                반려몽을 좌우로 조작하여 마음껏 받아먹이세요!
+              <Text style={styles.readyTitle}>🍉 반려몽 후르츠 닌자</Text>
+              <Text style={styles.readySubtitle}>
+                솟구쳐 오르는 수박과 과일을 샥- 썰어서 반려몽에게 배부르게 먹여주세요!
               </Text>
 
-              <View style={styles.rulePillBox}>
-                <View style={styles.ruleRow}>
-                  <View style={styles.ruleItemIcons}>
-                    <Apple size={16} color="#EF4444" />
-                    <Beef size={16} color="#B45309" />
-                    <Cake size={16} color="#EC4899" />
-                  </View>
-                  <Text style={styles.rulePillText}>맛있는 간식 = +점수 & 콤보!</Text>
+              {/* Fruit Previews */}
+              <View style={styles.readyPreviewBox}>
+                <View style={styles.readyFruitItem}>
+                  <WatermelonWhole size={36} />
+                  <Text style={styles.readyFruitLabel}>대왕 수박</Text>
+                  <Text style={styles.readyFruitPoints}>+30점</Text>
                 </View>
-                <View style={styles.ruleRow}>
-                  <View style={styles.ruleItemIcons}>
-                    <BombIcon size={16} />
-                    <ChiliPepperIcon size={16} />
-                  </View>
-                  <Text style={styles.rulePillText}>폭탄 / 고추 = -점수 & 기절!</Text>
+                <View style={styles.readyFruitItem}>
+                  <AppleWhole size={32} />
+                  <Text style={styles.readyFruitLabel}>사과</Text>
+                  <Text style={styles.readyFruitPoints}>+15점</Text>
                 </View>
-                <View style={styles.ruleRow}>
-                  <Flame size={16} color="#FF6B00" />
-                  <Text style={[styles.rulePillText, { color: '#FF7E82', fontWeight: '800' }]}>
-                    8콤보 달성 시 2배 FEVER TIME!
+                <View style={styles.readyFruitItem}>
+                  <PineappleWhole size={34} />
+                  <Text style={styles.readyFruitLabel}>황금 파인애플</Text>
+                  <Text style={[styles.readyFruitPoints, { color: '#D97706' }]}>+50점</Text>
+                </View>
+                <View style={styles.readyFruitItem}>
+                  <TickingBombIcon size={34} />
+                  <Text style={styles.readyFruitLabel}>시한폭탄</Text>
+                  <Text style={[styles.readyFruitPoints, { color: '#EF4444' }]}>회피! (-50)</Text>
+                </View>
+              </View>
+
+              {/* Instructions */}
+              <View style={styles.instructionsList}>
+                <View style={styles.instructionItem}>
+                  <Sword size={16} color="#EA580C" style={{ marginRight: 8 }} />
+                  <Text style={styles.instructionText}>
+                    손가락으로 화면을 긁어 솟구치는 과일을 단칼에 싹둑 썰어보세요!
+                  </Text>
+                </View>
+                <View style={styles.instructionItem}>
+                  <Flame size={16} color="#EA580C" style={{ marginRight: 8 }} />
+                  <Text style={styles.instructionText}>
+                    한 번의 칼질에 여러 과일을 동시에 베면 콤보 보너스 획득!
                   </Text>
                 </View>
               </View>
 
+              {/* Start Button */}
               <TouchableOpacity
-                style={styles.startBtn}
+                style={styles.startButton}
                 onPress={startGame}
                 activeOpacity={0.85}
               >
                 <Play size={18} color="#FFF" fill="#FFF" style={{ marginRight: 6 }} />
-                <Text style={styles.startBtnText}>게임 시작하기 (START)</Text>
+                <Text style={styles.startButtonText}>닌자 출격 (START)</Text>
               </TouchableOpacity>
             </View>
           </View>
         )}
 
         {/* --------------------------------------------------------- */}
-        {/* GAME OVER RESULT OVERLAY (Full-Screen Centered Modal) */}
+        {/* 2. GAME OVER / RESULT OVERLAY */}
         {/* --------------------------------------------------------- */}
         {gameState === 'gameover' && (
           <View style={[styles.overlayCenter, { width: screenWidth, height: screenHeight }]}>
             <View style={styles.resultCard}>
-              <View style={styles.resultHeaderIconBox}>
-                <PartyPopper size={36} color="#F59E0B" />
-              </View>
-              <Text style={styles.resultTitle}>먹방 타임 종료!</Text>
-
-              {/* Grade Badge */}
-              <View style={[styles.gradePill, { backgroundColor: currentGrade.color }]}>
-                <Text style={styles.gradePillText}>
-                  Rank {currentGrade.grade} • {currentGrade.title}
+              <View style={[styles.gradeCircle, { borderColor: currentGrade.color }]}>
+                <Text style={[styles.gradeText, { color: currentGrade.color }]}>
+                  {currentGrade.grade}
                 </Text>
               </View>
 
-              {/* Score Display */}
-              <View style={styles.resultScoreBox}>
-                <Text style={styles.resultScoreLabel}>최종 획득 점수</Text>
-                <Text style={styles.resultScoreVal}>{score}점</Text>
-                <Text style={styles.resultMaxCombo}>최고 콤보: {maxCombo} Combo</Text>
-              </View>
+              <Text style={styles.resultTitle}>{currentGrade.title}</Text>
+              <Text style={styles.resultSubtitle}>
+                {character?.name || '반려몽'}이 맛있는 과일들을 배부르게 먹고 행복해해요!
+              </Text>
 
-              {/* Earned Rewards */}
-              <View style={styles.rewardsBox}>
-                <View style={styles.rewardRow}>
-                  <Trophy size={18} color="#D48806" />
-                  <Text style={[styles.rewardText, { color: '#B45309', fontWeight: '800' }]}>
-                    반려몽 성장 경험치 +{Math.max(15, Math.min(50, Math.round(score / 15)))} EXP 획득! 🌱
-                  </Text>
+              {/* Stats */}
+              <View style={styles.resultStatsRow}>
+                <View style={styles.resultStatBox}>
+                  <Text style={styles.resultStatLabel}>최종 점수</Text>
+                  <Text style={styles.resultStatValue}>{score}점</Text>
+                </View>
+                <View style={styles.resultStatBox}>
+                  <Text style={styles.resultStatLabel}>썬 과일</Text>
+                  <Text style={styles.resultStatValue}>{slicedCount}개</Text>
+                </View>
+                <View style={styles.resultStatBox}>
+                  <Text style={styles.resultStatLabel}>최대 콤보</Text>
+                  <Text style={[styles.resultStatValue, { color: '#EA580C' }]}>{maxCombo}회</Text>
                 </View>
               </View>
 
-              {/* Action Buttons */}
+              {/* Rewards Box */}
+              <View style={styles.rewardBox}>
+                <Text style={styles.rewardBoxTitle}>
+                  {canEarnReward ? '🎉 미니게임 완료 보상' : '🎯 자유 연습 모드 기록'}
+                </Text>
+                <View style={styles.rewardRow}>
+                  {canEarnReward ? (
+                    <View style={styles.rewardPill}>
+                      <Trophy size={16} color="#D48806" style={{ marginRight: 6 }} />
+                      <View>
+                        <Text style={[styles.rewardPillText, { fontWeight: '800', color: '#B45309' }]}>
+                          성장 경험치 +{Math.max(15, Math.min(50, Math.round((Math.round(score / 12) + Math.round(fullness / 10)) * 1.3)))} EXP 획득! 🌱
+                        </Text>
+                        <Text style={{ fontSize: 11, color: '#92400E', marginTop: 2, fontWeight: '600' }}>
+                          오늘 내 남은 성장 보상: {remainingRewards}회
+                        </Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={[styles.rewardPill, { backgroundColor: '#F5F0E8' }]}>
+                      <Gamepad2 size={16} color="#78716C" style={{ marginRight: 6 }} />
+                      <View>
+                        <Text style={[styles.rewardPillText, { fontWeight: '800', color: '#44403C' }]}>
+                          자유 연습 모드 완료! (EXP +0)
+                        </Text>
+                        <Text style={{ fontSize: 11, color: '#78716C', marginTop: 2, fontWeight: '600' }}>
+                          오늘의 성장 보상 한도를 달성했습니다.
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              {/* Buttons */}
               <View style={styles.resultBtnRow}>
                 <TouchableOpacity
                   style={styles.retryBtn}
                   onPress={startGame}
                   activeOpacity={0.85}
                 >
-                  <RotateCcw size={16} color="#4A90E2" style={{ marginRight: 6 }} />
-                  <Text style={styles.retryBtnText}>다시 도전</Text>
+                  <RotateCcw size={16} color="#475569" />
+                  <Text style={styles.retryBtnText}>다시하기</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -755,444 +1154,459 @@ export default function SnackCatchGame({
                   onPress={handleClaimAndClose}
                   activeOpacity={0.85}
                 >
-                  <Check size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-                  <Text style={styles.claimBtnText}>보상 받기</Text>
+                  <Check size={16} color="#FFF" />
+                  <Text style={styles.claimBtnText}>확인</Text>
                 </TouchableOpacity>
               </View>
             </View>
           </View>
         )}
-      </View>
+      </Animated.View>
     </Modal>
   );
 }
 
+// -----------------------------------------------------------------
+// Styles
+// -----------------------------------------------------------------
 const styles = StyleSheet.create({
   gameContainer: {
-    backgroundColor: '#FFF9F2',
-    position: 'relative',
+    flex: 1,
+    backgroundColor: '#1C1917',
     overflow: 'hidden',
+  },
+  dojoBackgroundLayer: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#292524',
+  },
+  woodTextureBoard: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#44403C',
+    opacity: 0.15,
+  },
+  juiceSplatter: {
+    position: 'absolute',
+    width: 70,
+    height: 70,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   topHudBar: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 54 : 32,
+    top: Platform.OS === 'ios' ? 54 : 36,
     left: 16,
     right: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    zIndex: 50,
+    zIndex: 30,
   },
   hudPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.94)',
-    paddingHorizontal: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: '#FFE2D1',
-    gap: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.15,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 3,
+    gap: 6,
   },
   hudPillUrgent: {
-    borderColor: '#FF4D4F',
-    backgroundColor: '#FFF1F0',
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1.5,
+    borderColor: '#EF4444',
   },
   hudPillText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '800',
-    color: '#333333',
+    color: '#C2410C',
   },
   hudPillScore: {
-    backgroundColor: '#FFFBE6',
-    borderColor: '#FFE58F',
+    backgroundColor: '#FEF3C7',
   },
   scoreText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '900',
-    color: '#D48806',
+    color: '#B45309',
+  },
+  fullnessPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 20,
+    gap: 6,
+  },
+  fullnessEmoji: {
+    fontSize: 14,
+  },
+  fullnessText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#B45309',
+  },
+  fullnessBarBg: {
+    width: 60,
+    height: 8,
+    backgroundColor: '#E7E5E4',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  fullnessBarFill: {
+    height: '100%',
+    backgroundColor: '#F59E0B',
+    borderRadius: 4,
   },
   closeBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: '#FFE2D1',
   },
   comboRow: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 104 : 80,
+    top: Platform.OS === 'ios' ? 108 : 90,
     left: 0,
     right: 0,
     alignItems: 'center',
-    zIndex: 45,
+    zIndex: 25,
   },
   comboBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FF7E82',
+    backgroundColor: '#EA580C',
     paddingHorizontal: 16,
-    paddingVertical: 5,
-    borderRadius: 16,
-    shadowColor: '#FF7E82',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.35,
-    shadowRadius: 5,
-    elevation: 3,
-  },
-  feverBadge: {
-    backgroundColor: '#FF4D00',
-    borderColor: '#FFD700',
-    borderWidth: 2,
-    transform: [{ scale: 1.1 }],
-  },
-  comboText: {
-    fontSize: 13,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    letterSpacing: 0.5,
-  },
-  playField: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 25,
-  },
-  fallingItemBox: {
-    position: 'absolute',
-    width: ITEM_SIZE,
-    height: ITEM_SIZE,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fallingItemBadge: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  bottomStageArea: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: FLOOR_HEIGHT,
-    zIndex: 20,
-  },
-  stageWoodFloor: {
-    flex: 1,
-    backgroundColor: '#F3E5D8',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    borderTopWidth: 3,
-    borderColor: '#E6D2C0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingBottom: Platform.OS === 'ios' ? 24 : 12,
-    paddingHorizontal: 20,
-    shadowColor: '#8D6E63',
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
+    paddingVertical: 6,
+    borderRadius: 20,
+    shadowColor: '#EA580C',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
     elevation: 4,
   },
-  stageWoodHighlight: {
-    position: 'absolute',
-    top: 0,
-    left: 40,
-    right: 40,
-    height: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.6)',
-    borderRadius: 2,
+  comboText: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#FFF',
   },
-  stageGuideText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#8D6E63',
-    letterSpacing: -0.2,
-  },
-  petPlayerContainer: {
+  fruitWrapper: {
     position: 'absolute',
-    bottom: FLOOR_HEIGHT - 12,
-    width: PET_WIDTH,
-    height: PET_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 40,
   },
-  petPlayerImage: {
-    width: PET_WIDTH,
-    height: PET_HEIGHT,
-  },
-  petPlayerEmoji: {
-    fontSize: 60,
-  },
-  petStunned: {
-    opacity: 0.65,
-  },
-  stunBadge: {
+  halfWrapper: {
     position: 'absolute',
-    top: -12,
-    backgroundColor: '#DC2626',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  stunBadgeText: {
+  bottomPetStage: {
+    position: 'absolute',
+    bottom: 24,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  petBox: {
+    alignItems: 'center',
+  },
+  petImageSprite: {
+    width: 90,
+    height: 90,
+  },
+  petEmojiSprite: {
+    fontSize: 65,
+  },
+  petBowlContainer: {
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: 4,
+  },
+  petBowlText: {
     fontSize: 11,
-    color: '#FFF',
     fontWeight: '800',
-  },
-  playerShadow: {
-    width: 54,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(141, 110, 99, 0.25)',
-    position: 'absolute',
-    bottom: 2,
+    color: '#FFF',
   },
   floatingToast: {
     position: 'absolute',
-    zIndex: 55,
+    backgroundColor: 'rgba(28, 25, 23, 0.9)',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    zIndex: 35,
   },
   floatingToastText: {
-    fontSize: 15,
-    fontWeight: '900',
-    textShadowColor: 'rgba(255, 255, 255, 0.9)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
+    fontSize: 13,
+    fontWeight: '800',
   },
   overlayCenter: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 24,
-    zIndex: 100,
+    padding: 20,
+    zIndex: 50,
   },
   readyCard: {
     width: '100%',
-    maxWidth: 340,
+    maxWidth: 390,
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
     padding: 24,
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
     elevation: 8,
   },
-  readyHeaderIconRow: {
+  readyBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
+    gap: 8,
     marginBottom: 12,
   },
-  readyMiniBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  gameNoBadge: {
+    backgroundColor: '#FFEDD5',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  gameNoBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#C2410C',
+  },
+  categoryBadge: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.08)',
+    backgroundColor: '#FFF7ED',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  categoryBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#EA580C',
   },
   readyTitle: {
     fontSize: 20,
     fontWeight: '900',
-    color: '#2D3436',
-    marginBottom: 8,
-  },
-  readyDesc: {
-    fontSize: 13,
-    color: '#636E72',
+    color: '#1C1917',
+    marginBottom: 6,
     textAlign: 'center',
-    lineHeight: 19,
+  },
+  readySubtitle: {
+    fontSize: 13,
+    color: '#78716C',
+    textAlign: 'center',
+    lineHeight: 18,
     marginBottom: 16,
   },
-  rulePillBox: {
+  readyPreviewBox: {
+    flexDirection: 'row',
     width: '100%',
-    backgroundColor: '#FFF4EB',
-    borderRadius: 14,
+    backgroundColor: '#FAFAF9',
+    borderRadius: 16,
     padding: 12,
-    marginBottom: 20,
-    gap: 8,
+    justifyContent: 'space-around',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
   },
-  ruleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  ruleItemIcons: {
-    flexDirection: 'row',
+  readyFruitItem: {
     alignItems: 'center',
     gap: 4,
   },
-  rulePillText: {
-    fontSize: 12,
-    color: '#D46B08',
+  readyFruitLabel: {
+    fontSize: 11,
     fontWeight: '700',
-    textAlign: 'center',
+    color: '#57534E',
   },
-  startBtn: {
+  readyFruitPoints: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#EA580C',
+  },
+  instructionsList: {
     width: '100%',
-    backgroundColor: '#FF7E82',
-    paddingVertical: 14,
-    borderRadius: 16,
+    backgroundColor: '#FFF7ED',
+    borderRadius: 14,
+    padding: 12,
+    gap: 8,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#FFEDD5',
+  },
+  instructionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  instructionText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#9A3412',
+    lineHeight: 16,
+  },
+  startButton: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#FF7E82',
+    backgroundColor: '#EA580C',
+    paddingVertical: 14,
+    borderRadius: 16,
+    shadowColor: '#EA580C',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 8,
-    elevation: 4,
+    elevation: 5,
   },
-  startBtnText: {
+  startButtonText: {
     fontSize: 16,
-    fontWeight: '900',
-    color: '#FFFFFF',
+    fontWeight: '800',
+    color: '#FFF',
   },
   resultCard: {
     width: '100%',
-    maxWidth: 340,
-    backgroundColor: '#FFFFFF',
+    maxWidth: 390,
+    backgroundColor: '#FFF',
     borderRadius: 24,
     padding: 24,
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
     shadowRadius: 16,
-    elevation: 8,
+    elevation: 10,
   },
-  resultHeaderIconBox: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+  gradeCircle: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 4,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
+    backgroundColor: '#FAFAFA',
+  },
+  gradeText: {
+    fontSize: 38,
+    fontWeight: '900',
   },
   resultTitle: {
     fontSize: 20,
     fontWeight: '900',
-    color: '#2D3436',
-    marginBottom: 10,
-  },
-  gradePill: {
-    paddingHorizontal: 14,
-    paddingVertical: 5,
-    borderRadius: 14,
-    marginBottom: 16,
-  },
-  gradePillText: {
-    fontSize: 13,
-    fontWeight: '900',
-    color: '#FFFFFF',
-  },
-  resultScoreBox: {
-    width: '100%',
-    backgroundColor: '#FFFBE6',
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: '#FFE58F',
-    padding: 14,
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  resultScoreLabel: {
-    fontSize: 12,
-    color: '#8C6B00',
-    fontWeight: '700',
+    color: '#1C1917',
     marginBottom: 4,
   },
-  resultScoreVal: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: '#D48806',
+  resultSubtitle: {
+    fontSize: 13,
+    color: '#78716C',
+    textAlign: 'center',
+    marginBottom: 18,
   },
-  resultMaxCombo: {
-    fontSize: 12,
-    color: '#FA8C16',
-    fontWeight: '800',
-    marginTop: 4,
-  },
-  rewardsBox: {
+  resultStatsRow: {
     width: '100%',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 16,
-    padding: 12,
+    flexDirection: 'row',
     gap: 8,
+    marginBottom: 16,
+  },
+  resultStatBox: {
+    flex: 1,
+    backgroundColor: '#FAFAF9',
+    borderRadius: 14,
+    padding: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
+  },
+  resultStatLabel: {
+    fontSize: 11,
+    color: '#78716C',
+    marginBottom: 4,
+  },
+  resultStatValue: {
+    fontSize: 17,
+    fontWeight: '900',
+    color: '#1C1917',
+  },
+  rewardBox: {
+    width: '100%',
+    backgroundColor: '#FFF7ED',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#FFEDD5',
     marginBottom: 20,
+  },
+  rewardBoxTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#C2410C',
+    marginBottom: 8,
+    textAlign: 'center',
   },
   rewardRow: {
     flexDirection: 'row',
+    justifyContent: 'space-around',
     alignItems: 'center',
-    gap: 8,
   },
-  rewardText: {
-    fontSize: 13,
+  rewardPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  rewardPillText: {
+    fontSize: 12,
     fontWeight: '700',
-    color: '#2D3436',
+    color: '#9A3412',
   },
   resultBtnRow: {
+    width: '100%',
     flexDirection: 'row',
     gap: 10,
-    width: '100%',
   },
   retryBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    backgroundColor: '#E6F7FF',
+    backgroundColor: '#F5F5F4',
+    paddingVertical: 13,
     borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: '#91D5FF',
+    gap: 6,
   },
   retryBtnText: {
     fontSize: 14,
-    fontWeight: '800',
-    color: '#1890FF',
+    fontWeight: '700',
+    color: '#57534E',
   },
   claimBtn: {
-    flex: 1.3,
+    flex: 1.5,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    backgroundColor: '#FF7E82',
+    backgroundColor: '#EA580C',
+    paddingVertical: 13,
     borderRadius: 14,
-    shadowColor: '#FF7E82',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 3,
+    gap: 6,
   },
   claimBtnText: {
     fontSize: 14,
-    fontWeight: '900',
-    color: '#FFFFFF',
+    fontWeight: '800',
+    color: '#FFF',
   },
 });

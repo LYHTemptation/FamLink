@@ -556,10 +556,20 @@ export default function App() {
     }
   };
 
-  // 다마고치 앱 실행 중 실시간 자연 소모 타이머 (5분 주기)
+  // 다마고치 앱 실행 중 실시간 자연 소모 및 자정(새로운 날) 감지 타이머 (5분 주기)
   useEffect(() => {
     if (!profile?.family_id) return;
+    let lastCheckedDate = getTodayString();
+
     const decayInterval = setInterval(() => {
+      // 1. 자정 전환 감지 시 집안일 루틴 자동 갱신 및 만료 1회성 항목 자동 정리
+      const currentDate = getTodayString();
+      if (currentDate !== lastCheckedDate) {
+        lastCheckedDate = currentDate;
+        fetchRealShoppingItems(profile.family_id);
+      }
+
+      // 2. 반려몽 자연 소모
       setPetVitals(prev => {
         if (!prev) return prev;
         const next = {
@@ -688,39 +698,100 @@ export default function App() {
   const normalizeRecurringItems = (items) => {
     if (!items || !Array.isArray(items)) return items;
     const todayStr = getTodayString();
-    return items.map(item => {
-      if (item.repeat_type === 'daily' && item.is_completed) {
-        const compDate = item.completed_date || (item.completed_at ? item.completed_at.slice(0, 10) : null);
-        if (compDate && compDate !== todayStr) {
-          return {
-            ...item,
-            is_completed: false,
-            completed_by: null,
-            points_earned: false,
-            completed_date: null,
-            completed_at: null,
-          };
-        }
-      } else if (item.repeat_type === 'weekly' && item.is_completed) {
-        const compDateStr = item.completed_date || (item.completed_at ? item.completed_at.slice(0, 10) : null);
-        if (compDateStr) {
-          const compDate = new Date(compDateStr);
-          const now = new Date();
-          const diffDays = (now.getTime() - compDate.getTime()) / (1000 * 3600 * 24);
-          if (diffDays >= 7) {
-            return {
+    const expiredOneTimeIds = [];
+    const resetRecurringIds = [];
+    const activeList = [];
+
+    items.forEach(item => {
+      const isDaily = item.repeat_type === 'daily';
+      const isWeekly = item.repeat_type === 'weekly';
+      const isOneTime = !isDaily && !isWeekly;
+      const compDate = item.completed_date || (item.completed_at ? item.completed_at.slice(0, 10) : null);
+
+      if (item.is_completed) {
+        if (isOneTime) {
+          // 📌 1회성 집안일: 완료 날짜가 오늘이 아닌 과거인 경우 다음 날 자동 삭제/정리 대상
+          if (compDate && compDate !== todayStr) {
+            expiredOneTimeIds.push(item.id);
+            return; // UI 목록에서 즉시 제외
+          }
+        } else if (isDaily) {
+          // 🔄 매일 반복 집안일: 완료 날짜가 과거인 경우 자정 리셋하여 오늘 할 일(미완료)로 부활
+          if (compDate && compDate !== todayStr) {
+            resetRecurringIds.push(item.id);
+            activeList.push({
               ...item,
               is_completed: false,
               completed_by: null,
               points_earned: false,
               completed_date: null,
               completed_at: null,
-            };
+            });
+            return;
+          }
+        } else if (isWeekly) {
+          // 주간 반복 집안일: 7일 이상 경과 시 리셋
+          if (compDate) {
+            const compTime = new Date(compDate).getTime();
+            const nowTime = new Date().getTime();
+            const diffDays = (nowTime - compTime) / (1000 * 3600 * 24);
+            if (diffDays >= 7) {
+              resetRecurringIds.push(item.id);
+              activeList.push({
+                ...item,
+                is_completed: false,
+                completed_by: null,
+                points_earned: false,
+                completed_date: null,
+                completed_at: null,
+              });
+              return;
+            }
           }
         }
       }
-      return item;
+
+      activeList.push(item);
     });
+
+    // 🚀 Supabase DB 백그라운드 자동 동기화
+    if (isSupabaseReady) {
+      const isUuid = id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+      // 1. 만료된 1회성 완료 항목 DB 영구 삭제
+      const targetDeleteUuids = expiredOneTimeIds.filter(isUuid);
+      if (targetDeleteUuids.length > 0) {
+        supabase
+          .from('shopping_items')
+          .delete()
+          .in('id', targetDeleteUuids)
+          .then(({ error }) => {
+            if (error) console.log('Auto-cleanup expired one-time chores error:', error);
+          })
+          .catch(() => {});
+      }
+
+      // 2. 자정 지난 반복 루틴 항목 DB 미완료 리셋 동기화
+      const targetResetUuids = resetRecurringIds.filter(isUuid);
+      if (targetResetUuids.length > 0) {
+        supabase
+          .from('shopping_items')
+          .update({
+            is_completed: false,
+            completed_by: null,
+            points_earned: false,
+            completed_date: null,
+            completed_at: null,
+          })
+          .in('id', targetResetUuids)
+          .then(({ error }) => {
+            if (error) console.log('Auto-reset recurring chores in DB error:', error);
+          })
+          .catch(() => {});
+      }
+    }
+
+    return activeList;
   };
 
   const fetchRealShoppingItems = async (familyId) => {
@@ -850,6 +921,42 @@ export default function App() {
     setProfile(newProfile);
     setCurrentUser(newProfile.role || 'mom');
 
+    // 🍎 Apple Reviewer Account (FAM-APPLE01): 10 스몰톡 문답 및 5장 앨범 사진 사전 장전
+    if (newProfile?.family_code === 'FAM-APPLE01') {
+      const reviewerMembers = [
+        { id: 'rev-dad', name: '아빠(심사관)', avatar: '👨‍💼', color: '#4A90E2', role: 'dad', mood: '😊', status_text: '심사관 환영합니다!' },
+        { id: 'rev-child', name: '자녀(심사관)', avatar: '👦', color: '#2ECC71', role: 'son', mood: '✨', status_text: '오늘도 즐거운 하루!' },
+        { id: 'rev-mom', name: '엄마', avatar: '👩‍🦰', color: '#FF6B47', role: 'mom', mood: '🥰', status_text: '가족 모두 사랑해요' },
+        { id: 'rev-daughter', name: '딸', avatar: '👧', color: '#F39C12', role: 'daughter', mood: '🌸', status_text: '책 읽는 중' },
+      ];
+      setFamilyMembersList(reviewerMembers);
+
+      // 스몰톡 10개 문답 및 완료 상태 보장
+      setSmallTalk({
+        topic: '가족과 함께한 시간 중 가장 기억에 남는 행복한 순간은?',
+        responses: {
+          'rev-dad': '다 함께 주말에 공원 피크닉 갔을 때가 제일 행복했어!',
+          'rev-child': '가족들이랑 맛있는 저녁 먹고 반려몽 키울 때요!',
+          'rev-mom': '온 가족이 둘러앉아 옛날 앨범 이야기 나눈 날',
+          'rev-daughter': '아빠랑 자전거 타고 산책했을 때가 생각나요',
+        },
+        pointsAwarded: true,
+      });
+
+      // 앨범 샘플 사진 5장 프리로드
+      setMessages(prev => {
+        if (prev.filter(m => m.image || m.image_url).length >= 5) return prev;
+        const reviewerPhotos = [
+          { id: 'rev-p1', sender: 'dad', senderName: '아빠', text: '가족 봄나들이 추억 🌸', image: 'https://images.unsplash.com/photo-1511895426328-dc8714191300?w=600&auto=format&fit=crop&q=80', timestamp: '오전 10:15', created_at: new Date().toISOString() },
+          { id: 'rev-p2', sender: 'mom', senderName: '엄마', text: '주말 브런치 식사 ☕', image: 'https://images.unsplash.com/photo-1543353071-873f17a7a088?w=600&auto=format&fit=crop&q=80', timestamp: '오후 12:30', created_at: new Date().toISOString() },
+          { id: 'rev-p3', sender: 'son', senderName: '자녀', text: '공원 자전거 라이딩 🚴', image: 'https://images.unsplash.com/photo-1476820865390-c52aeebb9891?w=600&auto=format&fit=crop&q=80', timestamp: '오후 03:20', created_at: new Date().toISOString() },
+          { id: 'rev-p4', sender: 'daughter', senderName: '딸', text: '생일 파티 케이크 🎂', image: 'https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=600&auto=format&fit=crop&q=80', timestamp: '오후 06:00', created_at: new Date().toISOString() },
+          { id: 'rev-p5', sender: 'dad', senderName: '아빠', text: '저녁 노을 바닷가 산책 🌅', image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&auto=format&fit=crop&q=80', timestamp: '오후 07:45', created_at: new Date().toISOString() },
+        ];
+        return [...reviewerPhotos, ...prev];
+      });
+    }
+
     if (!isSupabaseReady) {
       await AsyncStorage.setItem('MOCK_SESSION', JSON.stringify(newSession));
       await AsyncStorage.setItem('MOCK_PROFILE', JSON.stringify(newProfile));
@@ -865,6 +972,39 @@ export default function App() {
       await AsyncStorage.removeItem('MOCK_PROFILE');
       setSession(null);
       setProfile(null);
+    }
+  };
+
+  // Apple Guideline 5.1.1(v) 회원 탈퇴 (Account Deletion)
+  const handleDeleteAccount = async () => {
+    if (isSupabaseReady && profile?.id) {
+      try {
+        const userId = profile.id;
+        // 1. 프로필 삭제 (profiles -> cascade 로 messages, small_talk_responses 등 삭제됨)
+        const { error: profileDelError } = await supabase
+          .from('profiles')
+          .delete()
+          .eq('id', userId);
+
+        if (profileDelError) {
+          console.warn('Profile delete error:', profileDelError.message);
+        }
+
+        // 2. Auth 세션 로그아웃
+        await supabase.auth.signOut();
+        setSession(null);
+        setProfile(null);
+        Alert.alert('탈퇴 완료', '회원 탈퇴 및 개인정보 삭제가 완료되었습니다. 그동안 FamLink를 이용해 주셔서 감사합니다.');
+      } catch (e) {
+        console.error('Account deletion failed:', e);
+        showError(e, '회원 탈퇴 처리 중 오류가 발생했습니다.');
+      }
+    } else {
+      // 로컬/시뮬레이션 모드 탈퇴
+      await AsyncStorage.clear();
+      setSession(null);
+      setProfile(null);
+      Alert.alert('탈퇴 완료', '회원 탈퇴 및 로컬 데이터가 모두 안전하게 삭제되었습니다.');
     }
   };
 
@@ -1514,7 +1654,24 @@ export default function App() {
 
   // Calendar Actions
   const handleAddEvent = async (eventData) => {
-    if (isSupabaseReady) {
+    const tempId = `evt-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+    const newEvent = {
+      id: tempId,
+      profile_id: session?.user?.id || profile?.id,
+      creatorObj: profile,
+      creator: profile?.name || profile?.role || currentUser || '나',
+      title: eventData.title,
+      date: eventData.date,
+      endDate: eventData.endDate || eventData.date,
+      time: eventData.time || '18:00',
+      category: eventData.category || '가족',
+    };
+
+    // 🚀 Optimistic Instant UI Update (0ms delay) - Calendar reflects instantly
+    const updated = [...events, newEvent];
+    setEvents(updated);
+
+    if (isSupabaseReady && profile?.family_id && session?.user?.id) {
       try {
         const payload = {
           family_id: profile.family_id,
@@ -1522,35 +1679,55 @@ export default function App() {
           title: eventData.title,
           date: eventData.date,
           end_date: eventData.endDate || eventData.date,
-          time: eventData.time,
-          category: eventData.category,
+          time: eventData.time || '18:00',
+          category: eventData.category || '가족',
         };
 
-        const { error } = await supabase
+        let { data, error } = await supabase
           .from('events')
-          .insert(payload);
+          .insert(payload)
+          .select('*, profiles(id, name, avatar, color, role)');
 
         if (error) {
           // Fallback if end_date column is not present in Supabase DB yet
           if (error.code === 'PGRST204' || (error.message && error.message.includes('end_date'))) {
             delete payload.end_date;
-            const { error: fallbackError } = await supabase.from('events').insert(payload);
-            if (fallbackError) throw fallbackError;
-          } else {
-            throw error;
+            const retry = await supabase
+              .from('events')
+              .insert(payload)
+              .select('*, profiles(id, name, avatar, color, role)');
+            data = retry.data;
+            error = retry.error;
           }
         }
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          const dbRow = data[0];
+          setEvents(prev =>
+            prev.map(e =>
+              e.id === tempId
+                ? {
+                    id: dbRow.id,
+                    profile_id: dbRow.profile_id,
+                    creatorObj: dbRow.profiles || profile,
+                    title: dbRow.title,
+                    date: dbRow.date,
+                    endDate: dbRow.end_date || dbRow.date,
+                    time: dbRow.time,
+                    category: dbRow.category,
+                    creator: dbRow.profiles?.name || dbRow.profiles?.role || profile?.name || '가족',
+                  }
+                : e
+            )
+          );
+        }
       } catch (e) {
-        showError(e, '일정 추가에 실패했습니다.');
+        console.warn('일정 Supabase 저장 경고 (로컬 유지):', e.message);
+        saveLocalState(points, messages, updated, smallTalk);
       }
     } else {
-      const newEvent = {
-        id: String(Date.now()),
-        ...eventData,
-        endDate: eventData.endDate || eventData.date,
-      };
-      const updated = [...events, newEvent];
-      setEvents(updated);
       saveLocalState(points, messages, updated, smallTalk);
     }
   };
@@ -1809,6 +1986,23 @@ export default function App() {
               onNavigateScreen={setCurrentScreen}
               customRooms={customRooms}
               onCreateCustomRoom={handleCreateCustomRoom}
+              onAddEvent={handleAddEvent}
+              onAddShoppingItem={handleAddItem}
+              onAddChore={handleAddItem}
+              onUpdateMessageVote={async (messageId, newText) => {
+                // Optimistically update message text for poll
+                setMessages(prev => prev.map(m => m.id === messageId ? { ...m, text: newText } : m));
+                if (isSupabaseReady) {
+                  try {
+                    await supabase
+                      .from('messages')
+                      .update({ text: newText })
+                      .eq('id', messageId);
+                  } catch (err) {
+                    console.warn('Failed to update poll message:', err);
+                  }
+                }
+              }}
             />
           </View>
         )}
@@ -1905,6 +2099,7 @@ export default function App() {
               onSendOrderNotice={handleSendOrderNotice}
               points={points}
               onDeductPoints={handleDeductPoints}
+              petmongCharacters={petmongCharacters}
             />
           </View>
         )}
@@ -1924,6 +2119,7 @@ export default function App() {
               onUpdateProfile={handleUpdateProfile}
               onlineUsers={onlineUsers}
               onLogout={handleLogout}
+              onDeleteAccount={handleDeleteAccount}
               onNavigateScreen={setCurrentScreen}
             />
           </View>

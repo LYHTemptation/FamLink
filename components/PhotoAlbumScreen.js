@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -66,6 +66,8 @@ export default function PhotoAlbumScreen({
   onSendOrderNotice,
   points = 0,
   onDeductPoints,
+  petmongCharacters = [],
+  petCharacter = null,
 }) {
   const { width: windowWidth } = useWindowDimensions();
   const screenWidth = windowWidth || Dimensions.get('window').width;
@@ -308,7 +310,8 @@ export default function PhotoAlbumScreen({
       const yearMonthLabel = `${y}년 ${parseInt(m, 10)}월`;
 
       const isToday = y === todayYear && curCursor.getMonth() === todayMonth && curCursor.getDate() === todayDate;
-      const topic = isToday ? todayTopic : stripEmojis(getTopicForDateFromList(dbTopics, curCursor));
+      const rawTodayTopic = typeof todayTopic === 'string' ? todayTopic : (todayTopic?.text || todayTopic?.title || todayTopic?.topic || '');
+      const topic = isToday ? stripEmojis(rawTodayTopic) : stripEmojis(getTopicForDateFromList(dbTopics, curCursor));
       coveredTopics.add(topic);
 
       const answersList = [];
@@ -346,7 +349,7 @@ export default function PhotoAlbumScreen({
       });
 
       const dateLabel = isToday ? '오늘의 질문 🌟' : `${parseInt(m, 10)}월 ${parseInt(d, 10)}일`;
-      const totalFamily = Math.max(1, familyMembers.length || 4);
+      const totalFamily = Math.max(1, familyMembers.length || 1);
       const isAnswered = answersList.length > 0;
       const isComplete = answersList.length >= totalFamily;
       const isInBook = includedSmallTalkTopics.some(t => stripEmojis(t) === topic);
@@ -395,7 +398,7 @@ export default function PhotoAlbumScreen({
       const yearMonth = `${y}-${m}`;
       const yearMonthLabel = `${y}년 ${parseInt(m, 10)}월`;
       const dateLabel = `${parseInt(m, 10)}월 ${parseInt(d, 10)}일`;
-      const totalFamily = Math.max(1, familyMembers.length || 4);
+      const totalFamily = Math.max(1, familyMembers.length || 1);
       const isInBook = includedSmallTalkTopics.some(t => stripEmojis(t) === topic);
 
       list.push({
@@ -451,63 +454,28 @@ export default function PhotoAlbumScreen({
     }));
   }, [allFamilyMonths, smallTalkArchiveList]);
 
-  // Quick Jump Chips: 현재 월, 전 월, (필요시 선택된 과거월), 전체
-  const displayedChips = useMemo(() => {
-    const chips = [];
+  // Current Month Info & Selected Month Label (for 2-button Quick Jump)
+  const currentMonthInfo = useMemo(() => {
     const now = new Date();
     const curYear = now.getFullYear();
     const curMonth = now.getMonth(); // 0-11
     const curMonthId = `${curYear}-${String(curMonth + 1).padStart(2, '0')}`;
-
-    // 1. 현재 월 (년도 월 형식 + 답변/전체 비율)
-    const curMonthMatch = availableMonths.find(m => m.id === curMonthId);
-    chips.push({
+    const curMatch = availableMonths.find(m => m.id === curMonthId);
+    return {
       id: curMonthId,
-      label: `${curYear}년 ${curMonth + 1}월`,
-      fullLabel: `${curYear}년 ${curMonth + 1}월`,
-      count: curMonthMatch ? curMonthMatch.count : 0,
-      answeredCount: curMonthMatch ? curMonthMatch.answeredCount : 0,
-    });
+      label: `현재달 (${curMonth + 1}월)`,
+      year: curYear,
+      month: curMonth + 1,
+      count: curMatch ? curMatch.count : 0,
+      answeredCount: curMatch ? curMatch.answeredCount : 0,
+    };
+  }, [availableMonths]);
 
-    // 2. 전 월 (년도 월 형식 + 답변/전체 비율)
-    const prevDate = new Date(curYear, curMonth - 1, 1);
-    const prevYear = prevDate.getFullYear();
-    const prevMonth = prevDate.getMonth();
-    const prevMonthId = `${prevYear}-${String(prevMonth + 1).padStart(2, '0')}`;
-    const prevMonthMatch = availableMonths.find(m => m.id === prevMonthId);
-    chips.push({
-      id: prevMonthId,
-      label: `${prevYear}년 ${prevMonth + 1}월`,
-      fullLabel: `${prevYear}년 ${prevMonth + 1}월`,
-      count: prevMonthMatch ? prevMonthMatch.count : 0,
-      answeredCount: prevMonthMatch ? prevMonthMatch.answeredCount : 0,
-    });
-
-    // 3. 만약 사용자가 '연·월 선택'으로 현재월/전월이 아닌 과거 월을 선택한 경우, 칩 목록에 노출 유지
-    if (selectedMonth !== 'all' && selectedMonth !== curMonthId && selectedMonth !== prevMonthId) {
-      const match = availableMonths.find(m => m.id === selectedMonth);
-      if (match) {
-        chips.push({
-          id: match.id,
-          label: match.label,
-          fullLabel: match.label,
-          count: match.count,
-          answeredCount: match.answeredCount,
-        });
-      }
-    }
-
-    // 4. 전체 (답변/전체 비율)
-    chips.push({
-      id: 'all',
-      label: '전체',
-      fullLabel: '전체',
-      count: smallTalkArchiveList.length,
-      answeredCount: smallTalkArchiveList.filter(i => i.isAnswered).length,
-    });
-
-    return chips;
-  }, [availableMonths, selectedMonth, smallTalkArchiveList]);
+  const selectedMonthLabel = useMemo(() => {
+    if (selectedMonth === 'all') return '전체';
+    const match = availableMonths.find(m => m.id === selectedMonth);
+    return match ? match.label : selectedMonth;
+  }, [selectedMonth, availableMonths]);
 
   // Grouped Years for multi-year month picker modal
   const groupedYears = useMemo(() => {
@@ -559,21 +527,63 @@ export default function PhotoAlbumScreen({
     return smallTalkArchiveList.filter(item => item.yearMonth === selectedMonth);
   }, [smallTalkArchiveList, selectedMonth]);
 
-  // Filtered Archive List based on Monthly chip, Filter chips & Search
+  // Search Query state normalization
+  const trimmedSearchQuery = useMemo(() => (searchQuery || '').trim().toLowerCase(), [searchQuery]);
+  const isSearchActive = trimmedSearchQuery.length > 0;
+
+  // Base list for filtering: when search is active, search across the entire archive
+  // so family questions or answers from any month can be found easily.
+  const baseArchiveList = useMemo(() => {
+    if (isSearchActive) return smallTalkArchiveList;
+    return monthScopedList;
+  }, [isSearchActive, smallTalkArchiveList, monthScopedList]);
+
+  // Helper to match an item against the search query
+  const checkItemMatchesSearch = useCallback((item, query) => {
+    if (!query) return true;
+    const topicStr = (typeof item.topic === 'string' ? item.topic : (item.topic?.text || item.topic?.title || '')).toLowerCase();
+    if (topicStr.includes(query)) return true;
+
+    if (Array.isArray(item.answers)) {
+      return item.answers.some(a => {
+        const text = (a?.text || '').toLowerCase();
+        const name = (a?.name || '').toLowerCase();
+        const role = (a?.role || '').toLowerCase();
+        return text.includes(query) || name.includes(query) || role.includes(query);
+      });
+    }
+    return false;
+  }, []);
+
+  // Filtered Archive List based on Monthly/Global chip, Filter chips & Search
   const filteredArchiveList = useMemo(() => {
-    return monthScopedList.filter(item => {
+    return baseArchiveList.filter(item => {
       if (archiveFilter === 'answered' && !item.isAnswered) return false;
       if (archiveFilter === 'unanswered' && item.isAnswered) return false;
-      if (archiveFilter === 'in-book' && !item.isInBook) return false;
-      if (searchQuery.trim()) {
-        const query = searchQuery.trim().toLowerCase();
-        const topicMatch = item.topic.toLowerCase().includes(query);
-        const ansMatch = item.answers.some(a => (a.text || '').toLowerCase().includes(query) || (a.name || '').toLowerCase().includes(query));
-        return topicMatch || ansMatch;
+      if (isSearchActive) {
+        return checkItemMatchesSearch(item, trimmedSearchQuery);
       }
       return true;
     });
-  }, [monthScopedList, archiveFilter, searchQuery]);
+  }, [baseArchiveList, archiveFilter, isSearchActive, trimmedSearchQuery, checkItemMatchesSearch]);
+
+  // Tab count calculator that accurately reflects search scope
+  const getFilterTabCount = useCallback((filterType) => {
+    const list = isSearchActive
+      ? smallTalkArchiveList.filter(item => checkItemMatchesSearch(item, trimmedSearchQuery))
+      : monthScopedList;
+
+    if (filterType === 'answered') return list.filter(i => i.isAnswered).length;
+    if (filterType === 'unanswered') return list.filter(i => !i.isAnswered).length;
+    return list.length;
+  }, [isSearchActive, smallTalkArchiveList, monthScopedList, trimmedSearchQuery, checkItemMatchesSearch]);
+
+  // Auto-expand all matching items when a search query is entered
+  useEffect(() => {
+    if (isSearchActive && filteredArchiveList.length > 0) {
+      setExpandedTopicIds(filteredArchiveList.map(item => item.id));
+    }
+  }, [isSearchActive, trimmedSearchQuery]);
 
   // Accordion Toggle Handlers
   const handleToggleExpand = (topicId) => {
@@ -618,32 +628,7 @@ export default function PhotoAlbumScreen({
     }
   };
 
-  // Batch add current month's answered topics into photobook
-  const handleBatchAddMonthToBook = () => {
-    const currentMonthAnsweredTopics = filteredArchiveList
-      .filter(i => i.isAnswered)
-      .map(i => i.topic);
 
-    if (currentMonthAnsweredTopics.length === 0) {
-      Alert.alert('알림', '포토북에 담을 수 있는 답변 완료된 스몰톡이 없습니다.');
-      return;
-    }
-
-    const newTopics = Array.from(new Set([...includedSmallTalkTopics, ...currentMonthAnsweredTopics]));
-    setIncludedSmallTalkTopics(newTopics);
-    savePhotobookConfig({ includedSmallTalkTopics: newTopics });
-
-    const activeMonthObj = availableMonths.find(m => m.id === selectedMonth);
-    const activeMonthName = activeMonthObj ? activeMonthObj.label : '해당 기간';
-    Alert.alert(
-      '월간 전체 수록 완료! 🎉',
-      `${activeMonthName}의 스몰톡 문답 ${currentMonthAnsweredTopics.length}개가 포토북에 일괄 수록되었습니다!\n[포토북 스튜디오] 탭에서 확인해보세요.`,
-      [
-        { text: '확인' },
-        { text: '포토북 보기', onPress: () => setActiveTab('photobook') },
-      ]
-    );
-  };
 
   // Toggle Photo into Photobook
   const handleTogglePhotoInBook = (photoMsgId, showAlert = false) => {
@@ -753,8 +738,10 @@ export default function PhotoAlbumScreen({
             smallTalkState={smallTalkState}
             currentUserProfile={currentUserProfile}
             points={points}
+            smallTalkArchiveList={smallTalkArchiveList}
             onDeductPoints={onDeductPoints}
             onSendOrderNotice={onSendOrderNotice}
+            petCharacter={petCharacter || (petmongCharacters && petmongCharacters.length > 0 ? petmongCharacters[0] : null)}
           />
         </View>
       ) : (
@@ -1052,63 +1039,94 @@ export default function PhotoAlbumScreen({
               <View style={styles.archiveBannerContent}>
                 <Text style={styles.archiveBannerTitle}>우리 가족 스몰톡 기록 보관소</Text>
                 <Text style={styles.archiveBannerDesc}>
-                  매일 나눈 질문과 가족들의 솔직한 답변들입니다. 월별 점프와 카드 접기/펼치기로 언제든 편리하게 찾아보세요! 📖
+                  매일 나눈 질문과 가족들의 솔직한 답변들입니다. 답변이 완료된 소중한 문답은 우리 가족 포토북에 자동으로 수록됩니다 📖
                 </Text>
               </View>
             </View>
 
-            {/* 1. Monthly Fast-Jump Selector Chips */}
-            <View style={styles.monthScrollContainer}>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.monthScrollContent}
+            {/* 1. Month Picker & Current Month Quick Jump (2-button Row) */}
+            <View style={styles.monthChipsRow}>
+              {/* [1] 연·월 선택 ▾ */}
+              <TouchableOpacity
+                style={[
+                  styles.monthChipBtn,
+                  styles.monthChipHalfBtn,
+                  selectedMonth !== currentMonthInfo.id ? styles.monthChipBtnActive : styles.moreMonthPickerBtn,
+                ]}
+                onPress={() => setMonthPickerModalVisible(true)}
+                activeOpacity={0.8}
               >
-                {displayedChips.map(month => {
-                  const isSelected = selectedMonth === month.id;
-                  return (
-                    <TouchableOpacity
-                      key={month.id}
-                      style={[styles.monthChipBtn, isSelected && styles.monthChipBtnActive]}
-                      onPress={() => setSelectedMonth(month.id)}
-                      activeOpacity={0.8}
-                    >
-                      <Calendar
-                        size={13}
-                        color={isSelected ? '#FFFFFF' : '#78716C'}
-                        style={{ marginRight: 5 }}
-                      />
-                      <Text style={[styles.monthChipBtnText, isSelected && styles.monthChipBtnTextActive]}>
-                        {month.label} ({month.answeredCount}/{month.count})
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-
-                {/* More Months / Multi-year Picker Button */}
-                <TouchableOpacity
-                  style={[styles.monthChipBtn, styles.moreMonthPickerBtn]}
-                  onPress={() => setMonthPickerModalVisible(true)}
-                  activeOpacity={0.8}
+                <Calendar
+                  size={13}
+                  color={selectedMonth !== currentMonthInfo.id ? '#FFFFFF' : '#FF6B47'}
+                  style={{ marginRight: 5 }}
+                />
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.monthChipBtnText,
+                    styles.moreMonthPickerBtnText,
+                    selectedMonth !== currentMonthInfo.id && styles.monthChipBtnTextActive,
+                  ]}
                 >
-                  <Calendar size={13} color="#FF6B47" style={{ marginRight: 4 }} />
-                  <Text style={styles.moreMonthPickerBtnText}>
-                    🗓️ 연·월 선택
-                  </Text>
-                  <ChevronDown size={13} color="#FF6B47" style={{ marginLeft: 2 }} />
-                </TouchableOpacity>
-              </ScrollView>
+                  {selectedMonth !== currentMonthInfo.id ? selectedMonthLabel : '연·월 선택'}
+                </Text>
+                <ChevronDown
+                  size={13}
+                  color={selectedMonth !== currentMonthInfo.id ? '#FFFFFF' : '#FF6B47'}
+                  style={{ marginLeft: 2 }}
+                />
+              </TouchableOpacity>
+
+              {/* [2] 현재달 */}
+              <TouchableOpacity
+                style={[
+                  styles.monthChipBtn,
+                  styles.monthChipHalfBtn,
+                  selectedMonth === currentMonthInfo.id && styles.monthChipBtnActive,
+                ]}
+                onPress={() => setSelectedMonth(currentMonthInfo.id)}
+                activeOpacity={0.8}
+              >
+                <Calendar
+                  size={13}
+                  color={selectedMonth === currentMonthInfo.id ? '#FFFFFF' : '#78716C'}
+                  style={{ marginRight: 5 }}
+                />
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.monthChipBtnText,
+                    selectedMonth === currentMonthInfo.id && styles.monthChipBtnTextActive,
+                  ]}
+                >
+                  {currentMonthInfo.label} ({currentMonthInfo.answeredCount}/{currentMonthInfo.count})
+                </Text>
+              </TouchableOpacity>
             </View>
 
             {/* 2. Monthly Summary & Batch Action Bar */}
             <View style={styles.monthSummaryRow}>
               <View style={styles.monthSummaryLeft}>
-                <Text style={styles.monthSummaryTitle}>
-                  📅 {selectedMonth === 'all' ? '전체' : (displayedChips.find(m => m.id === selectedMonth)?.fullLabel || availableMonths.find(m => m.id === selectedMonth)?.label || '전체')} 스몰톡
-                </Text>
-                <Text style={styles.monthSummarySub}>
-                  총 {monthScopedList.length}개 질문 중 {monthScopedList.filter(i => i.isAnswered).length}개 답변 완료 ({monthScopedList.length > 0 ? Math.round((monthScopedList.filter(i => i.isAnswered).length / monthScopedList.length) * 100) : 0}%)
-                </Text>
+                {isSearchActive ? (
+                  <>
+                    <Text style={styles.monthSummaryTitle}>
+                      🔍 '{searchQuery}' 검색 결과 ({filteredArchiveList.length}건)
+                    </Text>
+                    <Text style={styles.monthSummarySub}>
+                      전체 기간의 질문 및 가족 답변에서 일치하는 기록입니다.
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.monthSummaryTitle}>
+                      📅 {selectedMonthLabel} 스몰톡
+                    </Text>
+                    <Text style={styles.monthSummarySub}>
+                      총 {monthScopedList.length}개 질문 중 {monthScopedList.filter(i => i.isAnswered).length}개 답변 완료 ({monthScopedList.length > 0 ? Math.round((monthScopedList.filter(i => i.isAnswered).length / monthScopedList.length) * 100) : 0}%)
+                    </Text>
+                  </>
+                )}
               </View>
 
               <View style={styles.monthSummaryRightActions}>
@@ -1121,32 +1139,31 @@ export default function PhotoAlbumScreen({
                     {expandedTopicIds.length === filteredArchiveList.length ? '모두 접기' : '모두 펼치기'}
                   </Text>
                 </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.batchAddBtn}
-                  onPress={handleBatchAddMonthToBook}
-                  activeOpacity={0.85}
-                >
-                  <Plus size={13} color="#FFFFFF" strokeWidth={2.5} style={{ marginRight: 4 }} />
-                  <Text style={styles.batchAddBtnText}>월간 전체 담기</Text>
-                </TouchableOpacity>
               </View>
             </View>
 
             {/* 3. Search & Filter Controls */}
             <View style={styles.archiveControlsRow}>
-              <View style={styles.searchBarBox}>
-                <Search size={16} color="#A8A29E" style={{ marginRight: 8 }} />
+              <View style={[styles.searchBarBox, isSearchActive && styles.searchBarBoxActive]}>
+                <Search size={16} color={isSearchActive ? '#FF6B47' : '#A8A29E'} style={{ marginRight: 8 }} />
                 <TextInput
                   style={styles.searchBarInput}
-                  placeholder="질문이나 가족의 답변 검색..."
+                  placeholder="질문이나 가족의 답변, 작성자 검색..."
                   placeholderTextColor="#A8A29E"
                   value={searchQuery}
                   onChangeText={setSearchQuery}
+                  returnKeyType="search"
+                  clearButtonMode="while-editing"
+                  autoCorrect={false}
+                  autoCapitalize="none"
                 />
                 {searchQuery !== '' && (
-                  <TouchableOpacity onPress={() => setSearchQuery('')}>
-                    <X size={16} color="#A8A29E" />
+                  <TouchableOpacity
+                    onPress={() => setSearchQuery('')}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    style={{ padding: 4 }}
+                  >
+                    <X size={15} color="#78716C" />
                   </TouchableOpacity>
                 )}
               </View>
@@ -1159,7 +1176,7 @@ export default function PhotoAlbumScreen({
                 onPress={() => setArchiveFilter('all')}
               >
                 <Text style={[styles.archiveFilterChipText, archiveFilter === 'all' && styles.archiveFilterChipTextActive]}>
-                  전체 질문 ({monthScopedList.length})
+                  전체 ({getFilterTabCount('all')})
                 </Text>
               </TouchableOpacity>
 
@@ -1168,7 +1185,7 @@ export default function PhotoAlbumScreen({
                 onPress={() => setArchiveFilter('answered')}
               >
                 <Text style={[styles.archiveFilterChipText, archiveFilter === 'answered' && styles.archiveFilterChipTextActive]}>
-                  답변 완료 ({monthScopedList.filter(i => i.isAnswered).length})
+                  답변 완료 ({getFilterTabCount('answered')})
                 </Text>
               </TouchableOpacity>
 
@@ -1177,16 +1194,7 @@ export default function PhotoAlbumScreen({
                 onPress={() => setArchiveFilter('unanswered')}
               >
                 <Text style={[styles.archiveFilterChipText, archiveFilter === 'unanswered' && styles.archiveFilterChipTextActive]}>
-                  미답변 ({monthScopedList.filter(i => !i.isAnswered).length})
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.archiveFilterChip, archiveFilter === 'in-book' && styles.archiveFilterChipActive]}
-                onPress={() => setArchiveFilter('in-book')}
-              >
-                <Text style={[styles.archiveFilterChipText, archiveFilter === 'in-book' && styles.archiveFilterChipTextActive]}>
-                  📖 포토북 ({monthScopedList.filter(i => i.isInBook).length})
+                  미답변 ({getFilterTabCount('unanswered')})
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1198,7 +1206,7 @@ export default function PhotoAlbumScreen({
 
                 return (
                   <View key={item.id} style={[styles.archiveCard, isExpanded && styles.archiveCardExpanded]}>
-                    {/* Card Header: Date & Completion Badge & Photobook Button */}
+                    {/* Card Header: Date & Completion Badge & Photobook Auto-Inclusion Badge */}
                     <View style={styles.archiveCardHeader}>
                       <View style={styles.archiveHeaderLeft}>
                         <View style={[styles.archiveDateBadge, item.isToday && styles.archiveDateBadgeToday]}>
@@ -1211,24 +1219,17 @@ export default function PhotoAlbumScreen({
                         </View>
                       </View>
 
-                      {/* Add to Photobook Action Button */}
-                      <TouchableOpacity
-                        style={[styles.addToBookBtn, item.isInBook && styles.addToBookBtnDone]}
-                        onPress={() => handleToggleSmallTalkInBook(item.topic)}
-                        activeOpacity={0.8}
-                      >
-                        {item.isInBook ? (
-                          <>
-                            <Check size={13} color="#059669" strokeWidth={2.5} style={{ marginRight: 4 }} />
-                            <Text style={styles.addToBookBtnTextDone}>포토북 수록됨</Text>
-                          </>
-                        ) : (
-                          <>
-                            <Plus size={13} color="#FF6B47" strokeWidth={2.5} style={{ marginRight: 4 }} />
-                            <Text style={styles.addToBookBtnText}>포토북에 담기 📖</Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
+                      {/* Photobook Auto-Inclusion Status Badge */}
+                      {item.isAnswered ? (
+                        <View style={styles.autoBookBadge}>
+                          <Check size={11} color="#059669" strokeWidth={2.5} style={{ marginRight: 3 }} />
+                          <Text style={styles.autoBookBadgeText}>포토북 수록</Text>
+                        </View>
+                      ) : (
+                        <View style={styles.waitingAnswerBadge}>
+                          <Text style={styles.waitingAnswerBadgeText}>답변 대기 중</Text>
+                        </View>
+                      )}
                     </View>
 
                     {/* Question Title & Accordion Toggle Bar */}
@@ -1238,8 +1239,24 @@ export default function PhotoAlbumScreen({
                       activeOpacity={0.7}
                     >
                       <View style={styles.archiveQuestionTitleCol}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 4 }}>
+                          {isSearchActive && item.yearMonthLabel && (
+                            <View style={styles.searchMonthBadge}>
+                              <Text style={styles.searchMonthBadgeText}>{item.yearMonthLabel}</Text>
+                            </View>
+                          )}
+                          {isSearchActive && (typeof item.topic === 'string' ? item.topic : '').toLowerCase().includes(trimmedSearchQuery) && (
+                            <View style={styles.searchMatchPill}>
+                              <Text style={styles.searchMatchPillText}>질문 일치</Text>
+                            </View>
+                          )}
+                        </View>
                         <Text
-                          style={[styles.archiveQuestionTitle, !isExpanded && styles.archiveQuestionTitleCollapsed]}
+                          style={[
+                            styles.archiveQuestionTitle,
+                            !isExpanded && styles.archiveQuestionTitleCollapsed,
+                            isSearchActive && (typeof item.topic === 'string' ? item.topic : '').toLowerCase().includes(trimmedSearchQuery) && styles.archiveQuestionTitleMatched,
+                          ]}
                           numberOfLines={isExpanded ? undefined : 2}
                         >
                           "{item.topic}"
@@ -1283,17 +1300,32 @@ export default function PhotoAlbumScreen({
                     {/* Family Member Answers - Only when expanded */}
                     {isExpanded && (
                       <View style={styles.answersContainer}>
-                        {item.answers.map((ans, aIdx) => (
-                          <View key={ans.id || aIdx} style={styles.answerRow}>
-                            <UserAvatar avatar={ans.avatar} size={32} style={{ marginRight: 10, marginTop: 2 }} />
-                            <View style={styles.answerContentCol}>
-                              <Text style={styles.answerAuthorName}>{ans.name}</Text>
-                              <View style={styles.answerBubble}>
-                                <Text style={styles.answerText}>“{ans.text}”</Text>
+                        {item.answers.map((ans, aIdx) => {
+                          const ansTextLower = (ans.text || '').toLowerCase();
+                          const ansNameLower = (ans.name || '').toLowerCase();
+                          const ansMatched = isSearchActive && (ansTextLower.includes(trimmedSearchQuery) || ansNameLower.includes(trimmedSearchQuery));
+
+                          return (
+                            <View key={ans.id || aIdx} style={styles.answerRow}>
+                              <UserAvatar avatar={ans.avatar} size={32} style={{ marginRight: 10, marginTop: 2 }} />
+                              <View style={styles.answerContentCol}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                  <Text style={[styles.answerAuthorName, ansMatched && ansNameLower.includes(trimmedSearchQuery) && styles.answerAuthorNameMatched]}>
+                                    {ans.name}
+                                  </Text>
+                                  {ansMatched && (
+                                    <View style={styles.searchMatchPill}>
+                                      <Text style={styles.searchMatchPillText}>답변 일치</Text>
+                                    </View>
+                                  )}
+                                </View>
+                                <View style={[styles.answerBubble, ansMatched && styles.answerBubbleMatched]}>
+                                  <Text style={[styles.answerText, ansMatched && styles.answerTextMatched]}>“{ans.text}”</Text>
+                                </View>
                               </View>
                             </View>
-                          </View>
-                        ))}
+                          );
+                        })}
 
                         {item.answers.length === 0 && (
                           <View style={styles.emptyAnswersBox}>
@@ -1319,8 +1351,25 @@ export default function PhotoAlbumScreen({
               {filteredArchiveList.length === 0 && (
                 <View style={styles.emptySearchBox}>
                   <Search size={32} color="#A8A29E" style={{ marginBottom: 10 }} />
-                  <Text style={styles.emptySearchTitle}>선택하신 기간에 스몰톡 질문이 없습니다</Text>
-                  <Text style={styles.emptySearchSub}>다른 월을 선택하시거나 검색어를 확인해보세요.</Text>
+                  <Text style={styles.emptySearchTitle}>
+                    {isSearchActive
+                      ? `'${searchQuery}'에 대한 검색 결과가 없습니다`
+                      : '선택하신 기간에 스몰톡 질문이 없습니다'}
+                  </Text>
+                  <Text style={styles.emptySearchSub}>
+                    {isSearchActive
+                      ? '다른 질문 키워드나 가족 이름, 답변 내용으로 검색해보세요.'
+                      : '다른 월을 선택하시거나 검색어를 확인해보세요.'}
+                  </Text>
+                  {isSearchActive && (
+                    <TouchableOpacity
+                      style={styles.clearSearchBtn}
+                      onPress={() => setSearchQuery('')}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.clearSearchBtnText}>검색어 지우기</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               )}
             </View>
@@ -2164,22 +2213,27 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
 
-  // 1. Monthly Fast-Jump Selector
-  monthScrollContainer: {
+  // 1. Monthly Fast-Jump Selector (2-Button Quick Bar)
+  monthChipsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 12,
-  },
-  monthScrollContent: {
     gap: 8,
   },
   monthChipBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 13,
-    paddingVertical: 8,
+    paddingVertical: 9,
     borderRadius: 12,
     backgroundColor: '#FFFFFF',
     borderWidth: 1.2,
     borderColor: '#E8E0D0',
+  },
+  monthChipHalfBtn: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 8,
   },
   monthChipBtnActive: {
     backgroundColor: '#FF6B47',
@@ -2257,24 +2311,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#78716C',
   },
-  batchAddBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FF6B47',
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-    borderRadius: 10,
-    shadowColor: '#FF6B47',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  batchAddBtnText: {
-    fontSize: 11.5,
-    fontWeight: '800',
-    color: '#FFFFFF',
-  },
+
 
   // 3. Search & Filter Controls
   archiveControlsRow: {
@@ -2290,10 +2327,16 @@ const styles = StyleSheet.create({
     borderWidth: 1.2,
     borderColor: '#E8E0D0',
   },
+  searchBarBoxActive: {
+    borderColor: '#FF6B47',
+    backgroundColor: '#FFFBF9',
+  },
   searchBarInput: {
     flex: 1,
     fontSize: 13.5,
     color: '#1C1917',
+    padding: 0,
+    ...(Platform.OS === 'web' ? { outlineWidth: 0, outlineStyle: 'none' } : {}),
   },
   archiveFilterChipsRow: {
     flexDirection: 'row',
@@ -2380,29 +2423,31 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#A8A29E',
   },
-  addToBookBtn: {
+  autoBookBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF5F2',
-    borderWidth: 1.2,
-    borderColor: '#FFE0D6',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  addToBookBtnDone: {
     backgroundColor: '#ECFDF5',
     borderColor: '#A7F3D0',
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
+    borderRadius: 8,
   },
-  addToBookBtnText: {
-    fontSize: 11.5,
-    fontWeight: '800',
-    color: '#FF6B47',
-  },
-  addToBookBtnTextDone: {
-    fontSize: 11.5,
-    fontWeight: '800',
+  autoBookBadgeText: {
+    fontSize: 10.5,
+    fontWeight: '700',
     color: '#059669',
+  },
+  waitingAnswerBadge: {
+    backgroundColor: '#F5F0E8',
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
+    borderRadius: 8,
+  },
+  waitingAnswerBadgeText: {
+    fontSize: 10.5,
+    fontWeight: '600',
+    color: '#A8A29E',
   },
   archiveQuestionToggleRow: {
     flexDirection: 'row',
@@ -2527,6 +2572,60 @@ const styles = StyleSheet.create({
   emptySearchSub: {
     fontSize: 12,
     color: '#A8A29E',
+  },
+  searchMonthBadge: {
+    backgroundColor: '#F5F0E8',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  searchMonthBadgeText: {
+    fontSize: 10,
+    color: '#78716C',
+    fontWeight: '700',
+  },
+  searchMatchPill: {
+    backgroundColor: '#FFF5F2',
+    borderColor: '#FFE8E0',
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 6,
+  },
+  searchMatchPillText: {
+    fontSize: 9.5,
+    color: '#FF6B47',
+    fontWeight: '800',
+  },
+  archiveQuestionTitleMatched: {
+    color: '#C2410C',
+  },
+  answerAuthorNameMatched: {
+    color: '#FF6B47',
+    fontWeight: '800',
+  },
+  answerBubbleMatched: {
+    backgroundColor: '#FFF5F2',
+    borderColor: '#FF6B47',
+    borderWidth: 1.2,
+  },
+  answerTextMatched: {
+    color: '#1C1917',
+    fontWeight: '600',
+  },
+  clearSearchBtn: {
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#FFF5F2',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FFE8E0',
+  },
+  clearSearchBtnText: {
+    fontSize: 13,
+    color: '#FF6B47',
+    fontWeight: '700',
   },
 
   // PHOTO MANAGE MODAL & BADGES

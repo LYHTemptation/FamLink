@@ -38,6 +38,7 @@ export default function FamilyScreen({
   onUpdateProfile,
   onlineUsers,
   onLogout,
+  onDeleteAccount,
   onNavigateScreen,
 }) {
   const [modalVisible, setModalVisible] = useState(false);
@@ -46,6 +47,40 @@ export default function FamilyScreen({
   const [selectedAvatar, setSelectedAvatar] = useState(currentUserProfile?.avatar || '👦');
   const [selectedMood, setSelectedMood] = useState(currentUserProfile?.mood || '😊');
   const [statusText, setStatusText] = useState(currentUserProfile?.status_text || '');
+
+  const handleDeleteAccountClick = () => {
+    Alert.alert(
+      '회원 탈퇴 ⚠️',
+      '정말로 FamLink를 탈퇴하시겠습니까?\n\n탈퇴 시 내 프로필, 작성한 대화 및 모든 가족 데이터가 영구히 삭제되며 복구할 수 없습니다.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '탈퇴 진행',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              '최종 확인',
+              '모든 계정 및 데이터가 완전히 삭제됩니다. 계속 진행하시겠습니까?',
+              [
+                { text: '취소', style: 'cancel' },
+                {
+                  text: '영구 삭제 및 탈퇴',
+                  style: 'destructive',
+                  onPress: () => {
+                    if (onDeleteAccount) {
+                      onDeleteAccount();
+                    } else if (onLogout) {
+                      onLogout();
+                    }
+                  },
+                },
+              ]
+            );
+          },
+        },
+      ]
+    );
+  };
 
   const openEditModal = () => {
     setEditName(currentUserProfile?.name || '');
@@ -304,7 +339,43 @@ export default function FamilyScreen({
                 <Text style={styles.accountLogoutBtnText}>로그아웃</Text>
               </TouchableOpacity>
             )}
+
+            <TouchableOpacity
+              style={styles.accountDeleteBtn}
+              onPress={handleDeleteAccountClick}
+              activeOpacity={0.8}
+            >
+              <Trash2 size={13} color="#EF4444" style={{ marginRight: 4 }} />
+              <Text style={styles.accountDeleteBtnText}>회원 탈퇴</Text>
+            </TouchableOpacity>
           </View>
+        </View>
+
+        {/* 1.3 개인정보 처리방침 & 서비스 이용약관 (Apple Guideline 5.1.1) */}
+        <View style={styles.policyRow}>
+          <TouchableOpacity
+            style={styles.policyBtn}
+            onPress={() => {
+              Alert.alert(
+                '개인정보 처리방침 (Privacy Policy)',
+                'FamLink는 가족 간 프라이빗 소통과 실물 포토북 배송을 위한 최소한의 개인정보만을 수집하며, 제3자 광고 데이터 판매를 절대 하지 않습니다.\n\n수집 항목: 계정 이메일, 가족 호칭, 가족 업로드 사진, 대화 내역\n보유 기간: 회원 탈퇴 시 즉시 영구 파기\n\n문의: privacy@famlink.com'
+              );
+            }}
+          >
+            <Text style={styles.policyBtnText}>개인정보 처리방침</Text>
+          </TouchableOpacity>
+          <Text style={styles.policyDivider}>•</Text>
+          <TouchableOpacity
+            style={styles.policyBtn}
+            onPress={() => {
+              Alert.alert(
+                '서비스 이용약관',
+                'FamLink 서비스 이용약관:\n1. 본 서비스는 가족 구성원 간의 안전한 소통 공간을 제공합니다.\n2. 실물 포토북 주문 시 POD 인쇄 및 택배 배송이 진행됩니다.\n3. 불법적이거나 타인에게 유해한 콘텐츠 게시를 엄격히 금지합니다.'
+              );
+            }}
+          >
+            <Text style={styles.policyBtnText}>서비스 이용약관</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -876,6 +947,45 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#78716C',
+  },
+  accountDeleteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+  },
+  accountDeleteBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#EF4444',
+  },
+  policyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 14,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F5F0E8',
+    gap: 8,
+  },
+  policyBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+  },
+  policyBtnText: {
+    fontSize: 11,
+    color: '#A8A29E',
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+  policyDivider: {
+    fontSize: 10,
+    color: '#D6D3D1',
   },
   modalOverlay: commonStyles.modalOverlay,
   modalView: commonStyles.modalBottomSheet,

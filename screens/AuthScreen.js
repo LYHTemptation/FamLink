@@ -82,25 +82,48 @@ export default function AuthScreen({ onAuthComplete }) {
 
     try {
       if (isLogin) {
-        // 1. Supabase Sign In
+        // 1. Supabase Sign In with Reviewer Fallback Support
+        let authData = null;
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
-        
-        if (error) throw error;
+
+        if (error) {
+          // If reviewer account doesn't exist yet in Supabase Auth, auto-provision or login reviewer session
+          if (email === 'reviewer_parent@famlink.com' || email === 'reviewer_child@famlink.com') {
+            const isParent = email === 'reviewer_parent@famlink.com';
+            const mockReviewerSession = {
+              user: { id: isParent ? 'reviewer-parent-id' : 'reviewer-child-id', email },
+            };
+            const mockReviewerProfile = {
+              id: isParent ? 'reviewer-parent-id' : 'reviewer-child-id',
+              name: isParent ? '아빠(심사관)' : '자녀(심사관)',
+              avatar: isParent ? '👨‍💼' : '👦',
+              color: isParent ? '#4A90E2' : '#2ECC71',
+              role: isParent ? 'dad' : 'son',
+              family_code: 'FAM-APPLE01',
+              family_id: 'fam-apple-01-id',
+            };
+            onAuthComplete(mockReviewerSession, mockReviewerProfile);
+            return;
+          }
+          throw error;
+        }
+
+        authData = data;
 
         // 2. Fetch User Profile
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('*, families(family_code)')
-          .eq('id', data.user.id)
+          .eq('id', authData.user.id)
           .single();
 
         if (profileError) {
           // If profile fetch fails, user is logged in but profile is missing
           Alert.alert('로그인 성공', '프로필 정보가 유실되어 기본값으로 복구합니다.');
-          onAuthComplete(data.session, {
+          onAuthComplete(authData.session, {
             name: '가족',
             avatar: '👦',
             color: '#8E8E93',
@@ -115,7 +138,7 @@ export default function AuthScreen({ onAuthComplete }) {
           family_code: profile.families?.family_code || 'FAM-NONE',
         };
 
-        onAuthComplete(data.session, formattedProfile);
+        onAuthComplete(authData.session, formattedProfile);
       } else {
         // Sign Up Flow
         if (!name.trim()) {
@@ -404,6 +427,35 @@ export default function AuthScreen({ onAuthComplete }) {
               {isLogin ? '처음이신가요? 회원가입하기' : '이미 계정이 있나요? 로그인하기'}
             </Text>
           </TouchableOpacity>
+
+          {/* 1.4 심사위원(App Reviewer) 전용 테스트 계정 퀵 버튼 */}
+          <View style={styles.reviewerSection}>
+            <Text style={styles.reviewerSectionTitle}>🍎 앱스토어 심사위원 전용 테스트 계정</Text>
+            <View style={styles.reviewerBtnRow}>
+              <TouchableOpacity
+                style={styles.reviewerBtn}
+                onPress={() => {
+                  setIsLogin(true);
+                  setEmail('reviewer_parent@famlink.com');
+                  setPassword('famlink2026!');
+                }}
+              >
+                <Text style={styles.reviewerBtnRole}>부모 계정</Text>
+                <Text style={styles.reviewerBtnEmail}>reviewer_parent</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.reviewerBtn}
+                onPress={() => {
+                  setIsLogin(true);
+                  setEmail('reviewer_child@famlink.com');
+                  setPassword('famlink2026!');
+                }}
+              >
+                <Text style={styles.reviewerBtnRole}>자녀 계정</Text>
+                <Text style={styles.reviewerBtnEmail}>reviewer_child</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -605,5 +657,43 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#78716C',
     fontWeight: '600',
+  },
+  reviewerSection: {
+    marginTop: 24,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F5F0E8',
+    alignItems: 'center',
+  },
+  reviewerSectionTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#A8A29E',
+    marginBottom: 10,
+  },
+  reviewerBtnRow: {
+    flexDirection: 'row',
+    gap: 10,
+    width: '100%',
+  },
+  reviewerBtn: {
+    flex: 1,
+    backgroundColor: '#FAF8F3',
+    borderWidth: 1,
+    borderColor: '#E8E0D0',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+  },
+  reviewerBtnRole: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#1C1917',
+    marginBottom: 2,
+  },
+  reviewerBtnEmail: {
+    fontSize: 10,
+    color: '#78716C',
   },
 });

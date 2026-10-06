@@ -28,6 +28,7 @@ import {
   Gamepad2,
   Play,
   Flame,
+  Gift,
 } from 'lucide-react-native';
 import UserAvatar from './UserAvatar';
 import SnackCatchGame from './minigames/SnackCatchGame';
@@ -138,31 +139,72 @@ export default function SmallTalkScreen({
   const [isBubbleGameVisible, setIsBubbleGameVisible] = useState(false);
   const [isDreamGameVisible, setIsDreamGameVisible] = useState(false);
 
+  // 사용자별(개인별) 일일 미니게임 성장 보상 한도 (1인당 하루 최대 3회)
+  const DAILY_GAME_REWARD_LIMIT = 3;
+  const [dailyGameRewardCount, setDailyGameRewardCount] = useState(0);
 
-  // 반려몽 체류형 미니게임 완료 콜백 (반려몽 영역 활동: EXP 성장 지급)
-  const handleCompletePetmongGame = (gameTitle, { score, exp: awardedExp, points: awardedPts }) => {
-    const finalExp = awardedExp || Math.max(15, Math.min(50, Math.round((score || 100) / 10)));
-    if (onAwardPetExp) {
-      onAwardPetExp(null, finalExp, `${gameTitle} 완료 (+${finalExp} EXP)`);
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const currentUserId = currentUserProfile?.id || (typeof currentUser === 'string' ? currentUser : 'guest');
+  const rewardStorageKey = useMemo(() => {
+    return `@famlink_daily_game_rewards_${currentUserId}_${todayStr}`;
+  }, [currentUserId, todayStr]);
+
+  useEffect(() => {
+    AsyncStorage.getItem(rewardStorageKey)
+      .then((val) => {
+        if (val !== null) {
+          setDailyGameRewardCount(parseInt(val, 10) || 0);
+        } else {
+          setDailyGameRewardCount(0);
+        }
+      })
+      .catch(() => {});
+  }, [rewardStorageKey]);
+
+  const remainingRewards = Math.max(0, DAILY_GAME_REWARD_LIMIT - dailyGameRewardCount);
+  const canEarnReward = remainingRewards > 0;
+
+  // 반려몽 체류형 미니게임 완료 콜백 (사용자별 일일 한도 체크 및 연습 모드 분기)
+  const handleCompletePetmongGame = (gameTitle, { score = 0, exp: awardedExp = 0, isPractice = false }) => {
+    if (!isPractice && dailyGameRewardCount < DAILY_GAME_REWARD_LIMIT) {
+      const nextCount = dailyGameRewardCount + 1;
+      setDailyGameRewardCount(nextCount);
+      AsyncStorage.setItem(rewardStorageKey, String(nextCount)).catch(() => {});
+
+      const finalExp = awardedExp || Math.max(15, Math.min(50, Math.round((score || 100) / 10)));
+      if (onAwardPetExp) {
+        onAwardPetExp(null, finalExp, `${currentUserProfile?.name || '가족'}님의 ${gameTitle} (+${finalExp} EXP)`);
+      }
+
+      const left = DAILY_GAME_REWARD_LIMIT - nextCount;
+      Alert.alert(
+        '🎉 미니게임 완료!',
+        `${gameTitle}을(를) 멋지게 마쳤어요!\n\n🌱 반려몽이 +${finalExp} EXP를 획득하여 쑥쑥 성장했습니다!\n🎁 오늘 내 남은 성장 보상: ${left > 0 ? `${left}회` : '모두 달성 (이후 자유 연습)'}`
+      );
+    } else {
+      Alert.alert(
+        '🎮 자유 연습 모드 완료!',
+        `${gameTitle} 연습을 멋지게 마쳤어요!\n\n최종 점수: ${score}점\n(오늘의 1인 성장 보상 ${DAILY_GAME_REWARD_LIMIT}회를 모두 달성하여 연습 모드로 기록되었습니다. 내일 다시 만나요! ✨)`
+      );
     }
-    Alert.alert(
-      '🎉 미니게임 완료!',
-      `${gameTitle}을(를) 멋지게 마쳤어요!\n🌱 반려몽이 +${finalExp} EXP를 획득하여 쑥쑥 성장했습니다!`
-    );
   };
 
-  // 1. 가족 멤버 구성 (기본 4인: 엄마, 아빠, 지수, 민준)
+  // 1. 가족 멤버 구성 (실제 연동 멤버, 없을 시 본인 프로필 단일 구성)
   const membersList = useMemo(() => {
     if (familyMembers && familyMembers.length > 0) {
       return familyMembers;
     }
-    return [
-      { id: 'm1', name: '엄마', role: '엄마', avatar: '👩', color: '#FFA500' },
-      { id: 'm2', name: '아빠', role: '아빠', avatar: '👨', color: '#87CEEB' },
-      { id: 'm3', name: '지수', role: '지수', avatar: '👧', color: '#DDA0DD' },
-      { id: 'm4', name: '민준', role: '민준', avatar: '👦', color: '#90EE90' },
-    ];
-  }, [familyMembers]);
+    if (currentUserProfile) {
+      return [{
+        id: currentUserProfile.id || 'me',
+        name: currentUserProfile.name || (typeof currentUser === 'string' ? currentUser : '나'),
+        role: currentUserProfile.role || '본인',
+        avatar: currentUserProfile.avatar || '😊',
+        color: '#FF6B47',
+      }];
+    }
+    return [];
+  }, [familyMembers, currentUserProfile, currentUser]);
 
   // 2. 오늘의 대화 주제 및 응답 계산 (FamLink 기존 스몰톡 기능 100% 연동)
   const { topic = '', responses = {} } = smallTalkState || {};
@@ -231,7 +273,7 @@ export default function SmallTalkScreen({
   const totalMemberCount = membersList.length;
 
   const currentUserMember = useMemo(() => {
-    return membersList.find(m => isCurrentMember(m)) || membersList[0];
+    return membersList.find(m => isCurrentMember(m)) || membersList[0] || null;
   }, [membersList, myId, myName]);
 
   // 빠른 인라인 답변 텍스트 상태
@@ -263,7 +305,19 @@ export default function SmallTalkScreen({
   const totalChoresCount = choresList.length;
   const completedChoresCount = completedChoresList.length;
   const remainingChoresCount = activeChores.length;
-  const todayEarnedScore = completedChoresList.reduce((sum, c) => sum + (c.points || 20), 0);
+
+  // ⭐ 오늘 실제로 완료하여 획득한 점수만 정확히 합산 (과거 완료 점수 누적 완벽 방지)
+  const todayCompletedChores = useMemo(() => {
+    return completedChoresList.filter(c => {
+      const raw = c.rawItem || c;
+      const compDate = raw.completed_date || (raw.completed_at ? raw.completed_at.slice(0, 10) : null);
+      return !compDate || compDate === todayStr;
+    });
+  }, [completedChoresList, todayStr]);
+
+  const todayEarnedScore = useMemo(() => {
+    return todayCompletedChores.reduce((sum, c) => sum + (c.points || 20), 0);
+  }, [todayCompletedChores]);
 
   // 집안일 완료 토글 (홈 화면 퀘스트 보드와 양방향 100% 실시간 연동)
   const handleToggleChoreItem = (chore) => {
@@ -315,7 +369,7 @@ export default function SmallTalkScreen({
 
     Alert.alert(
       '완료 목록 비우기 🧹',
-      `완료된 1회성 집안일 ${oneTimeCompleted.length}개를 목록에서 비우시겠습니까?\n(매일 반복 루틴은 유지됩니다)`,
+      `완료된 1회성 집안일 ${oneTimeCompleted.length}개를 목록에서 즉시 비우시겠습니까?\n(다음 날이 되면 자동으로도 정리됩니다)`,
       [
         { text: '취소', style: 'cancel' },
         {
@@ -500,9 +554,14 @@ export default function SmallTalkScreen({
               </TouchableOpacity>
             )}
 
-            {/* 가족 멤버별 답변 리스트 (엄마, 아빠, 지수, 민준) */}
+            {/* 가족 멤버별 답변 리스트 */}
             <View style={styles.membersAnswerList}>
-              {membersList.map((member, idx) => {
+              {membersList.length === 0 ? (
+                <View style={{ paddingVertical: 18, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 13, color: '#A8A29E' }}>가족 구성원을 등록하거나 초대해보세요.</Text>
+                </View>
+              ) : (
+                membersList.map((member, idx) => {
                 const ringColors = [
                   'rgba(255, 179, 71, 0.25)',
                   'rgba(135, 206, 235, 0.25)',
@@ -567,7 +626,7 @@ export default function SmallTalkScreen({
                     </View>
                   </TouchableOpacity>
                 );
-              })}
+              }))}
             </View>
 
             {/* 카드 하단 30P 보너스 배너 */}
@@ -791,36 +850,54 @@ export default function SmallTalkScreen({
 
             {/* 1. 반려몽과 함께하는 4대 액션 게임 */}
             <View style={{ marginBottom: 12 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, paddingHorizontal: 4 }}>
-                <Gamepad2 size={18} color="#FF6B47" style={{ marginRight: 6 }} />
-                <Text style={{ fontSize: 15, fontWeight: '800', color: '#1C1917' }}>반려몽 액션 놀이터</Text>
-                <View style={{ marginLeft: 8, backgroundColor: '#DCFCE7', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>
-                  <Text style={{ fontSize: 10, fontWeight: '800', color: '#16A34A' }}>반려몽 성장 EXP 획득</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, paddingHorizontal: 4 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Gamepad2 size={18} color="#FF6B47" style={{ marginRight: 6 }} />
+                  <Text style={{ fontSize: 15, fontWeight: '800', color: '#1C1917' }}>반려몽 액션 놀이터</Text>
+                </View>
+                <View style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: canEarnReward ? '#FFF5F2' : '#F5F0E8',
+                  borderWidth: 1,
+                  borderColor: canEarnReward ? '#FFE8E0' : '#E7E5E4',
+                  paddingHorizontal: 8,
+                  paddingVertical: 3,
+                  borderRadius: 12,
+                }}>
+                  <Gift size={11} color={canEarnReward ? '#FF6B47' : '#78716C'} style={{ marginRight: 4 }} />
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: canEarnReward ? '#FF6B47' : '#78716C' }}>
+                    오늘 내 보상 {dailyGameRewardCount}/{DAILY_GAME_REWARD_LIMIT}회
+                  </Text>
                 </View>
               </View>
               <Text style={{ fontSize: 12, color: '#78716C', paddingHorizontal: 4, marginBottom: 10 }}>
-                가족 누구나 플레이하여 우리 반려몽 성장 EXP(+15 ~ +50 EXP)를 함께 모아요!
+                {canEarnReward
+                  ? `가족 구성원 1인당 매일 최대 ${DAILY_GAME_REWARD_LIMIT}회까지 성장 EXP(+15 ~ +50 EXP)를 획득할 수 있어요!`
+                  : `오늘의 1인 성장 보상을 모두 획득했습니다! 자유 연습 모드로 계속 플레이할 수 있어요.`}
               </Text>
 
               <View style={styles.gamesCardsList}>
-                {/* 펫게임 1: 와구와구 간식 캐치 */}
+                {/* 펫게임 1: 후르츠 닌자 */}
                 <TouchableOpacity
                   style={styles.gameActionCard}
                   onPress={() => setIsSnackGameVisible(true)}
                   activeOpacity={0.85}
                 >
                   <View style={[styles.gameLargeIconBox, { backgroundColor: '#FFEDD5' }]}>
-                    <Text style={styles.gameLargeIcon}>🍎</Text>
+                    <Text style={styles.gameLargeIcon}>🍉</Text>
                   </View>
                   <View style={styles.gameInfoCol}>
                     <View style={styles.gameTitleRow}>
-                      <Text style={styles.gameTitleText}>와구와구 간식 캐치</Text>
+                      <Text style={styles.gameTitleText}>후르츠 닌자</Text>
                       <View style={[styles.gameBadgePill, { backgroundColor: '#FFEDD5' }]}>
-                        <Text style={[styles.gameBadgePillText, { color: '#C2410C' }]}>아케이드</Text>
+                        <Text style={[styles.gameBadgePillText, { color: '#C2410C' }]}>슬라이스</Text>
                       </View>
                     </View>
-                    <Text style={styles.gameDescText}>30초 동안 쏟아지는 사과/고기/케이크 캐치!</Text>
-                    <Text style={[styles.gamePointsText, { color: '#16A34A' }]}>+15 ~ +50 EXP 획득 🌱</Text>
+                    <Text style={styles.gameDescText}>솟구치는 수박과 과일을 샥- 썰어 반려몽 먹방 완성!</Text>
+                    <Text style={[styles.gamePointsText, { color: canEarnReward ? '#16A34A' : '#78716C' }]}>
+                      {canEarnReward ? '+15 ~ +50 EXP 획득 🌱' : '자유 연습 모드 🎯 (EXP 완료)'}
+                    </Text>
                   </View>
                   <Text style={styles.gameChevron}>›</Text>
                 </TouchableOpacity>
@@ -838,33 +915,37 @@ export default function SmallTalkScreen({
                     <View style={styles.gameTitleRow}>
                       <Text style={styles.gameTitleText}>핑퐁 리프팅 랠리</Text>
                       <View style={[styles.gameBadgePill, { backgroundColor: '#BAE6FD' }]}>
-                        <Text style={[styles.gameBadgePillText, { color: '#0369A1' }]}>핑퐁액션</Text>
+                        <Text style={[styles.gameBadgePillText, { color: '#0369A1' }]}>멀티볼 ⚽</Text>
                       </View>
                     </View>
-                    <Text style={styles.gameDescText}>손가락 패들로 공을 튕겨 올려 반려몽과 랠리 대결!</Text>
-                    <Text style={[styles.gamePointsText, { color: '#16A34A' }]}>+15 ~ +50 EXP 획득 🌱</Text>
+                    <Text style={styles.gameDescText}>공이 2개로 증가하는 멀티볼 긴장감! 반려몽과 핑퐁 랠리!</Text>
+                    <Text style={[styles.gamePointsText, { color: canEarnReward ? '#16A34A' : '#78716C' }]}>
+                      {canEarnReward ? '+15 ~ +50 EXP 획득 🌱' : '자유 연습 모드 🎯 (EXP 완료)'}
+                    </Text>
                   </View>
                   <Text style={styles.gameChevron}>›</Text>
                 </TouchableOpacity>
 
-                {/* 펫게임 3: 뽀득뽀득 버블 팝 */}
+                {/* 펫게임 3: 비누방울 머지 */}
                 <TouchableOpacity
                   style={styles.gameActionCard}
                   onPress={() => setIsBubbleGameVisible(true)}
                   activeOpacity={0.85}
                 >
-                  <View style={[styles.gameLargeIconBox, { backgroundColor: '#99F6E4' }]}>
+                  <View style={[styles.gameLargeIconBox, { backgroundColor: '#E0F2FE' }]}>
                     <Text style={styles.gameLargeIcon}>🫧</Text>
                   </View>
                   <View style={styles.gameInfoCol}>
                     <View style={styles.gameTitleRow}>
-                      <Text style={styles.gameTitleText}>뽀득뽀득 버블 팝</Text>
-                      <View style={[styles.gameBadgePill, { backgroundColor: '#99F6E4' }]}>
-                        <Text style={[styles.gameBadgePillText, { color: '#0F766E' }]}>스피드</Text>
+                      <Text style={styles.gameTitleText}>비누방울 머지</Text>
+                      <View style={[styles.gameBadgePill, { backgroundColor: '#E0F2FE' }]}>
+                        <Text style={[styles.gameBadgePillText, { color: '#0284C7' }]}>머지퍼즐</Text>
                       </View>
                     </View>
-                    <Text style={styles.gameDescText}>피어오르는 비누방울을 팡팡 터트리는 쾌감 액션!</Text>
-                    <Text style={[styles.gamePointsText, { color: '#16A34A' }]}>+15 ~ +50 EXP 획득 🌱</Text>
+                    <Text style={styles.gameDescText}>수박게임 스타일! 방울을 합쳐 대왕 무지개 거품 완성!</Text>
+                    <Text style={[styles.gamePointsText, { color: canEarnReward ? '#16A34A' : '#78716C' }]}>
+                      {canEarnReward ? '+15 ~ +50 EXP 획득 🌱' : '자유 연습 모드 🎯 (EXP 완료)'}
+                    </Text>
                   </View>
                   <Text style={styles.gameChevron}>›</Text>
                 </TouchableOpacity>
@@ -882,11 +963,13 @@ export default function SmallTalkScreen({
                     <View style={styles.gameTitleRow}>
                       <Text style={styles.gameTitleText}>꿈나라 별자리 잇기</Text>
                       <View style={[styles.gameBadgePill, { backgroundColor: '#C7D2FE' }]}>
-                        <Text style={[styles.gameBadgePillText, { color: '#4338CA' }]}>힐링퍼즐</Text>
+                        <Text style={[styles.gameBadgePillText, { color: '#4338CA' }]}>은하수 탐색</Text>
                       </View>
                     </View>
-                    <Text style={styles.gameDescText}>빛나는 별들을 순서대로 이어 별자리를 완성해요!</Text>
-                    <Text style={[styles.gamePointsText, { color: '#16A34A' }]}>+15 ~ +50 EXP 획득 🌱</Text>
+                    <Text style={styles.gameDescText}>무수히 쏟아지는 밤하늘 은하수에서 신비로운 별자리를 찾아 이어보세요!</Text>
+                    <Text style={[styles.gamePointsText, { color: canEarnReward ? '#16A34A' : '#78716C' }]}>
+                      {canEarnReward ? '+15 ~ +50 EXP 획득 🌱' : '자유 연습 모드 🎯 (EXP 완료)'}
+                    </Text>
                   </View>
                   <Text style={styles.gameChevron}>›</Text>
                 </TouchableOpacity>
@@ -1098,7 +1181,7 @@ export default function SmallTalkScreen({
               <Text style={styles.repeatHintText}>
                 {newChoreRepeatType === 'daily'
                   ? '✨ 매일 자정(00:00)이 지나면 새로운 오늘 할 일로 자동 갱신돼요'
-                  : '✨ 오늘 완료하면 끝나는 일회성 할 일이에요'}
+                  : '✨ 완료하면 오늘 목록에 머물고 다음 날(자정)에 자동 정리돼요'}
               </Text>
             </View>
 
@@ -1130,8 +1213,10 @@ export default function SmallTalkScreen({
         visible={isSnackGameVisible}
         character={petCharacter}
         transparentUrl={petCharacter?.image_url}
+        canEarnReward={canEarnReward}
+        remainingRewards={remainingRewards}
         onClose={() => setIsSnackGameVisible(false)}
-        onGameComplete={(result) => handleCompletePetmongGame('와구와구 간식 캐치', result)}
+        onGameComplete={(result) => handleCompletePetmongGame('후르츠 닌자', result)}
       />
 
       {/* 2. 핑퐁 리프팅 랠리 */}
@@ -1139,6 +1224,8 @@ export default function SmallTalkScreen({
         visible={isKeepyUppyGameVisible}
         character={petCharacter}
         transparentUrl={petCharacter?.image_url}
+        canEarnReward={canEarnReward}
+        remainingRewards={remainingRewards}
         onClose={() => setIsKeepyUppyGameVisible(false)}
         onGameComplete={(result) => handleCompletePetmongGame('핑퐁 리프팅 랠리', result)}
       />
@@ -1148,8 +1235,10 @@ export default function SmallTalkScreen({
         visible={isBubbleGameVisible}
         character={petCharacter}
         transparentUrl={petCharacter?.image_url}
+        canEarnReward={canEarnReward}
+        remainingRewards={remainingRewards}
         onClose={() => setIsBubbleGameVisible(false)}
-        onGameComplete={(result) => handleCompletePetmongGame('뽀득뽀득 버블 팝', result)}
+        onGameComplete={(result) => handleCompletePetmongGame('비누방울 머지', result)}
       />
 
       {/* 4. 꿈나라 별자리 잇기 */}
@@ -1157,6 +1246,8 @@ export default function SmallTalkScreen({
         visible={isDreamGameVisible}
         character={petCharacter}
         transparentUrl={petCharacter?.image_url}
+        canEarnReward={canEarnReward}
+        remainingRewards={remainingRewards}
         onClose={() => setIsDreamGameVisible(false)}
         onGameComplete={(result) => handleCompletePetmongGame('꿈나라 별자리 잇기', result)}
       />
