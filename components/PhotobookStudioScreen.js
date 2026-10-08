@@ -279,6 +279,7 @@ export default function PhotobookStudioScreen({
   const handleOpenFullViewer = (pNum = currentPageNum) => {
     const target = Math.max(0, Math.min(TOTAL_PHOTOBOOK_PAGES, pNum));
     setViewerPageNum(target);
+    setCurrentPageNum(target);
     setFullViewerVisible(true);
     setTimeout(() => {
       const winW = windowWidth || Dimensions.get('window').width;
@@ -289,6 +290,7 @@ export default function PhotobookStudioScreen({
   const handleGoToViewerPage = (pNum) => {
     const target = Math.max(0, Math.min(TOTAL_PHOTOBOOK_PAGES, pNum));
     setViewerPageNum(target);
+    setCurrentPageNum(target);
     const winW = windowWidth || Dimensions.get('window').width;
     viewerScrollRef.current?.scrollTo({ x: target * winW, animated: true });
   };
@@ -897,6 +899,26 @@ ${topicSnippets.join('\n')}
     }
   };
 
+  // 9-2. 사진첩에서 가져온 사진 목록에서 삭제하기
+  const handleDeleteCustomPhoto = (targetUri) => {
+    Alert.alert(
+      '사진 삭제',
+      '사진첩 등록 목록에서 이 사진을 삭제하시겠습니까?\n(이미 포토북 페이지에 수록된 사진은 유지됩니다)',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '삭제',
+          style: 'destructive',
+          onPress: () => {
+            const nextList = customGalleryPhotos.filter(u => u !== targetUri);
+            setCustomGalleryPhotos(nextList);
+            broadcastPhotobookChange({ customGalleryPhotos: nextList });
+          },
+        },
+      ]
+    );
+  };
+
   // 10. 주문 완료 처리 (비즈니스 POD & 하이브리드 결제 연동)
   const handleExecuteOrder = async () => {
     if (!orderName.trim() || !orderPhone.trim() || !orderAddress.trim()) {
@@ -948,25 +970,33 @@ ${topicSnippets.join('\n')}
                 <Text style={[styles.coverKickerBadge, { color: currentTheme.accent, ...fontStyle }]}>
                   FAMLINK FAMILY STORYBOOK · 150×210MM A5
                 </Text>
-                <Text
-                  style={[styles.coverMainTitle, { color: currentTheme.text, ...fontStyle, fontSize: Math.round((isViewer ? 20 : isFull ? 17 : 14) * fontScale) }]}
-                  numberOfLines={2}
+                <TouchableOpacity
+                  onPress={() => {
+                    setTempTitle(bookTitle);
+                    setTempSubtitle(bookSubtitle);
+                    setEditTitleModalVisible(true);
+                  }}
+                  activeOpacity={0.75}
                 >
-                  {bookTitle}
-                </Text>
-                <Text
-                  style={[styles.coverSubTitle, { color: currentTheme.accent, ...fontStyle, fontSize: Math.round((isViewer ? 12 : isFull ? 11 : 9.5) * fontScale) }]}
-                  numberOfLines={1}
-                >
-                  {bookSubtitle}
-                </Text>
+                  <Text
+                    style={[styles.coverMainTitle, { color: currentTheme.text, ...fontStyle, fontSize: Math.round((isViewer ? 20 : isFull ? 17 : 14) * fontScale) }]}
+                    numberOfLines={2}
+                  >
+                    {bookTitle}
+                  </Text>
+                  <Text
+                    style={[styles.coverSubTitle, { color: currentTheme.accent, ...fontStyle, fontSize: Math.round((isViewer ? 12 : isFull ? 11 : 9.5) * fontScale) }]}
+                    numberOfLines={1}
+                  >
+                    {bookSubtitle}
+                  </Text>
+                </TouchableOpacity>
 
                 {/* 중앙 정방형 대표 사진 액자 */}
                 <TouchableOpacity
                   style={[styles.coverPhotoFrameBox, (isViewer || isFull) && { width: isViewer ? 170 : 140, height: isViewer ? 190 : 160 }]}
-                  onPress={() => !isViewer && handleOpenPhotoPicker('cover')}
-                  activeOpacity={isViewer ? 1 : 0.85}
-                  disabled={isViewer}
+                  onPress={() => handleOpenPhotoPicker('cover')}
+                  activeOpacity={0.85}
                 >
                   {effectiveCoverPhoto ? (
                     <Image source={{ uri: effectiveCoverPhoto }} style={styles.coverPhotoImg} resizeMode="cover" />
@@ -976,11 +1006,9 @@ ${topicSnippets.join('\n')}
                       <Text style={[styles.coverPhotoEmptyText, { color: currentTheme.accent }]}>표지 사진</Text>
                     </View>
                   )}
-                  {!isViewer && (
-                    <View style={styles.coverPhotoBadge}>
-                      <Text style={styles.coverPhotoBadgeText}>대표 사진 📸</Text>
-                    </View>
-                  )}
+                  <View style={styles.coverPhotoBadge}>
+                    <Text style={styles.coverPhotoBadgeText}>대표 사진 📸</Text>
+                  </View>
                 </TouchableOpacity>
 
                 <Text style={[styles.coverFamilySignature, { color: currentTheme.text, ...fontStyle }]}>
@@ -994,9 +1022,8 @@ ${topicSnippets.join('\n')}
           {coverStyle === 'full' && (
             <TouchableOpacity
               style={styles.coverFullPhotoContainer}
-              onPress={() => !isViewer && handleOpenPhotoPicker('cover')}
-              activeOpacity={isViewer ? 1 : 0.9}
-              disabled={isViewer}
+              onPress={() => handleOpenPhotoPicker('cover')}
+              activeOpacity={0.88}
             >
               {effectiveCoverPhoto ? (
                 <Image source={{ uri: effectiveCoverPhoto }} style={styles.coverPhotoImg} resizeMode="cover" />
@@ -1007,14 +1034,22 @@ ${topicSnippets.join('\n')}
                 </View>
               )}
               {/* 풀사진 위 반투명 감성 타이틀 바 */}
-              <View style={styles.coverFullPhotoOverlay}>
+              <TouchableOpacity
+                style={styles.coverFullPhotoOverlay}
+                onPress={() => {
+                  setTempTitle(bookTitle);
+                  setTempSubtitle(bookSubtitle);
+                  setEditTitleModalVisible(true);
+                }}
+                activeOpacity={0.8}
+              >
                 <Text style={[styles.coverFullTitle, { ...fontStyle, fontSize: Math.round((isViewer ? 20 : isFull ? 17 : 14) * fontScale) }]} numberOfLines={2}>
                   {bookTitle}
                 </Text>
                 <Text style={[styles.coverFullSub, { ...fontStyle, fontSize: Math.round((isViewer ? 12 : 10.5) * fontScale) }]} numberOfLines={1}>
                   {bookSubtitle}
                 </Text>
-              </View>
+              </TouchableOpacity>
               {!isViewer && (
                 <View style={styles.coverPhotoBadge}>
                   <Text style={styles.coverPhotoBadgeText}>풀블리드 화보형 📸</Text>
@@ -1027,19 +1062,29 @@ ${topicSnippets.join('\n')}
             <View style={styles.coverMinimalContainer}>
               <View style={styles.coverMinimalCenter}>
                 <Heart size={28} color={currentTheme.accent} style={{ marginBottom: 12 }} />
-                <Text
-                  style={[styles.coverMinimalTitle, { color: currentTheme.text, ...fontStyle, fontSize: Math.round((isViewer ? 22 : isFull ? 19 : 15) * fontScale) }]}
-                  numberOfLines={2}
+                <TouchableOpacity
+                  onPress={() => {
+                    setTempTitle(bookTitle);
+                    setTempSubtitle(bookSubtitle);
+                    setEditTitleModalVisible(true);
+                  }}
+                  activeOpacity={0.75}
+                  style={{ alignItems: 'center' }}
                 >
-                  {bookTitle}
-                </Text>
-                <View style={[styles.coverMinimalHairline, { backgroundColor: currentTheme.accent }]} />
-                <Text
-                  style={[styles.coverMinimalSub, { color: currentTheme.accent, ...fontStyle, fontSize: Math.round((isViewer ? 13 : isFull ? 11.5 : 10) * fontScale) }]}
-                  numberOfLines={2}
-                >
-                  {bookSubtitle}
-                </Text>
+                  <Text
+                    style={[styles.coverMinimalTitle, { color: currentTheme.text, ...fontStyle, fontSize: Math.round((isViewer ? 22 : isFull ? 19 : 15) * fontScale) }]}
+                    numberOfLines={2}
+                  >
+                    {bookTitle}
+                  </Text>
+                  <View style={[styles.coverMinimalHairline, { backgroundColor: currentTheme.accent }]} />
+                  <Text
+                    style={[styles.coverMinimalSub, { color: currentTheme.accent, ...fontStyle, fontSize: Math.round((isViewer ? 13 : isFull ? 11.5 : 10) * fontScale) }]}
+                    numberOfLines={2}
+                  >
+                    {bookSubtitle}
+                  </Text>
+                </TouchableOpacity>
               </View>
               <Text style={[styles.coverFamilySignature, { color: currentTheme.text, ...fontStyle }]}>
                 {currentUserProfile?.name || '가족'}의 이야기 · FamLink Press
@@ -1094,7 +1139,6 @@ ${topicSnippets.join('\n')}
             </Text>
           </View>
 
-          {!isViewer && (
             <View style={{ flexDirection: 'row', gap: 6, marginTop: 8 }}>
               <TouchableOpacity
                 style={styles.editTitleMiniBtn}
@@ -1118,7 +1162,6 @@ ${topicSnippets.join('\n')}
                 <Text style={[styles.editTitleMiniBtnText, { color: '#FF6B47', fontWeight: '800' }]}>AI 프롤로그 집필</Text>
               </TouchableOpacity>
             </View>
-          )}
           <Text style={styles.pageNumberFootnote}>- {pageNum} -</Text>
         </View>
       );
@@ -1223,16 +1266,14 @@ ${topicSnippets.join('\n')}
             {epilogueEssay}
           </Text>
 
-          {!isViewer && (
-            <TouchableOpacity
-              style={[styles.editTitleMiniBtn, { backgroundColor: '#FFF5F2', borderColor: '#FFD5CC', alignSelf: 'flex-start', marginVertical: 6 }]}
-              onPress={() => handleOpenAiEssayModal('epilogue')}
-              activeOpacity={0.7}
-            >
-              <Sparkles size={11} color="#FF6B47" style={{ marginRight: 4 }} />
-              <Text style={[styles.editTitleMiniBtnText, { color: '#FF6B47', fontWeight: '800' }]}>AI 에필로그 집필</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={[styles.editTitleMiniBtn, { backgroundColor: '#FFF5F2', borderColor: '#FFD5CC', alignSelf: 'flex-start', marginVertical: 6 }]}
+            onPress={() => handleOpenAiEssayModal('epilogue')}
+            activeOpacity={0.7}
+          >
+            <Sparkles size={11} color="#FF6B47" style={{ marginRight: 4 }} />
+            <Text style={[styles.editTitleMiniBtnText, { color: '#FF6B47', fontWeight: '800' }]}>AI 에필로그 집필</Text>
+          </TouchableOpacity>
 
           <View style={styles.colophonBox}>
             <Text style={styles.colophonText}>기록 기간: 180일간의 발자취</Text>
@@ -1252,9 +1293,11 @@ ${topicSnippets.join('\n')}
             <View style={styles.multiSlotContainer}>
               <TouchableOpacity
                 style={styles.halfSlotTop}
-                onPress={() => !isViewer && handleOpenPhotoPicker(photoSlotIndex)}
-                activeOpacity={isViewer ? 1 : 0.85}
-                disabled={isViewer}
+                onPress={() => {
+                  setCurrentPageNum(pageNum);
+                  handleOpenPhotoPicker(photoSlotIndex);
+                }}
+                activeOpacity={0.85}
               >
                 {sPhotos[photoSlotIndex] ? (
                   <Image source={{ uri: sPhotos[photoSlotIndex] }} style={styles.slotImageFull} resizeMode="cover" />
@@ -1264,9 +1307,11 @@ ${topicSnippets.join('\n')}
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.halfSlotBottom}
-                onPress={() => !isViewer && handleOpenPhotoPicker(photoSlotIndex + 1)}
-                activeOpacity={isViewer ? 1 : 0.85}
-                disabled={isViewer}
+                onPress={() => {
+                  setCurrentPageNum(pageNum);
+                  handleOpenPhotoPicker(photoSlotIndex + 1);
+                }}
+                activeOpacity={0.85}
               >
                 {sPhotos[photoSlotIndex + 1] ? (
                   <Image source={{ uri: sPhotos[photoSlotIndex + 1] }} style={styles.slotImageFull} resizeMode="cover" />
@@ -1278,23 +1323,23 @@ ${topicSnippets.join('\n')}
           ) : (
             <TouchableOpacity
               style={styles.photoCanvasSlot}
-              onPress={() => !isViewer && handleOpenPhotoPicker(photoSlotIndex)}
-              activeOpacity={isViewer ? 1 : 0.85}
-              disabled={isViewer}
+              onPress={() => {
+                setCurrentPageNum(pageNum);
+                handleOpenPhotoPicker(photoSlotIndex);
+              }}
+              activeOpacity={0.85}
             >
               {sPhotos[photoSlotIndex] ? (
                 <Image source={{ uri: sPhotos[photoSlotIndex] }} style={styles.slotImageFull} resizeMode="cover" />
               ) : (
                 <View style={styles.emptySlotPlaceholder}>
                   <Camera size={26} color="#A8A29E" />
-                  <Text style={[styles.emptySlotText, isSmallScreen && { fontSize: 10 }]}>{isViewer ? '사진' : '터치하여 사진 교체'}</Text>
+                  <Text style={[styles.emptySlotText, isSmallScreen && { fontSize: 10 }]}>터치하여 사진 교체</Text>
                 </View>
               )}
-              {!isViewer && (
-                <View style={styles.slotEditBadge}>
-                  <Text style={styles.slotEditBadgeText}>P.{pageNum} 📸</Text>
-                </View>
-              )}
+              <View style={styles.slotEditBadge}>
+                <Text style={styles.slotEditBadgeText}>P.{pageNum} 📸</Text>
+              </View>
             </TouchableOpacity>
           )}
 
@@ -1339,13 +1384,11 @@ ${topicSnippets.join('\n')}
                   },
                 ]}
                 onPress={() => {
-                  if (!isViewer) {
-                    setSelectedTopicSlot(qIdx);
-                    setTopicPickerModalVisible(true);
-                  }
+                  setCurrentPageNum(pageNum);
+                  setSelectedTopicSlot(qIdx);
+                  setTopicPickerModalVisible(true);
                 }}
-                activeOpacity={isViewer ? 1 : 0.78}
-                disabled={isViewer}
+                activeOpacity={0.78}
               >
                 {/* 질문 타이포그래피 (도서 인터뷰 표기 + 인-플레이스 교체 뱃지) */}
                 <View style={styles.bookQuestionRow}>
@@ -1368,12 +1411,10 @@ ${topicSnippets.join('\n')}
                       "{item.topic}"
                     </Text>
                   </View>
-                  {!isViewer && (
-                    <View style={styles.bookQnaEditBadge}>
-                      <RotateCcw size={8} color="#FF6B47" style={{ marginRight: 2 }} />
-                      <Text style={styles.bookQnaEditBadgeText}>교체</Text>
-                    </View>
-                  )}
+                  <View style={styles.bookQnaEditBadge}>
+                    <RotateCcw size={8} color="#FF6B47" style={{ marginRight: 2 }} />
+                    <Text style={styles.bookQnaEditBadgeText}>교체</Text>
+                  </View>
                 </View>
 
                 {/* 가족 답변 단락 (단행본 인쇄 스타일 화자 라벨 + 본문) */}
@@ -1427,47 +1468,43 @@ ${topicSnippets.join('\n')}
         {/* 상단 사진 영역 */}
         <TouchableOpacity
           style={styles.hybridPhotoSlot}
-          onPress={() => !isViewer && handleOpenPhotoPicker(photoSlotIndex)}
-          activeOpacity={isViewer ? 1 : 0.85}
-          disabled={isViewer}
+          onPress={() => {
+            setCurrentPageNum(pageNum);
+            handleOpenPhotoPicker(photoSlotIndex);
+          }}
+          activeOpacity={0.85}
         >
           {sPhotos[photoSlotIndex] ? (
             <Image source={{ uri: sPhotos[photoSlotIndex] }} style={styles.slotImageFull} resizeMode="cover" />
           ) : (
             <View style={styles.emptySlotPlaceholder}>
               <Camera size={22} color="#A8A29E" />
-              <Text style={[styles.emptySlotText, { fontSize: 9.5 }]}>{isViewer ? '사진' : '사진 터치'}</Text>
+              <Text style={[styles.emptySlotText, { fontSize: 9.5 }]}>사진 터치</Text>
             </View>
           )}
-          {!isViewer && (
-            <View style={styles.slotEditBadge}>
-              <Text style={styles.slotEditBadgeText}>P.{pageNum} 📸</Text>
-            </View>
-          )}
+          <View style={styles.slotEditBadge}>
+            <Text style={styles.slotEditBadgeText}>P.{pageNum} 📸</Text>
+          </View>
         </TouchableOpacity>
 
         {/* 하단 스몰톡 영역 (도서 본문 스타일 - 터치 시 질문 교체) */}
         <TouchableOpacity
           style={styles.hybridTalkBox}
           onPress={() => {
-            if (!isViewer) {
-              setSelectedTopicSlot(0);
-              setTopicPickerModalVisible(true);
-            }
+            setCurrentPageNum(pageNum);
+            setSelectedTopicSlot(0);
+            setTopicPickerModalVisible(true);
           }}
-          activeOpacity={isViewer ? 1 : 0.8}
-          disabled={isViewer}
+          activeOpacity={0.8}
         >
           <View style={styles.hybridTalkHeader}>
             <Text style={[styles.hybridTopicText, { ...fontStyle, fontSize: Math.round((isViewer ? 12 : 10.5) * fontScale), color: currentTheme.text, flex: 1, marginRight: 4 }]} numberOfLines={1}>
               ❝ {coreTopic.topic} ❞
             </Text>
-            {!isViewer && (
-              <View style={styles.bookQnaEditBadge}>
-                <RotateCcw size={7.5} color="#FF6B47" style={{ marginRight: 2 }} />
-                <Text style={styles.bookQnaEditBadgeText}>교체</Text>
-              </View>
-            )}
+            <View style={styles.bookQnaEditBadge}>
+              <RotateCcw size={7.5} color="#FF6B47" style={{ marginRight: 2 }} />
+              <Text style={styles.bookQnaEditBadgeText}>교체</Text>
+            </View>
           </View>
           <View style={styles.hybridAnswersList}>
             {activeFamilyList.length === 0 ? (
@@ -1504,6 +1541,800 @@ ${topicSnippets.join('\n')}
       </View>
     );
   };
+
+  // =========================================================
+  // 🪟 재사용 모달 콘텐츠 렌더러 (일반 편집 & 전체화면 뷰어 공용)
+  // =========================================================
+  const renderPhotoPickerContent = () => (
+    <View style={styles.modalBackdrop}>
+      <View style={styles.pickerSheetCard}>
+        <View style={styles.sheetHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.sheetTitle}>포토북 수록 사진 선택</Text>
+            <Text style={styles.sheetSub}>내 폰 사진첩이나 채팅방 공유 사진 중 선택하세요.</Text>
+          </View>
+          <TouchableOpacity onPress={() => setPhotoPickerVisible(false)} style={styles.closeBtn}>
+            <X size={20} color="#1C1917" />
+          </TouchableOpacity>
+        </View>
+
+        {/* 📱 1. 내 사진첩에서 직접 불러오기 버튼 (Primary CTA) */}
+        <TouchableOpacity
+          style={styles.pickFromGalleryCtaBtn}
+          onPress={handlePickFromDeviceGallery}
+          activeOpacity={0.85}
+        >
+          <Camera size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+          <Text style={styles.pickFromGalleryCtaBtnText}>
+            내 사진첩(갤러리)에서 사진 가져오기 📱
+          </Text>
+        </TouchableOpacity>
+
+        <ScrollView contentContainerStyle={styles.photoGridScroll} showsVerticalScrollIndicator={false}>
+          {/* A. 내 사진첩에서 최근 불러온 사진 목록 */}
+          {customGalleryPhotos.length > 0 && (
+            <View style={{ width: '100%', marginBottom: 18 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <Text style={styles.photoTraySectionTitle}>
+                  📱 사진첩에서 가져온 사진 ({customGalleryPhotos.length}장)
+                </Text>
+                <Text style={{ fontSize: 11, color: '#A8A29E', fontWeight: '600' }}>
+                  ✕ 버튼으로 삭제 가능
+                </Text>
+              </View>
+              <View style={styles.photoTrayGridRow}>
+                {customGalleryPhotos.map((uri, idx) => (
+                  <View key={`custom-${idx}`} style={styles.gridThumbBox}>
+                    <TouchableOpacity
+                      style={{ width: '100%', height: '100%' }}
+                      onPress={() => handleSelectPhoto(uri)}
+                      activeOpacity={0.8}
+                    >
+                      <Image source={{ uri }} style={styles.gridThumbImage} resizeMode="cover" />
+                    </TouchableOpacity>
+
+                    {/* 우측 상단 삭제 (✕) 배지 버튼 */}
+                    <TouchableOpacity
+                      style={styles.deletePhotoBadgeBtn}
+                      onPress={() => handleDeleteCustomPhoto(uri)}
+                      activeOpacity={0.7}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <X size={11} color="#FFFFFF" strokeWidth={2.8} />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* B. 채팅방에서 공유된 사진 목록 */}
+          <View style={{ width: '100%' }}>
+            <Text style={styles.photoTraySectionTitle}>
+              💬 가족 채팅방 공유 사진 ({chatPhotos.length}장)
+            </Text>
+            {chatPhotos.length === 0 ? (
+              <View style={styles.emptyNotice}>
+                <Camera size={32} color="#A8A29E" style={{ marginBottom: 6 }} />
+                <Text style={styles.emptyNoticeText}>채팅방에 공유된 사진이 없습니다.</Text>
+                <Text style={styles.emptyNoticeSubText}>
+                  위의 [내 사진첩에서 사진 가져오기] 버튼을 눌러 기기 내 사진을 넣어보세요!
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.photoTrayGridRow}>
+                {chatPhotos.map(item => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={styles.gridThumbBox}
+                    onPress={() => handleSelectPhoto(item.uri)}
+                    activeOpacity={0.8}
+                  >
+                    <Image source={{ uri: item.uri }} style={styles.gridThumbImage} resizeMode="cover" />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+        </ScrollView>
+      </View>
+    </View>
+  );
+
+  const renderVolumePickerContent = () => (
+    <View style={styles.modalBackdrop}>
+      <View style={styles.volumeSheetCard}>
+        <View style={styles.sheetHeader}>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+              <Bookmark size={15} color="#FF6B47" strokeWidth={2.5} style={{ marginRight: 6 }} />
+              <Text style={styles.sheetTitle}>가족 기록 도서(권차) 선택</Text>
+            </View>
+            <Text style={styles.sheetSub}>6개월 활동 단위로 완간되는 우리 가족 이야기책을 선택하세요.</Text>
+          </View>
+          <TouchableOpacity onPress={() => setVolumePickerModalVisible(false)} style={styles.closeBtn}>
+            <X size={20} color="#1C1917" />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView contentContainerStyle={styles.volumeListScroll} showsVerticalScrollIndicator={false}>
+          {VOLUME_OPTIONS.map((v, idx) => {
+            const isSelected = selectedVolume === v.id;
+            return (
+              <TouchableOpacity
+                key={v.id}
+                style={[styles.volumeOptionCard, isSelected && styles.volumeOptionCardActive]}
+                onPress={() => {
+                  setSelectedVolume(v.id);
+                  setBookTitle(`우리 가족의 ${v.label === '제1권' ? '첫 번째' : v.label === '제2권' ? '두 번째' : '세 번째'} 이야기 (${v.title})`);
+                  setVolumePickerModalVisible(false);
+                }}
+                activeOpacity={0.85}
+              >
+                <View style={[styles.volumeBadgeCircle, isSelected && styles.volumeBadgeCircleActive]}>
+                  <Text style={[styles.volumeBadgeCircleText, isSelected && styles.volumeBadgeCircleTextActive]}>
+                    {v.title}
+                  </Text>
+                </View>
+
+                <View style={{ flex: 1, marginHorizontal: 12 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                    <Text style={[styles.volumeOptionTitle, isSelected && styles.volumeOptionTitleActive]}>
+                      {v.label} · {v.period}
+                    </Text>
+                    {idx === 0 && (
+                      <View style={styles.activeVolTag}>
+                        <Text style={styles.activeVolTagText}>완간 수록</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.volumeOptionDesc}>{v.desc}</Text>
+                </View>
+
+                <View style={[styles.volumeRadioCircle, isSelected && styles.volumeRadioCircleActive]}>
+                  {isSelected && <Check size={13} color="#FFFFFF" strokeWidth={3} />}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+    </View>
+  );
+
+  const renderOrderModalContent = () => (
+    <View style={styles.modalBackdrop}>
+      <View style={styles.orderSheetCard}>
+        <View style={styles.sheetHeader}>
+          <View>
+            <Text style={styles.sheetTitle}>양장 하드커버 실물 인쇄 발주</Text>
+            <Text style={styles.sheetSub}>6개월간의 소중한 기록을 영구 소장 도서로 제작합니다.</Text>
+          </View>
+          <TouchableOpacity onPress={() => setOrderModalVisible(false)} style={styles.closeBtn}>
+            <X size={20} color="#1C1917" />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView contentContainerStyle={styles.orderFormScroll} showsVerticalScrollIndicator={false}>
+          {/* 도서 명세 요약 */}
+          <View style={styles.orderSummaryCard}>
+            <Text style={styles.orderBookTitle}>{bookTitle}</Text>
+            <Text style={styles.orderBookSub}>
+              150×210mm A5 세로형 · 16페이지 · 무광 하드커버 양장제본 · 세네카 책등 4mm 인쇄
+            </Text>
+            <View style={styles.priceDivider} />
+            <View style={styles.priceRow}>
+              <Text style={styles.priceLabel}>기본 1권 인쇄비:</Text>
+              <Text style={styles.priceVal}>24,000원</Text>
+            </View>
+          </View>
+
+          {/* 🌟 하이브리드 토크노믹스: 가족 활동 포인트 차감 할인 카드 */}
+          <View style={styles.pointsDiscountCard}>
+            <View style={styles.pointsHeaderRow}>
+              <View style={styles.pointsTitleGroup}>
+                <Award size={16} color="#059669" style={{ marginRight: 6 }} />
+                <Text style={styles.pointsTitleText}>가족 활동 포인트 할인</Text>
+              </View>
+              <View style={styles.holdingPointsBadge}>
+                <Text style={styles.holdingPointsBadgeText}>
+                  보유 {(points || 0).toLocaleString()} P
+                </Text>
+              </View>
+            </View>
+
+            {availablePointsToUse > 0 ? (
+              <TouchableOpacity
+                style={[styles.pointsApplyBtn, usePointsDiscount && styles.pointsApplyBtnActive]}
+                onPress={() => setUsePointsDiscount(!usePointsDiscount)}
+                activeOpacity={0.85}
+              >
+                <View style={[styles.pointsCheckSquare, usePointsDiscount && styles.pointsCheckSquareActive]}>
+                  {usePointsDiscount && <Check size={12} color="#FFFFFF" strokeWidth={3} />}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.pointsApplyTitle}>
+                    포인트로 -{availablePointsToUse.toLocaleString()}원 즉시 할인
+                  </Text>
+                  <Text style={styles.pointsApplySub}>
+                    지난 6개월간 매일 대화하며 모은 온기 포인트로 인쇄비를 지원해 드려요! (최대 12,000P)
+                  </Text>
+                </View>
+                <Text style={[styles.pointsDiscountAmt, usePointsDiscount && styles.pointsDiscountAmtActive]}>
+                  -{availablePointsToUse.toLocaleString()}원
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.noPointsNotice}>
+                <Text style={styles.noPointsNoticeText}>
+                  💡 매일 스몰톡과 집안일 미션으로 포인트를 모으면 다음 권 인쇄비를 최대 12,000원 할인받을 수 있어요!
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* 추가 옵션: 조부모님 선물용 1권 추가 할인 (비즈니스 핵심 업셀링) */}
+          <TouchableOpacity
+            style={[styles.addCopyBox, orderAddCopy && styles.addCopyBoxActive]}
+            onPress={() => setOrderAddCopy(!orderAddCopy)}
+            activeOpacity={0.85}
+          >
+            <View style={styles.addCopyCheckbox}>
+              {orderAddCopy && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={styles.addCopyTitle}>부모님/조부모님 선물용 +1권 추가</Text>
+                <View style={styles.discountBadge}>
+                  <Text style={styles.discountBadgeText}>42% 파격 특가</Text>
+                </View>
+              </View>
+              <Text style={styles.addCopySub}>할인가 +14,000원에 한 권 더 제작해 선물하세요!</Text>
+            </View>
+            <Text style={styles.addCopyPriceText}>+14,000원</Text>
+          </TouchableOpacity>
+
+          {/* 총 결제 예정 금액 (하이브리드 명세) */}
+          <View style={styles.totalPriceBanner}>
+            <View>
+              <Text style={styles.totalPriceLabel}>최종 실결제 금액 (배송비 무료):</Text>
+              {appliedPoints > 0 && (
+                <Text style={styles.totalPriceSubNotice}>
+                  (가족 포인트 {appliedPoints.toLocaleString()}P 할인 적용됨 ✨)
+                </Text>
+              )}
+            </View>
+            <Text style={styles.totalPriceNumber}>
+              {finalCashPrice.toLocaleString()}원
+            </Text>
+          </View>
+
+          {/* 배송지 입력 필드 */}
+          <Text style={styles.formInputLabel}>받는 분 성함</Text>
+          <TextInput
+            style={styles.formInput}
+            value={orderName}
+            onChangeText={setOrderName}
+            placeholder="성함을 입력하세요"
+          />
+
+          <Text style={styles.formInputLabel}>연락처</Text>
+          <TextInput
+            style={styles.formInput}
+            value={orderPhone}
+            onChangeText={setOrderPhone}
+            placeholder="연락처를 입력하세요"
+            keyboardType="phone-pad"
+          />
+
+          <Text style={styles.formInputLabel}>배송지 주소</Text>
+          <TextInput
+            style={styles.formInput}
+            value={orderAddress}
+            onChangeText={setOrderAddress}
+            placeholder="상세 주소를 입력하세요"
+          />
+
+          <TouchableOpacity
+            style={styles.submitOrderBtn}
+            onPress={handleExecuteOrder}
+            disabled={isSubmittingOrder}
+            activeOpacity={0.85}
+          >
+            <ShoppingBag size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+            <Text style={styles.submitOrderBtnText}>
+              {isSubmittingOrder
+                ? '주문 생성 중...'
+                : `${finalCashPrice.toLocaleString()}원 결제하고 총 ${orderAddCopy ? '2권' : '1권'} 제작 주문하기`}
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    </View>
+  );
+
+  const renderEditTitleModalContent = () => (
+    <View style={[styles.modalBackdrop, { justifyContent: 'center' }]}>
+      <View style={styles.editTitleModalCard}>
+        <Text style={styles.editTitleHeading}>도서 제목 & 부제 편집</Text>
+        <Text style={styles.formInputLabel}>메인 제목</Text>
+        <TextInput
+          style={styles.formInput}
+          value={tempTitle}
+          onChangeText={setTempTitle}
+        />
+        <Text style={styles.formInputLabel}>부제 (한 줄 설명)</Text>
+        <TextInput
+          style={styles.formInput}
+          value={tempSubtitle}
+          onChangeText={setTempSubtitle}
+        />
+        <View style={styles.modalBtnRow}>
+          <TouchableOpacity
+            style={styles.modalCancelBtn}
+            onPress={() => setEditTitleModalVisible(false)}
+          >
+            <Text style={styles.modalCancelBtnText}>취소</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.modalSaveBtn}
+            onPress={() => {
+              if (!tempTitle.trim()) {
+                Alert.alert('알림', '제목을 입력해주세요.');
+                return;
+              }
+              const newT = tempTitle.trim();
+              const newSub = tempSubtitle.trim();
+              setBookTitle(newT);
+              setBookSubtitle(newSub);
+              broadcastPhotobookChange({ bookTitle: newT, bookSubtitle: newSub });
+              setEditTitleModalVisible(false);
+            }}
+          >
+            <Text style={styles.modalSaveBtnText}>저장</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+
+  const renderAiEssayModalContent = () => (
+    <View style={styles.modalBackdrop}>
+      <View style={[styles.pickerSheetCard, { maxHeight: '88%' }]}>
+        {/* Header */}
+        <View style={styles.sheetHeader}>
+          <View style={{ flex: 1, marginRight: 10 }}>
+            <Text style={styles.sheetTitle} numberOfLines={1}>
+              {targetEssayType === 'prologue' ? 'AI 프롤로그 (여는 글) 집필' : 'AI 에필로그 (맺는 글) 집필'}
+            </Text>
+            <Text style={styles.sheetSub}>
+              {targetEssayType === 'prologue'
+                ? '가족들과 나눈 지난 스몰톡 문답을 바탕으로 따뜻한 여는 글을 완성합니다.'
+                : '180일간의 온기 기록을 갈무리하는 감동적인 맺는 글을 완성합니다.'}
+            </Text>
+          </View>
+          <TouchableOpacity onPress={() => setAiEssayModalVisible(false)} style={styles.closeBtn}>
+            <X size={20} color="#1C1917" />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView contentContainerStyle={{ paddingBottom: 30 }} showsVerticalScrollIndicator={false}>
+          {/* AI 자동 생성 CTA 배너 */}
+          <TouchableOpacity
+            style={styles.aiGenerateCtaCard}
+            onPress={() => handleGenerateAiEssay(targetEssayType)}
+            disabled={isGeneratingAiEssay}
+            activeOpacity={0.85}
+          >
+            <View style={styles.aiGenerateIconBox}>
+              {isGeneratingAiEssay ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Wand2 size={20} color="#FFFFFF" />
+              )}
+            </View>
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={styles.aiGenerateCtaTitle}>
+                  {isGeneratingAiEssay ? 'Gemini AI 작가가 집필 중...' : 'Gemini AI 감성 작가 자동 집필'}
+                </Text>
+                <View style={styles.aiModelBadge}>
+                  <Text style={styles.aiModelBadgeText}>AI 2.5</Text>
+                </View>
+              </View>
+              <Text style={styles.aiGenerateCtaDesc}>
+                {smallTalkArchiveList.length > 0
+                  ? `가족 스몰톡 ${smallTalkArchiveList.length}개 답변을 분석해 문학 수필로 승화합니다.`
+                  : '가족들의 따뜻한 일상을 문학적 에세이로 빚어냅니다.'}
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          {/* 에세이 직접 편집 인풋창 */}
+          <Text style={styles.essayInputSectionTitle}>
+            {targetEssayType === 'prologue' ? '📖 프롤로그 본문 문구' : '✍️ 에필로그 본문 문구'}
+          </Text>
+          <View style={styles.essayInputCard}>
+            <TextInput
+              style={styles.essayTextInput}
+              multiline
+              numberOfLines={6}
+              value={customEssayInput}
+              onChangeText={setCustomEssayInput}
+              placeholder="직접 글귀를 작성하거나 위의 AI 집필 버튼을 눌러보세요..."
+              placeholderTextColor="#A8A29E"
+            />
+          </View>
+
+          {/* 추천 프리셋 문구 리스트 */}
+          <Text style={styles.presetSectionTitle}>추천 감성 글귀 프리셋</Text>
+          {(targetEssayType === 'prologue'
+            ? [
+                '서로 다른 하루를 보낸 우리가 한자리에 모여 속마음을 털어놓던 매 순간이 눈부신 기적이었습니다.',
+                '가장 평범했던 우리 가족의 오늘이 훗날 꺼내볼 가장 애틋하고 빛나는 페이지가 됩니다.',
+                '말하지 않아도 전해지던 마음, 식탁 위에 피어난 웃음꽃을 이 책의 첫 페이지에 새깁니다.',
+              ]
+            : [
+                '180번의 질문과 수많은 대화 속에 우리 가족의 사랑은 더욱 단단하고 깊어졌습니다.',
+                '책장을 덮어도 우리 가족의 이야기는 계속됩니다. 언제나 서로의 가장 든든한 품이 되어주길.',
+                '그리울 때마다 펼쳐볼 우리들의 청춘과 사랑의 앨범, 함께여서 참 고맙습니다.',
+              ]
+          ).map((presetText, pIdx) => (
+            <TouchableOpacity
+              key={pIdx}
+              style={styles.captionPresetItem}
+              onPress={() => setCustomEssayInput(presetText)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.captionPresetText, { lineHeight: 19 }]}>"{presetText}"</Text>
+            </TouchableOpacity>
+          ))}
+
+          {/* 하단 적용 버튼 */}
+          <View style={[styles.captionModalBtnRow, { marginTop: 16 }]}>
+            <TouchableOpacity
+              style={[styles.captionApplyBtn, { flex: 1, backgroundColor: '#7C3AED' }]}
+              onPress={() => handleApplyAiEssay(customEssayInput)}
+              activeOpacity={0.85}
+            >
+              <Check size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
+              <Text style={styles.captionApplyBtnText}>
+                {targetEssayType === 'prologue' ? 'P.1 프롤로그에 수록하기' : 'P.16 에필로그에 수록하기'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </View>
+    </View>
+  );
+
+  const renderTopicPickerContent = () => (
+    <View style={styles.modalBackdrop}>
+      <View style={[styles.pickerSheetCard, { maxHeight: '90%' }]}>
+        {/* 상단 헤더: 현재 편집 중인 페이지 번호 명시 */}
+        <View style={styles.sheetHeader}>
+          <View style={{ flex: 1, marginRight: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+              <View style={styles.modalPageTag}>
+                <Text style={styles.modalPageTagText}>P.{currentPageNum} 편집</Text>
+              </View>
+            </View>
+            <Text style={styles.sheetTitle} numberOfLines={1}>스몰톡 인터뷰 문답 교체</Text>
+            <Text style={styles.sheetSub}>
+              {getPageFormat(currentSpreadIndex, activeSingleSide) === 'photo'
+                ? '현재 페이지는 사진 전용 레이아웃입니다.'
+                : getPageFormat(currentSpreadIndex, activeSingleSide) === 'hybrid'
+                ? '사진+스몰톡(포맷3) 페이지의 대표 질문을 원하는 문답으로 교체하세요.'
+                : '현재 페이지에 수록할 질문 슬롯(Q1~Q3)을 고르고 원하는 문답으로 교체하세요.'}
+            </Text>
+          </View>
+          <TouchableOpacity onPress={() => setTopicPickerModalVisible(false)} style={styles.closeBtn}>
+            <X size={20} color="#1C1917" />
+          </TouchableOpacity>
+        </View>
+
+        {/* 사진 전용 페이지인 경우: 레이아웃 변경 유도 안내 박스 */}
+        {getPageFormat(currentSpreadIndex, activeSingleSide) === 'photo' ? (
+          <View style={styles.photoPageFormatGuideBox}>
+            <View style={styles.guideIconRow}>
+              <Camera size={20} color="#FF6B47" />
+              <Text style={styles.guideTitleText}>현재 P.{currentPageNum}은 사진 전용 페이지입니다</Text>
+            </View>
+            <Text style={styles.guideDescText}>
+              스몰톡 문답을 이 페이지에 수록하려면 레이아웃 포맷을 [포맷2: 스몰톡] 또는 [포맷3: 사진+톡]으로 변경해 주세요.
+            </Text>
+            <View style={styles.guideActionRow}>
+              <TouchableOpacity
+                style={[styles.guideActionBtn, { backgroundColor: '#FF6B47' }]}
+                onPress={() => {
+                  handleSetPageFormat('smalltalk', currentPageNum);
+                  Alert.alert('포맷 변경 완료 ✨', `P.${currentPageNum}이 [포맷2: 스몰톡] 레이아웃으로 변경되었습니다.`);
+                }}
+                activeOpacity={0.8}
+              >
+                <FileText size={13} color="#FFFFFF" style={{ marginRight: 4 }} />
+                <Text style={[styles.guideActionBtnText, { color: '#FFFFFF' }]}>포맷2 (스몰톡)으로 변경</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.guideActionBtn, { backgroundColor: '#FFF5F2', borderColor: '#FFD5CC', borderWidth: 1 }]}
+                onPress={() => {
+                  handleSetPageFormat('hybrid', currentPageNum);
+                  Alert.alert('포맷 변경 완료 ✨', `P.${currentPageNum}이 [포맷3: 사진+스몰톡] 레이아웃으로 변경되었습니다.`);
+                }}
+                activeOpacity={0.8}
+              >
+                <Sparkles size={13} color="#FF6B47" style={{ marginRight: 4 }} />
+                <Text style={[styles.guideActionBtnText, { color: '#FF6B47' }]}>포맷3 (사진+톡)으로 변경</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <>
+            {/* A. 교체 대상 슬롯 선택 카드 리스트 */}
+            <View style={{ marginBottom: 12 }}>
+              <Text style={styles.slotTargetLabel}>
+                {getPageFormat(currentSpreadIndex, activeSingleSide) === 'hybrid'
+                  ? '교체 대상 질문 (대표 슬롯):'
+                  : `P.${currentPageNum} 수록 질문 중 교체할 대상 선택:`}
+              </Text>
+              <View style={{ gap: 6, marginTop: 6 }}>
+                {(getPageFormat(currentSpreadIndex, activeSingleSide) === 'hybrid' ? [0] : [0, 1, 2]).map(slotIdx => {
+                  const isSelectedSlot = selectedTopicSlot === slotIdx;
+                  const slotTopicText = currentInterviewTopics[slotIdx]?.topic || `질문 ${slotIdx + 1}`;
+                  return (
+                    <TouchableOpacity
+                      key={slotIdx}
+                      style={[styles.slotItemCard, isSelectedSlot && styles.slotItemCardActive]}
+                      onPress={() => setSelectedTopicSlot(slotIdx)}
+                      activeOpacity={0.8}
+                    >
+                      <View style={[styles.slotBadge, isSelectedSlot && styles.slotBadgeActive]}>
+                        <Text style={[styles.slotBadgeText, isSelectedSlot && styles.slotBadgeTextActive]}>
+                          Q{slotIdx + 1}
+                        </Text>
+                      </View>
+                      <Text
+                        style={[styles.slotItemTopicText, isSelectedSlot && styles.slotItemTopicTextActive]}
+                        numberOfLines={1}
+                      >
+                        "{slotTopicText}"
+                      </Text>
+                      {isSelectedSlot && (
+                        <CheckCircle2 size={15} color="#FF6B47" style={{ marginLeft: 6 }} />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
+            {/* B. 2대 탭 세그먼트: [✨ 추천 질문] / [💬 가족 스몰톡 기록 (N개)] */}
+            <View style={styles.topicModalTabBar}>
+              <TouchableOpacity
+                style={[styles.topicModalTabBtn, topicModalTab === 'recommended' && styles.topicModalTabBtnActive]}
+                onPress={() => setTopicModalTab('recommended')}
+                activeOpacity={0.8}
+              >
+                <Sparkles size={13} color={topicModalTab === 'recommended' ? '#FF6B47' : '#78716C'} style={{ marginRight: 4 }} />
+                <Text style={[styles.topicModalTabBtnText, topicModalTab === 'recommended' && styles.topicModalTabBtnTextActive]}>
+                  추천 질문 풀
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.topicModalTabBtn, topicModalTab === 'archive' && styles.topicModalTabBtnActive]}
+                onPress={() => setTopicModalTab('archive')}
+                activeOpacity={0.8}
+              >
+                <MessageSquare size={13} color={topicModalTab === 'archive' ? '#FF6B47' : '#78716C'} style={{ marginRight: 4 }} />
+                <Text style={[styles.topicModalTabBtnText, topicModalTab === 'archive' && styles.topicModalTabBtnTextActive]}>
+                  가족 실제 문답 기록 ({smallTalkArchiveList.length}개)
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* C. 탭별 콘텐츠 */}
+            <ScrollView contentContainerStyle={{ paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
+              {topicModalTab === 'recommended' ? (
+                <>
+                  <Text style={{ fontSize: 12.5, fontWeight: '800', color: '#1C1917', marginBottom: 8 }}>
+                    💡 테마별 감성 인터뷰 질문 (탭하여 즉시 Q{selectedTopicSlot + 1}에 교체)
+                  </Text>
+                  {[
+                    '가족에게 가장 감동받았던 사소한 배려는 무엇인가요?',
+                    '우리 집에서 가장 편안하고 아늑한 나만의 아지트는?',
+                    '가족들과 함께 해보고 싶은 소소한 취미가 있나요?',
+                    '다시 돌아가고 싶은 우리 가족의 하루가 있다면 언제인가요?',
+                    '가족들에게 꼭 해주고 싶은 따뜻한 요리가 있나요?',
+                    '최근 나를 가장 크게 웃게 했던 가족의 모습은 무엇인가요?',
+                    '우리 가족만의 특별한 약속이나 가훈을 정한다면?',
+                    '힘들고 지칠 때 나를 위로해주는 우리 집만의 안식처는?',
+                    '가족들에게 꼭 추천해주고 싶은 나만의 힐링 음악은?',
+                    '우리 가족과 함께 떠났던 여행 중 가장 기억에 남는 곳은?',
+                  ].map((qText, sIdx) => (
+                    <TouchableOpacity
+                      key={sIdx}
+                      style={styles.topicPickerCandidateCard}
+                      onPress={() => {
+                        const updated = [...currentInterviewTopics];
+                        updated[selectedTopicSlot] = {
+                          ...updated[selectedTopicSlot],
+                          topic: qText,
+                        };
+                        setCustomSpreadTopics(prev => ({ ...prev, [currentSpreadIndex]: updated }));
+                        setTopicPickerModalVisible(false);
+                        Alert.alert('질문 교체 완료 🪄', `P.${currentPageNum} Q${selectedTopicSlot + 1} 질문이 새로운 문답으로 교체되었습니다!`);
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Sparkles size={14} color="#7C3AED" style={{ marginRight: 8 }} />
+                      <Text style={styles.candidateText}>"{qText}"</Text>
+                    </TouchableOpacity>
+                  ))}
+                </>
+              ) : (
+                <>
+                  {/* 검색창 */}
+                  <View style={styles.topicSearchBox}>
+                    <Search size={14} color="#78716C" style={{ marginRight: 6 }} />
+                    <TextInput
+                      style={styles.topicSearchInput}
+                      value={topicSearchQuery}
+                      onChangeText={setTopicSearchQuery}
+                      placeholder="가족과 나눈 질문 검색..."
+                      placeholderTextColor="#A8A29E"
+                    />
+                    {topicSearchQuery ? (
+                      <TouchableOpacity onPress={() => setTopicSearchQuery('')}>
+                        <X size={14} color="#78716C" />
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+
+                  {/* 아카이브 리스트 */}
+                  {smallTalkArchiveList
+                    .filter(item => !topicSearchQuery || (item.topic && item.topic.includes(topicSearchQuery)))
+                    .map((item, aIdx) => {
+                      // 실제 가족 답변들 매핑
+                      const answersMap = {};
+                      if (Array.isArray(item.answers)) {
+                        item.answers.forEach(ans => {
+                          const authorId = ans.user_id || ans.userId || ans.id;
+                          if (authorId) answersMap[authorId] = ans.response_text || ans.responseText || ans.text;
+                        });
+                      }
+
+                      return (
+                        <TouchableOpacity
+                          key={item.id || aIdx}
+                          style={styles.archiveTopicItemCard}
+                          onPress={() => {
+                            const updated = [...currentInterviewTopics];
+                            updated[selectedTopicSlot] = {
+                              id: item.id || `archive-${aIdx}`,
+                              date: item.dateLabel || item.yearMonthLabel || '가족 아카이브',
+                              topic: item.topic,
+                              answers: Object.keys(answersMap).length > 0 ? answersMap : (item.answers || updated[selectedTopicSlot]?.answers || {}),
+                            };
+                            setCustomSpreadTopics(prev => ({ ...prev, [currentSpreadIndex]: updated }));
+                            setTopicPickerModalVisible(false);
+                            Alert.alert('아카이브 질문 반영 완료 ✨', `가족들이 답변한 실제 기록이 P.${currentPageNum} Q${selectedTopicSlot + 1}에 수록되었습니다!`);
+                          }}
+                          activeOpacity={0.8}
+                        >
+                          <View style={styles.archiveTopicItemHeader}>
+                            <Text style={styles.archiveTopicItemDate}>
+                              {item.dateLabel || item.yearMonthLabel || `${aIdx + 1}번째 질문`}
+                            </Text>
+                            {item.isAnswered && (
+                              <View style={styles.archiveAnsweredBadge}>
+                                <Text style={styles.archiveAnsweredBadgeText}>답변 완료 ✨</Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text style={styles.archiveTopicItemTitle}>"{item.topic}"</Text>
+                          {Array.isArray(item.answers) && item.answers.length > 0 && (
+                            <Text style={styles.archiveTopicAnswerCount}>
+                              총 {item.answers.length}명의 가족 답변 수록됨
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+
+                  {smallTalkArchiveList.length === 0 && (
+                    <View style={styles.emptyArchiveBox}>
+                      <Text style={styles.emptyArchiveText}>아직 등록된 가족 스몰톡 기록이 없습니다.</Text>
+                    </View>
+                  )}
+                </>
+              )}
+            </ScrollView>
+          </>
+        )}
+      </View>
+    </View>
+  );
+
+  const renderAppendixModalContent = () => (
+    <View style={styles.modalBackdrop}>
+      <View style={[styles.pickerSheetCard, { maxHeight: '88%' }]}>
+        <View style={styles.sheetHeader}>
+          <View style={{ flex: 1, marginRight: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+              <View style={styles.modalPageTag}>
+                <Text style={styles.modalPageTagText}>P.15 부록</Text>
+              </View>
+            </View>
+            <Text style={styles.sheetTitle} numberOfLines={1}>스몰톡 아카이브 색인 및 디지털 연동</Text>
+            <Text style={styles.sheetSub}>
+              권말 P.15에는 통계 리포트와 대표 문답이 인쇄되며, 전수 문답은 QR코드로 연결됩니다.
+            </Text>
+          </View>
+          <TouchableOpacity onPress={() => setAppendixModalVisible(false)} style={styles.closeBtn}>
+            <X size={20} color="#1C1917" />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView contentContainerStyle={{ paddingBottom: 30 }} showsVerticalScrollIndicator={false}>
+          {/* 현실적 부록 안내 배너 */}
+          <View style={styles.appendixNoticeBox}>
+            <Award size={16} color="#FF6B47" style={{ marginRight: 6 }} />
+            <Text style={styles.appendixNoticeText}>
+              총 {smallTalkArchiveList.length}개 질문 중 {answeredSmallTalkCount}개 완료 · 실물 책 QR코드 스캔 시 전수 열람 가능
+            </Text>
+          </View>
+
+          {/* QR코드 연동 안내 카드 */}
+          <View style={styles.appendixQrGuideCard}>
+            <View style={styles.appendixQrIconCircle}>
+              <QrCode size={24} color="#FF6B47" />
+            </View>
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={styles.appendixQrGuideTitle}>A5 실물 책 맞춤형 하이브리드 부록</Text>
+              <Text style={styles.appendixQrGuideDesc}>
+                180개에 달하는 방대한 질문과 가족들의 장문 답변은 실물 책 P.15의 전용 QR코드를 통해 스마트폰에서 언제든 편리하게 검색하고 열람할 수 있습니다.
+              </Text>
+            </View>
+          </View>
+
+          {/* 아카이브 목록 미리보기 */}
+          <Text style={{ fontSize: 13, fontWeight: '800', color: '#1C1917', marginTop: 14, marginBottom: 8 }}>
+            📋 연동된 가족 문답 목록 ({smallTalkArchiveList.length}개)
+          </Text>
+
+          {smallTalkArchiveList.length === 0 ? (
+            <View style={{ padding: 30, alignItems: 'center' }}>
+              <Text style={{ color: '#78716C', fontSize: 13 }}>아직 등록된 스몰톡 문답이 없습니다.</Text>
+            </View>
+          ) : (
+            <View style={styles.appendixGrid}>
+              {smallTalkArchiveList.map((item, i) => {
+                const isDone = Boolean(item.isAnswered || (item.answers && item.answers.length > 0));
+                return (
+                  <View key={item.id || i} style={styles.appendixRow}>
+                    <Text style={styles.appendixDate}>{item.dateLabel || `Day ${i + 1}`}</Text>
+                    <Text style={styles.appendixQuestion} numberOfLines={1}>
+                      {item.topic}
+                    </Text>
+                    {isDone ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                        <Check size={12} color="#10B981" />
+                        <Text style={{ fontSize: 10, color: '#10B981', fontWeight: '800' }}>완료</Text>
+                      </View>
+                    ) : (
+                      <Text style={{ fontSize: 10, color: '#A8A29E' }}>대기</Text>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </ScrollView>
+      </View>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
@@ -2057,7 +2888,7 @@ ${topicSnippets.join('\n')}
       {/* ========================================================= */}
       {/* 3-1. 테마 선택 모달 (Theme Picker Modal)                    */}
       {/* ========================================================= */}
-      <Modal visible={themePickerModalVisible} transparent animationType="fade">
+      <Modal visible={!fullViewerVisible && themePickerModalVisible} transparent animationType="fade" onRequestClose={() => setThemePickerModalVisible(false)}>
         <View style={styles.modalCenterBackdrop}>
           <TouchableOpacity
             style={styles.modalCenterBackdropTouch}
@@ -2102,7 +2933,7 @@ ${topicSnippets.join('\n')}
       {/* ========================================================= */}
       {/* 3-2. 폰트 & 글자 크기 선택 모달 (Font Picker Modal)          */}
       {/* ========================================================= */}
-      <Modal visible={fontPickerModalVisible} transparent animationType="fade">
+      <Modal visible={!fullViewerVisible && fontPickerModalVisible} transparent animationType="fade" onRequestClose={() => setFontPickerModalVisible(false)}>
         <View style={styles.modalCenterBackdrop}>
           <TouchableOpacity
             style={styles.modalCenterBackdropTouch}
@@ -2177,7 +3008,7 @@ ${topicSnippets.join('\n')}
       {/* ========================================================= */}
       {/* 3-3. 16개 스프레드 빠른 점프 4×4 콤팩트 그리드 모달            */}
       {/* ========================================================= */}
-      <Modal visible={pagePickerModalVisible} transparent animationType="fade">
+      <Modal visible={!fullViewerVisible && pagePickerModalVisible} transparent animationType="fade" onRequestClose={() => setPagePickerModalVisible(false)}>
         <View style={styles.modalCenterBackdrop}>
           <TouchableOpacity
             style={styles.modalCenterBackdropTouch}
@@ -2256,803 +3087,68 @@ ${topicSnippets.join('\n')}
 
       {/* ========================================================= */}
       {/* 4. 사진 트레이 선택 모달 (Photo Picker Tray)                */}
-      {/*    본인 폰 사진첩 직접 불러오기 + 채팅방 공유 사진 통합      */}
       {/* ========================================================= */}
-      <Modal visible={photoPickerVisible} transparent animationType="slide">
-        <View style={styles.modalBackdrop}>
-          <View style={styles.pickerSheetCard}>
-            <View style={styles.sheetHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.sheetTitle}>포토북 수록 사진 선택</Text>
-                <Text style={styles.sheetSub}>내 폰 사진첩이나 채팅방 공유 사진 중 선택하세요.</Text>
-              </View>
-              <TouchableOpacity onPress={() => setPhotoPickerVisible(false)} style={styles.closeBtn}>
-                <X size={20} color="#1C1917" />
-              </TouchableOpacity>
-            </View>
-
-            {/* 📱 1. 내 사진첩에서 직접 불러오기 버튼 (Primary CTA) */}
-            <TouchableOpacity
-              style={styles.pickFromGalleryCtaBtn}
-              onPress={handlePickFromDeviceGallery}
-              activeOpacity={0.85}
-            >
-              <Camera size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.pickFromGalleryCtaBtnText}>
-                내 사진첩(갤러리)에서 사진 가져오기 📱
-              </Text>
-            </TouchableOpacity>
-
-            <ScrollView contentContainerStyle={styles.photoGridScroll} showsVerticalScrollIndicator={false}>
-              {/* A. 내 사진첩에서 최근 불러온 사진 목록 */}
-              {customGalleryPhotos.length > 0 && (
-                <View style={{ width: '100%', marginBottom: 16 }}>
-                  <Text style={styles.photoTraySectionTitle}>
-                    📱 사진첩에서 가져온 사진 ({customGalleryPhotos.length}장)
-                  </Text>
-                  <View style={styles.photoTrayGridRow}>
-                    {customGalleryPhotos.map((uri, idx) => (
-                      <TouchableOpacity
-                        key={`custom-${idx}`}
-                        style={styles.gridThumbBox}
-                        onPress={() => handleSelectPhoto(uri)}
-                        activeOpacity={0.8}
-                      >
-                        <Image source={{ uri }} style={styles.gridThumbImage} resizeMode="cover" />
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-              )}
-
-              {/* B. 채팅방에서 공유된 사진 목록 */}
-              <View style={{ width: '100%' }}>
-                <Text style={styles.photoTraySectionTitle}>
-                  💬 가족 채팅방 공유 사진 ({chatPhotos.length}장)
-                </Text>
-                {chatPhotos.length === 0 ? (
-                  <View style={styles.emptyNotice}>
-                    <Camera size={32} color="#A8A29E" style={{ marginBottom: 6 }} />
-                    <Text style={styles.emptyNoticeText}>채팅방에 공유된 사진이 없습니다.</Text>
-                    <Text style={styles.emptyNoticeSubText}>
-                      위의 [내 사진첩에서 사진 가져오기] 버튼을 눌러 기기 내 사진을 넣어보세요!
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={styles.photoTrayGridRow}>
-                    {chatPhotos.map(item => (
-                      <TouchableOpacity
-                        key={item.id}
-                        style={styles.gridThumbBox}
-                        onPress={() => handleSelectPhoto(item.uri)}
-                        activeOpacity={0.8}
-                      >
-                        <Image source={{ uri: item.uri }} style={styles.gridThumbImage} resizeMode="cover" />
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-              </View>
-            </ScrollView>
-          </View>
-        </View>
+      <Modal visible={!fullViewerVisible && photoPickerVisible} transparent animationType="slide" onRequestClose={() => setPhotoPickerVisible(false)}>
+        {renderPhotoPickerContent()}
       </Modal>
 
       {/* ========================================================= */}
       {/* 5. 가족 기록(권차) 선택 모달 (Volume Picker Modal)            */}
       {/* ========================================================= */}
-      <Modal visible={volumePickerModalVisible} transparent animationType="slide">
-        <View style={styles.modalBackdrop}>
-          <View style={styles.volumeSheetCard}>
-            <View style={styles.sheetHeader}>
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
-                  <Bookmark size={15} color="#FF6B47" strokeWidth={2.5} style={{ marginRight: 6 }} />
-                  <Text style={styles.sheetTitle}>가족 기록 도서(권차) 선택</Text>
-                </View>
-                <Text style={styles.sheetSub}>6개월 활동 단위로 완간되는 우리 가족 이야기책을 선택하세요.</Text>
-              </View>
-              <TouchableOpacity onPress={() => setVolumePickerModalVisible(false)} style={styles.closeBtn}>
-                <X size={20} color="#1C1917" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView contentContainerStyle={styles.volumeListScroll} showsVerticalScrollIndicator={false}>
-              {VOLUME_OPTIONS.map((v, idx) => {
-                const isSelected = selectedVolume === v.id;
-                return (
-                  <TouchableOpacity
-                    key={v.id}
-                    style={[styles.volumeOptionCard, isSelected && styles.volumeOptionCardActive]}
-                    onPress={() => {
-                      setSelectedVolume(v.id);
-                      setBookTitle(`우리 가족의 ${v.label === '제1권' ? '첫 번째' : v.label === '제2권' ? '두 번째' : '세 번째'} 이야기 (${v.title})`);
-                      setVolumePickerModalVisible(false);
-                    }}
-                    activeOpacity={0.85}
-                  >
-                    <View style={[styles.volumeBadgeCircle, isSelected && styles.volumeBadgeCircleActive]}>
-                      <Text style={[styles.volumeBadgeCircleText, isSelected && styles.volumeBadgeCircleTextActive]}>
-                        {v.title}
-                      </Text>
-                    </View>
-
-                    <View style={{ flex: 1, marginHorizontal: 12 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                        <Text style={[styles.volumeOptionTitle, isSelected && styles.volumeOptionTitleActive]}>
-                          {v.label} · {v.period}
-                        </Text>
-                        {idx === 0 && (
-                          <View style={styles.activeVolTag}>
-                            <Text style={styles.activeVolTagText}>완간 수록</Text>
-                          </View>
-                        )}
-                      </View>
-                      <Text style={styles.volumeOptionDesc}>{v.desc}</Text>
-                    </View>
-
-                    <View style={[styles.volumeRadioCircle, isSelected && styles.volumeRadioCircleActive]}>
-                      {isSelected && <Check size={13} color="#FFFFFF" strokeWidth={3} />}
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-        </View>
+      <Modal visible={!fullViewerVisible && volumePickerModalVisible} transparent animationType="slide" onRequestClose={() => setVolumePickerModalVisible(false)}>
+        {renderVolumePickerContent()}
       </Modal>
-
-
 
       {/* ========================================================= */}
       {/* 6. 실물 양장본 인쇄 주문 모달 (POD Commerce Modal)         */}
       {/* ========================================================= */}
-      <Modal visible={orderModalVisible} transparent animationType="slide">
-        <View style={styles.modalBackdrop}>
-          <View style={styles.orderSheetCard}>
-            <View style={styles.sheetHeader}>
-              <View>
-                <Text style={styles.sheetTitle}>양장 하드커버 실물 인쇄 발주</Text>
-                <Text style={styles.sheetSub}>6개월간의 소중한 기록을 영구 소장 도서로 제작합니다.</Text>
-              </View>
-              <TouchableOpacity onPress={() => setOrderModalVisible(false)} style={styles.closeBtn}>
-                <X size={20} color="#1C1917" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView contentContainerStyle={styles.orderFormScroll} showsVerticalScrollIndicator={false}>
-              {/* 도서 명세 요약 */}
-              <View style={styles.orderSummaryCard}>
-                <Text style={styles.orderBookTitle}>{bookTitle}</Text>
-                <Text style={styles.orderBookSub}>
-                  150×210mm A5 세로형 · 16페이지 · 무광 하드커버 양장제본 · 세네카 책등 4mm 인쇄
-                </Text>
-                <View style={styles.priceDivider} />
-                <View style={styles.priceRow}>
-                  <Text style={styles.priceLabel}>기본 1권 인쇄비:</Text>
-                  <Text style={styles.priceVal}>24,000원</Text>
-                </View>
-              </View>
-
-              {/* 🌟 하이브리드 토크노믹스: 가족 활동 포인트 차감 할인 카드 */}
-              <View style={styles.pointsDiscountCard}>
-                <View style={styles.pointsHeaderRow}>
-                  <View style={styles.pointsTitleGroup}>
-                    <Award size={16} color="#059669" style={{ marginRight: 6 }} />
-                    <Text style={styles.pointsTitleText}>가족 활동 포인트 할인</Text>
-                  </View>
-                  <View style={styles.holdingPointsBadge}>
-                    <Text style={styles.holdingPointsBadgeText}>
-                      보유 {(points || 0).toLocaleString()} P
-                    </Text>
-                  </View>
-                </View>
-
-                {availablePointsToUse > 0 ? (
-                  <TouchableOpacity
-                    style={[styles.pointsApplyBtn, usePointsDiscount && styles.pointsApplyBtnActive]}
-                    onPress={() => setUsePointsDiscount(!usePointsDiscount)}
-                    activeOpacity={0.85}
-                  >
-                    <View style={[styles.pointsCheckSquare, usePointsDiscount && styles.pointsCheckSquareActive]}>
-                      {usePointsDiscount && <Check size={12} color="#FFFFFF" strokeWidth={3} />}
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.pointsApplyTitle}>
-                        포인트로 -{availablePointsToUse.toLocaleString()}원 즉시 할인
-                      </Text>
-                      <Text style={styles.pointsApplySub}>
-                        지난 6개월간 매일 대화하며 모은 온기 포인트로 인쇄비를 지원해 드려요! (최대 12,000P)
-                      </Text>
-                    </View>
-                    <Text style={[styles.pointsDiscountAmt, usePointsDiscount && styles.pointsDiscountAmtActive]}>
-                      -{availablePointsToUse.toLocaleString()}원
-                    </Text>
-                  </TouchableOpacity>
-                ) : (
-                  <View style={styles.noPointsNotice}>
-                    <Text style={styles.noPointsNoticeText}>
-                      💡 매일 스몰톡과 집안일 미션으로 포인트를 모으면 다음 권 인쇄비를 최대 12,000원 할인받을 수 있어요!
-                    </Text>
-                  </View>
-                )}
-              </View>
-
-              {/* 추가 옵션: 조부모님 선물용 1권 추가 할인 (비즈니스 핵심 업셀링) */}
-              <TouchableOpacity
-                style={[styles.addCopyBox, orderAddCopy && styles.addCopyBoxActive]}
-                onPress={() => setOrderAddCopy(!orderAddCopy)}
-                activeOpacity={0.85}
-              >
-                <View style={styles.addCopyCheckbox}>
-                  {orderAddCopy && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Text style={styles.addCopyTitle}>부모님/조부모님 선물용 +1권 추가</Text>
-                    <View style={styles.discountBadge}>
-                      <Text style={styles.discountBadgeText}>42% 파격 특가</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.addCopySub}>할인가 +14,000원에 한 권 더 제작해 선물하세요!</Text>
-                </View>
-                <Text style={styles.addCopyPriceText}>+14,000원</Text>
-              </TouchableOpacity>
-
-              {/* 총 결제 예정 금액 (하이브리드 명세) */}
-              <View style={styles.totalPriceBanner}>
-                <View>
-                  <Text style={styles.totalPriceLabel}>최종 실결제 금액 (배송비 무료):</Text>
-                  {appliedPoints > 0 && (
-                    <Text style={styles.totalPriceSubNotice}>
-                      (가족 포인트 {appliedPoints.toLocaleString()}P 할인 적용됨 ✨)
-                    </Text>
-                  )}
-                </View>
-                <Text style={styles.totalPriceNumber}>
-                  {finalCashPrice.toLocaleString()}원
-                </Text>
-              </View>
-
-              {/* 배송지 입력 필드 */}
-              <Text style={styles.formInputLabel}>받는 분 성함</Text>
-              <TextInput
-                style={styles.formInput}
-                value={orderName}
-                onChangeText={setOrderName}
-                placeholder="성함을 입력하세요"
-              />
-
-              <Text style={styles.formInputLabel}>연락처</Text>
-              <TextInput
-                style={styles.formInput}
-                value={orderPhone}
-                onChangeText={setOrderPhone}
-                placeholder="연락처를 입력하세요"
-                keyboardType="phone-pad"
-              />
-
-              <Text style={styles.formInputLabel}>배송지 주소</Text>
-              <TextInput
-                style={styles.formInput}
-                value={orderAddress}
-                onChangeText={setOrderAddress}
-                placeholder="상세 주소를 입력하세요"
-              />
-
-              <TouchableOpacity
-                style={styles.submitOrderBtn}
-                onPress={handleExecuteOrder}
-                disabled={isSubmittingOrder}
-                activeOpacity={0.85}
-              >
-                <ShoppingBag size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-                <Text style={styles.submitOrderBtnText}>
-                  {isSubmittingOrder
-                    ? '주문 생성 중...'
-                    : `${finalCashPrice.toLocaleString()}원 결제하고 총 ${orderAddCopy ? '2권' : '1권'} 제작 주문하기`}
-                </Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        </View>
+      <Modal visible={!fullViewerVisible && orderModalVisible} transparent animationType="slide" onRequestClose={() => setOrderModalVisible(false)}>
+        {renderOrderModalContent()}
       </Modal>
 
       {/* 도서 제목 편집 모달 */}
-      <Modal visible={editTitleModalVisible} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
-          <View style={styles.editTitleModalCard}>
-            <Text style={styles.editTitleHeading}>도서 제목 & 부제 편집</Text>
-            <Text style={styles.formInputLabel}>메인 제목</Text>
-            <TextInput
-              style={styles.formInput}
-              value={tempTitle}
-              onChangeText={setTempTitle}
-            />
-            <Text style={styles.formInputLabel}>부제 (한 줄 설명)</Text>
-            <TextInput
-              style={styles.formInput}
-              value={tempSubtitle}
-              onChangeText={setTempSubtitle}
-            />
-            <View style={styles.modalBtnRow}>
-              <TouchableOpacity
-                style={styles.modalCancelBtn}
-                onPress={() => setEditTitleModalVisible(false)}
-              >
-                <Text style={styles.modalCancelBtnText}>취소</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.modalSaveBtn}
-                onPress={() => {
-                  if (!tempTitle.trim()) {
-                    Alert.alert('알림', '제목을 입력해주세요.');
-                    return;
-                  }
-                  const newT = tempTitle.trim();
-                  const newSub = tempSubtitle.trim();
-                  setBookTitle(newT);
-                  setBookSubtitle(newSub);
-                  broadcastPhotobookChange({ bookTitle: newT, bookSubtitle: newSub });
-                  setEditTitleModalVisible(false);
-                }}
-              >
-                <Text style={styles.modalSaveBtnText}>저장</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
+      <Modal visible={!fullViewerVisible && editTitleModalVisible} transparent animationType="fade" onRequestClose={() => setEditTitleModalVisible(false)}>
+        {renderEditTitleModalContent()}
       </Modal>
 
       {/* ========================================================= */}
       {/* 6-B. AI 스몰톡 에세이(프롤로그 / 에필로그) 집필 & 편집 모달 */}
       {/* ========================================================= */}
-      <Modal visible={aiEssayModalVisible} transparent animationType="slide">
-        <View style={styles.modalBackdrop}>
-          <View style={[styles.pickerSheetCard, { maxHeight: '88%' }]}>
-            {/* Header */}
-            <View style={styles.sheetHeader}>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <Text style={styles.sheetTitle} numberOfLines={1}>
-                  {targetEssayType === 'prologue' ? 'AI 프롤로그 (여는 글) 집필' : 'AI 에필로그 (맺는 글) 집필'}
-                </Text>
-                <Text style={styles.sheetSub}>
-                  {targetEssayType === 'prologue'
-                    ? '가족들이 나눈 스몰톡 문답을 분석하여 P.1 프롤로그에 수록될 따스한 여는 글을 짓습니다.'
-                    : '180일간의 여정을 마무리하며 P.16 에필로그에 수록될 가족 헌사 맺음말을 짓습니다.'}
-                </Text>
-              </View>
-              <TouchableOpacity onPress={() => setAiEssayModalVisible(false)} style={styles.closeBtn}>
-                <X size={20} color="#1C1917" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView contentContainerStyle={{ paddingBottom: 26 }} showsVerticalScrollIndicator={false}>
-              {/* 스몰톡 분석 안내 배너 */}
-              <View style={[styles.aiArchiveNoticeCard, { marginBottom: 14 }]}>
-                <BookOpen size={16} color="#7C3AED" style={{ marginRight: 8, marginTop: 2 }} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.aiArchiveNoticeTitle}>스몰톡 문답 아카이브 연동</Text>
-                  <Text style={styles.aiArchiveNoticeDesc}>
-                    {smallTalkArchiveList && smallTalkArchiveList.length > 0
-                      ? `포토북에 담긴 ${smallTalkArchiveList.length}개의 가족 문답 기록을 바탕으로 Gemini 2.5가 문학 에세이를 집필합니다.`
-                      : '포토북에 수록된 180문답과 가족 구성원의 이름을 바탕으로 Gemini 2.5가 감동적인 에세이를 집필합니다.'}
-                  </Text>
-                </View>
-              </View>
-
-              {/* 실시간 AI 생성 CTA 버튼 */}
-              <TouchableOpacity
-                style={[styles.aiGenerateActionBtn, { backgroundColor: '#7C3AED' }]}
-                onPress={() => handleGenerateAiEssay(targetEssayType)}
-                disabled={isGeneratingAiEssay}
-                activeOpacity={0.85}
-              >
-                {isGeneratingAiEssay ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 6 }} />
-                ) : (
-                  <Sparkles size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
-                )}
-                <Text style={styles.aiGenerateActionBtnText}>
-                  {isGeneratingAiEssay ? 'Gemini 2.5 AI가 스몰톡을 읽고 글을 짓는 중...' : '스몰톡 읽고 AI로 새로 집필하기'}
-                </Text>
-              </TouchableOpacity>
-
-              {/* 글귀 편집 입력창 */}
-              <Text style={[styles.modalSectionSubTitle, { marginTop: 18 }]}>본문 내용 (직접 수정 및 퇴고 가능)</Text>
-              <View style={[styles.captionInputContainer, { minHeight: 140 }]}>
-                <TextInput
-                  style={[styles.captionTextInput, { height: 130, textAlignVertical: 'top' }]}
-                  value={customEssayInput}
-                  onChangeText={setCustomEssayInput}
-                  placeholder="가족에게 전하고 싶은 따뜻한 에세이 문장을 적어보세요."
-                  placeholderTextColor="#A8A29E"
-                  multiline
-                  numberOfLines={6}
-                />
-              </View>
-
-              {/* 프리셋 문장 선택 옵션 */}
-              <Text style={[styles.modalSectionSubTitle, { marginTop: 16, marginBottom: 8 }]}>💡 추천 에세이 문장 둘러보기 (탭하여 적용)</Text>
-              {[
-                targetEssayType === 'prologue'
-                  ? '가장 눈부신 순간은 언제나 멀리 있지 않았습니다. 함께 밥을 먹고, 사소한 농담을 주고받고, 문득 전해진 다정한 안부 속에 우리 가족의 가장 따뜻한 계절이 깃들어 있었습니다.\n\n지난 6개월간 매일 주고받은 스몰톡 문답과 카메라에 담긴 온기를 엮어, 우리들의 찬란했던 시간들을 이 한 권의 책에 고이 남깁니다.'
-                  : '계절은 바뀌어도 우리가 함께 나눈 사랑의 온도는 변하지 않습니다. 함께여서 눈부셨던 180일간의 발자취는 이제 우리 마음속 가장 깊은 보물이 되었습니다.\n\n다음 6개월 뒤에도 더 풍성하고 다정한 추억으로 이 자리를 채워나가길 소망하며, 서로의 든든한 버팀목이 되어준 온 가족에게 이 책을 바칩니다.',
-                targetEssayType === 'prologue'
-                  ? '어느 날 문득 돌아본 우리들의 시간은 그 어떤 문학 작품보다 아름다웠습니다. 서로의 작은 목소리에 귀 기울이며 쌓아 올린 180일간의 온기를 모아, 우리 가족의 첫 번째 이야기를 열어봅니다.'
-                  : '하루하루의 사소한 문답들이 모여 우리 가족만의 단단한 역사가 되었습니다. 비바람 부는 날에도 서로의 기댈 언덕이 되어준 가족들에게 고마운 마음을 전하며, 끝나지 않을 우리들의 다음 계절을 기대합니다.'
-              ].map((presetText, pIdx) => (
-                <TouchableOpacity
-                  key={pIdx}
-                  style={[styles.captionPresetItem, { paddingVertical: 10 }]}
-                  onPress={() => setCustomEssayInput(presetText)}
-                  activeOpacity={0.75}
-                >
-                  <Text style={[styles.captionPresetText, { lineHeight: 19 }]}>"{presetText}"</Text>
-                </TouchableOpacity>
-              ))}
-
-              {/* 하단 적용 버튼 */}
-              <View style={[styles.captionModalBtnRow, { marginTop: 16 }]}>
-                <TouchableOpacity
-                  style={[styles.captionApplyBtn, { flex: 1, backgroundColor: '#7C3AED' }]}
-                  onPress={() => handleApplyAiEssay(customEssayInput)}
-                  activeOpacity={0.85}
-                >
-                  <Check size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
-                  <Text style={styles.captionApplyBtnText}>
-                    {targetEssayType === 'prologue' ? 'P.1 프롤로그에 수록하기' : 'P.16 에필로그에 수록하기'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-          </View>
-        </View>
+      <Modal visible={!fullViewerVisible && aiEssayModalVisible} transparent animationType="slide" onRequestClose={() => setAiEssayModalVisible(false)}>
+        {renderAiEssayModalContent()}
       </Modal>
 
       {/* ========================================================= */}
       {/* 7. 스몰톡 질문 교체 및 아카이브 담기 모달                   */}
       {/* ========================================================= */}
-      <Modal visible={topicPickerModalVisible} transparent animationType="slide">
-        <View style={styles.modalBackdrop}>
-          <View style={[styles.pickerSheetCard, { maxHeight: '90%' }]}>
-            {/* 상단 헤더: 현재 편집 중인 페이지 번호 명시 */}
-            <View style={styles.sheetHeader}>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-                  <View style={styles.modalPageTag}>
-                    <Text style={styles.modalPageTagText}>P.{currentPageNum} 편집</Text>
-                  </View>
-                </View>
-                <Text style={styles.sheetTitle} numberOfLines={1}>스몰톡 인터뷰 문답 교체</Text>
-                <Text style={styles.sheetSub}>
-                  {getPageFormat(currentSpreadIndex, activeSingleSide) === 'photo'
-                    ? '현재 페이지는 사진 전용 레이아웃입니다.'
-                    : getPageFormat(currentSpreadIndex, activeSingleSide) === 'hybrid'
-                    ? '사진+스몰톡(포맷3) 페이지의 대표 질문을 원하는 문답으로 교체하세요.'
-                    : '현재 페이지에 수록할 질문 슬롯(Q1~Q3)을 고르고 원하는 문답으로 교체하세요.'}
-                </Text>
-              </View>
-              <TouchableOpacity onPress={() => setTopicPickerModalVisible(false)} style={styles.closeBtn}>
-                <X size={20} color="#1C1917" />
-              </TouchableOpacity>
-            </View>
-
-            {/* 사진 전용 페이지인 경우: 레이아웃 변경 유도 안내 박스 */}
-            {getPageFormat(currentSpreadIndex, activeSingleSide) === 'photo' ? (
-              <View style={styles.photoPageFormatGuideBox}>
-                <View style={styles.guideIconRow}>
-                  <Camera size={20} color="#FF6B47" />
-                  <Text style={styles.guideTitleText}>현재 P.{currentPageNum}은 사진 전용 페이지입니다</Text>
-                </View>
-                <Text style={styles.guideDescText}>
-                  스몰톡 문답을 이 페이지에 수록하려면 레이아웃 포맷을 [포맷2: 스몰톡] 또는 [포맷3: 사진+톡]으로 변경해 주세요.
-                </Text>
-                <View style={styles.guideActionRow}>
-                  <TouchableOpacity
-                    style={[styles.guideActionBtn, { backgroundColor: '#FF6B47' }]}
-                    onPress={() => {
-                      handleSetPageFormat('smalltalk', currentPageNum);
-                      Alert.alert('포맷 변경 완료 ✨', `P.${currentPageNum}이 [포맷2: 스몰톡] 레이아웃으로 변경되었습니다.`);
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <FileText size={13} color="#FFFFFF" style={{ marginRight: 4 }} />
-                    <Text style={[styles.guideActionBtnText, { color: '#FFFFFF' }]}>포맷2 (스몰톡)으로 변경</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.guideActionBtn, { backgroundColor: '#FFF5F2', borderColor: '#FFD5CC', borderWidth: 1 }]}
-                    onPress={() => {
-                      handleSetPageFormat('hybrid', currentPageNum);
-                      Alert.alert('포맷 변경 완료 ✨', `P.${currentPageNum}이 [포맷3: 사진+스몰톡] 레이아웃으로 변경되었습니다.`);
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Sparkles size={13} color="#FF6B47" style={{ marginRight: 4 }} />
-                    <Text style={[styles.guideActionBtnText, { color: '#FF6B47' }]}>포맷3 (사진+톡)으로 변경</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : (
-              <>
-                {/* A. 교체 대상 슬롯 선택 카드 리스트 */}
-                <View style={{ marginBottom: 12 }}>
-                  <Text style={styles.slotTargetLabel}>
-                    {getPageFormat(currentSpreadIndex, activeSingleSide) === 'hybrid'
-                      ? '교체 대상 질문 (대표 슬롯):'
-                      : `P.${currentPageNum} 수록 질문 중 교체할 대상 선택:`}
-                  </Text>
-                  <View style={{ gap: 6, marginTop: 6 }}>
-                    {(getPageFormat(currentSpreadIndex, activeSingleSide) === 'hybrid' ? [0] : [0, 1, 2]).map(slotIdx => {
-                      const isSelectedSlot = selectedTopicSlot === slotIdx;
-                      const slotTopicText = currentInterviewTopics[slotIdx]?.topic || `질문 ${slotIdx + 1}`;
-                      return (
-                        <TouchableOpacity
-                          key={slotIdx}
-                          style={[styles.slotItemCard, isSelectedSlot && styles.slotItemCardActive]}
-                          onPress={() => setSelectedTopicSlot(slotIdx)}
-                          activeOpacity={0.8}
-                        >
-                          <View style={[styles.slotBadge, isSelectedSlot && styles.slotBadgeActive]}>
-                            <Text style={[styles.slotBadgeText, isSelectedSlot && styles.slotBadgeTextActive]}>
-                              Q{slotIdx + 1}
-                            </Text>
-                          </View>
-                          <Text
-                            style={[styles.slotItemTopicText, isSelectedSlot && styles.slotItemTopicTextActive]}
-                            numberOfLines={1}
-                          >
-                            "{slotTopicText}"
-                          </Text>
-                          {isSelectedSlot && (
-                            <CheckCircle2 size={15} color="#FF6B47" style={{ marginLeft: 6 }} />
-                          )}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                </View>
-
-                {/* B. 2대 탭 세그먼트: [✨ 추천 질문] / [💬 가족 스몰톡 기록 (N개)] */}
-                <View style={styles.topicModalTabBar}>
-                  <TouchableOpacity
-                    style={[styles.topicModalTabBtn, topicModalTab === 'recommended' && styles.topicModalTabBtnActive]}
-                    onPress={() => setTopicModalTab('recommended')}
-                    activeOpacity={0.8}
-                  >
-                    <Sparkles size={13} color={topicModalTab === 'recommended' ? '#FF6B47' : '#78716C'} style={{ marginRight: 4 }} />
-                    <Text style={[styles.topicModalTabBtnText, topicModalTab === 'recommended' && styles.topicModalTabBtnTextActive]}>
-                      추천 질문 풀
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.topicModalTabBtn, topicModalTab === 'archive' && styles.topicModalTabBtnActive]}
-                    onPress={() => setTopicModalTab('archive')}
-                    activeOpacity={0.8}
-                  >
-                    <MessageSquare size={13} color={topicModalTab === 'archive' ? '#FF6B47' : '#78716C'} style={{ marginRight: 4 }} />
-                    <Text style={[styles.topicModalTabBtnText, topicModalTab === 'archive' && styles.topicModalTabBtnTextActive]}>
-                      가족 실제 문답 기록 ({smallTalkArchiveList.length}개)
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* C. 탭별 콘텐츠 */}
-                <ScrollView contentContainerStyle={{ paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
-                  {topicModalTab === 'recommended' ? (
-                    <>
-                      <Text style={{ fontSize: 12.5, fontWeight: '800', color: '#1C1917', marginBottom: 8 }}>
-                        💡 테마별 감성 인터뷰 질문 (탭하여 즉시 Q{selectedTopicSlot + 1}에 교체)
-                      </Text>
-                      {[
-                        '가족에게 가장 감동받았던 사소한 배려는 무엇인가요?',
-                        '우리 집에서 가장 편안하고 아늑한 나만의 아지트는?',
-                        '가족들과 함께 해보고 싶은 소소한 취미가 있나요?',
-                        '다시 돌아가고 싶은 우리 가족의 하루가 있다면 언제인가요?',
-                        '가족들에게 꼭 해주고 싶은 따뜻한 요리가 있나요?',
-                        '최근 나를 가장 크게 웃게 했던 가족의 모습은 무엇인가요?',
-                        '우리 가족만의 특별한 약속이나 가훈을 정한다면?',
-                        '힘들고 지칠 때 나를 위로해주는 우리 집만의 안식처는?',
-                        '가족들에게 꼭 추천해주고 싶은 나만의 힐링 음악은?',
-                        '우리 가족과 함께 떠났던 여행 중 가장 기억에 남는 곳은?',
-                      ].map((qText, sIdx) => (
-                        <TouchableOpacity
-                          key={sIdx}
-                          style={styles.topicPickerCandidateCard}
-                          onPress={() => {
-                            const updated = [...currentInterviewTopics];
-                            updated[selectedTopicSlot] = {
-                              ...updated[selectedTopicSlot],
-                              topic: qText,
-                            };
-                            setCustomSpreadTopics(prev => ({ ...prev, [currentSpreadIndex]: updated }));
-                            setTopicPickerModalVisible(false);
-                            Alert.alert('질문 교체 완료 🪄', `P.${currentPageNum} Q${selectedTopicSlot + 1} 질문이 새로운 문답으로 교체되었습니다!`);
-                          }}
-                          activeOpacity={0.8}
-                        >
-                          <Sparkles size={14} color="#7C3AED" style={{ marginRight: 8 }} />
-                          <Text style={styles.candidateText}>"{qText}"</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </>
-                  ) : (
-                    <>
-                      {/* 검색창 */}
-                      <View style={styles.topicSearchBox}>
-                        <Search size={14} color="#78716C" style={{ marginRight: 6 }} />
-                        <TextInput
-                          style={styles.topicSearchInput}
-                          value={topicSearchQuery}
-                          onChangeText={setTopicSearchQuery}
-                          placeholder="가족과 나눈 질문 검색..."
-                          placeholderTextColor="#A8A29E"
-                        />
-                        {topicSearchQuery ? (
-                          <TouchableOpacity onPress={() => setTopicSearchQuery('')}>
-                            <X size={14} color="#78716C" />
-                          </TouchableOpacity>
-                        ) : null}
-                      </View>
-
-                      {/* 아카이브 리스트 */}
-                      {smallTalkArchiveList
-                        .filter(item => !topicSearchQuery || (item.topic && item.topic.includes(topicSearchQuery)))
-                        .map((item, aIdx) => {
-                          // 실제 가족 답변들 매핑
-                          const answersMap = {};
-                          if (Array.isArray(item.answers)) {
-                            item.answers.forEach(ans => {
-                              const authorId = ans.user_id || ans.userId || ans.id;
-                              if (authorId) answersMap[authorId] = ans.response_text || ans.responseText || ans.text;
-                            });
-                          }
-
-                          return (
-                            <TouchableOpacity
-                              key={item.id || aIdx}
-                              style={styles.archiveTopicItemCard}
-                              onPress={() => {
-                                const updated = [...currentInterviewTopics];
-                                updated[selectedTopicSlot] = {
-                                  id: item.id || `archive-${aIdx}`,
-                                  date: item.dateLabel || item.yearMonthLabel || '가족 아카이브',
-                                  topic: item.topic,
-                                  answers: Object.keys(answersMap).length > 0 ? answersMap : (item.answers || updated[selectedTopicSlot]?.answers || {}),
-                                };
-                                setCustomSpreadTopics(prev => ({ ...prev, [currentSpreadIndex]: updated }));
-                                setTopicPickerModalVisible(false);
-                                Alert.alert('아카이브 질문 반영 완료 ✨', `가족들이 답변한 실제 기록이 P.${currentPageNum} Q${selectedTopicSlot + 1}에 수록되었습니다!`);
-                              }}
-                              activeOpacity={0.8}
-                            >
-                              <View style={styles.archiveTopicItemHeader}>
-                                <Text style={styles.archiveTopicItemDate}>
-                                  {item.dateLabel || item.yearMonthLabel || `${aIdx + 1}번째 질문`}
-                                </Text>
-                                {item.isAnswered && (
-                                  <View style={styles.archiveAnsweredBadge}>
-                                    <Text style={styles.archiveAnsweredBadgeText}>답변 완료 ✨</Text>
-                                  </View>
-                                )}
-                              </View>
-                              <Text style={styles.archiveTopicItemTitle}>"{item.topic}"</Text>
-                              {Array.isArray(item.answers) && item.answers.length > 0 && (
-                                <Text style={styles.archiveTopicAnswerCount}>
-                                  총 {item.answers.length}명의 가족 답변 수록됨
-                                </Text>
-                              )}
-                            </TouchableOpacity>
-                          );
-                        })}
-
-                      {smallTalkArchiveList.length === 0 && (
-                        <View style={styles.emptyArchiveBox}>
-                          <Text style={styles.emptyArchiveText}>아직 등록된 가족 스몰톡 기록이 없습니다.</Text>
-                        </View>
-                      )}
-                    </>
-                  )}
-                </ScrollView>
-              </>
-            )}
-          </View>
-        </View>
+      <Modal visible={!fullViewerVisible && topicPickerModalVisible} transparent animationType="slide" onRequestClose={() => setTopicPickerModalVisible(false)}>
+        {renderTopicPickerContent()}
       </Modal>
 
       {/* ========================================================= */}
       {/* 8. 180문답 전수 인덱스 부록 모달 (Appendix Modal)           */}
       {/* ========================================================= */}
-      <Modal visible={appendixModalVisible} transparent animationType="slide">
-        <View style={styles.modalBackdrop}>
-          <View style={[styles.pickerSheetCard, { maxHeight: '88%' }]}>
-            <View style={styles.sheetHeader}>
-              <View style={{ flex: 1, marginRight: 10 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-                  <View style={styles.modalPageTag}>
-                    <Text style={styles.modalPageTagText}>P.15 부록</Text>
-                  </View>
-                </View>
-                <Text style={styles.sheetTitle} numberOfLines={1}>스몰톡 아카이브 색인 및 디지털 연동</Text>
-                <Text style={styles.sheetSub}>
-                  권말 P.15에는 통계 리포트와 대표 문답이 인쇄되며, 전수 문답은 QR코드로 연결됩니다.
-                </Text>
-              </View>
-              <TouchableOpacity onPress={() => setAppendixModalVisible(false)} style={styles.closeBtn}>
-                <X size={20} color="#1C1917" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView contentContainerStyle={{ paddingBottom: 30 }} showsVerticalScrollIndicator={false}>
-              {/* 현실적 부록 안내 배너 */}
-              <View style={styles.appendixNoticeBox}>
-                <Award size={16} color="#FF6B47" style={{ marginRight: 6 }} />
-                <Text style={styles.appendixNoticeText}>
-                  총 {smallTalkArchiveList.length}개 질문 중 {answeredSmallTalkCount}개 완료 · 실물 책 QR코드 스캔 시 전수 열람 가능
-                </Text>
-              </View>
-
-              {/* QR코드 연동 안내 카드 */}
-              <View style={styles.appendixQrGuideCard}>
-                <View style={styles.appendixQrIconCircle}>
-                  <QrCode size={24} color="#FF6B47" />
-                </View>
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.appendixQrGuideTitle}>A5 실물 책 맞춤형 하이브리드 부록</Text>
-                  <Text style={styles.appendixQrGuideDesc}>
-                    180개에 달하는 방대한 질문과 가족들의 장문 답변은 실물 책 P.15의 전용 QR코드를 통해 스마트폰에서 언제든 편리하게 검색하고 열람할 수 있습니다.
-                  </Text>
-                </View>
-              </View>
-
-              {/* 아카이브 목록 미리보기 */}
-              <Text style={{ fontSize: 13, fontWeight: '800', color: '#1C1917', marginTop: 14, marginBottom: 8 }}>
-                📋 연동된 가족 문답 목록 ({smallTalkArchiveList.length}개)
-              </Text>
-
-              {smallTalkArchiveList.length === 0 ? (
-                <View style={{ padding: 30, alignItems: 'center' }}>
-                  <Text style={{ color: '#78716C', fontSize: 13 }}>아직 등록된 스몰톡 문답이 없습니다.</Text>
-                </View>
-              ) : (
-                <View style={styles.appendixGrid}>
-                  {smallTalkArchiveList.map((item, i) => {
-                    const isDone = Boolean(item.isAnswered || (item.answers && item.answers.length > 0));
-                    return (
-                      <View key={item.id || i} style={styles.appendixRow}>
-                        <Text style={styles.appendixDate}>{item.dateLabel || `Day ${i + 1}`}</Text>
-                        <Text style={styles.appendixQuestion} numberOfLines={1}>
-                          {item.topic}
-                        </Text>
-                        {isDone ? (
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                            <Check size={12} color="#10B981" />
-                            <Text style={{ fontSize: 10, color: '#10B981', fontWeight: '800' }}>완료</Text>
-                          </View>
-                        ) : (
-                          <Text style={{ fontSize: 10, color: '#A8A29E' }}>대기</Text>
-                        )}
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
-            </ScrollView>
-          </View>
-        </View>
+      <Modal visible={!fullViewerVisible && appendixModalVisible} transparent animationType="slide" onRequestClose={() => setAppendixModalVisible(false)}>
+        {renderAppendixModalContent()}
       </Modal>
 
       {/* ========================================================= */}
-      {/* 4. 실물 책 1:1 전체화면 감상 뷰어 (Full-screen Book Reader) */}
-      {/*    외부 라이브러리 없이 순수 리액트 네이티브로 구현한 몰입형 리더 */}
+      {/* 4. 실물 책 1:1 전체화면 감상 & 편집 뷰어 (Full-screen Book Reader & Editor) */}
       {/* ========================================================= */}
       <Modal
         visible={fullViewerVisible}
         animationType="fade"
         transparent={false}
-        onRequestClose={() => setFullViewerVisible(false)}
+        statusBarTranslucent
+        onRequestClose={() => {
+          if (photoPickerVisible) setPhotoPickerVisible(false);
+          else if (topicPickerModalVisible) setTopicPickerModalVisible(false);
+          else if (editTitleModalVisible) setEditTitleModalVisible(false);
+          else if (aiEssayModalVisible) setAiEssayModalVisible(false);
+          else if (orderModalVisible) setOrderModalVisible(false);
+          else if (appendixModalVisible) setAppendixModalVisible(false);
+          else setFullViewerVisible(false);
+        }}
       >
         <View style={styles.fullViewerContainer}>
           {/* 상단 내비게이션 바: [편집으로 돌아가기], [P.X / 16P], [주문하기] */}
@@ -3074,10 +3170,7 @@ ${topicSnippets.join('\n')}
 
             <TouchableOpacity
               style={styles.fullViewerOrderBtn}
-              onPress={() => {
-                setFullViewerVisible(false);
-                setOrderModalVisible(true);
-              }}
+              onPress={() => setOrderModalVisible(true)}
               activeOpacity={0.85}
             >
               <ShoppingBag size={13} color="#FFFFFF" style={{ marginRight: 4 }} />
@@ -3167,7 +3260,7 @@ ${topicSnippets.join('\n')}
 
             <View style={styles.viewerGuideInfo}>
               <Text style={styles.viewerGuideInfoText}>
-                좌우로 넘겨 실물 인쇄 규격(15×21cm A5)으로 감상하세요
+                💡 사진이나 질문을 터치하여 실물 크기로 바로 편집하세요
               </Text>
             </View>
 
@@ -3181,6 +3274,40 @@ ${topicSnippets.join('\n')}
               <ChevronRight size={15} color={colors.text.primary} style={{ marginLeft: 2 }} />
             </TouchableOpacity>
           </View>
+
+          {/* ========================================================= */}
+          {/* 인-뷰어 오버레이 모달들 (네이티브 중복 Modal 충돌 없이 즉시 표시) */}
+          {/* ========================================================= */}
+          {photoPickerVisible && (
+            <View style={styles.inViewerModalOverlay}>
+              {renderPhotoPickerContent()}
+            </View>
+          )}
+          {topicPickerModalVisible && (
+            <View style={styles.inViewerModalOverlay}>
+              {renderTopicPickerContent()}
+            </View>
+          )}
+          {editTitleModalVisible && (
+            <View style={styles.inViewerModalOverlay}>
+              {renderEditTitleModalContent()}
+            </View>
+          )}
+          {aiEssayModalVisible && (
+            <View style={styles.inViewerModalOverlay}>
+              {renderAiEssayModalContent()}
+            </View>
+          )}
+          {orderModalVisible && (
+            <View style={styles.inViewerModalOverlay}>
+              {renderOrderModalContent()}
+            </View>
+          )}
+          {appendixModalVisible && (
+            <View style={styles.inViewerModalOverlay}>
+              {renderAppendixModalContent()}
+            </View>
+          )}
         </View>
       </Modal>
 
@@ -4891,6 +5018,25 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  deletePhotoBadgeBtn: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(28, 25, 23, 0.78)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.2,
+    borderColor: 'rgba(255, 255, 255, 0.75)',
+    zIndex: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.25,
+    shadowRadius: 2,
+    elevation: 3,
+  },
   // 8. 가족 기록(권차) 선택 모달
   volumeSheetCard: {
     backgroundColor: '#FFFFFF',
@@ -6250,15 +6396,28 @@ const styles = StyleSheet.create({
   // =========================================================
   fullViewerContainer: {
     flex: 1,
-    backgroundColor: colors.background, // 웜 아이보리 캔버스 (#FAF8F3)
+    width: '100%',
+    height: '100%',
+    backgroundColor: colors.background,
     justifyContent: 'space-between',
+  },
+  inViewerModalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+    zIndex: 9999,
+    elevation: 9999,
   },
   fullViewerHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 44 : 12,
+    paddingTop: Platform.OS === 'ios' ? 48 : (Platform.OS === 'android' ? 36 : 14),
     paddingBottom: 10,
     backgroundColor: colors.surface,
     borderBottomWidth: 1,
@@ -6332,7 +6491,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: 10,
-    paddingBottom: Platform.OS === 'ios' ? 26 : 12,
+    paddingBottom: Platform.OS === 'ios' ? 32 : 14,
     backgroundColor: colors.surface,
     borderTopWidth: 1,
     borderTopColor: colors.border,

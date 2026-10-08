@@ -102,16 +102,25 @@ export default function PetmongGameEngine({
   const canHarvestFruit = !hasHarvestedToday && (todayMessages.length > 0 || todayResponsesCount > 0);
 
   // -------------------------------------------------------------
-  // 2. State & Animation References
+  // 2. State & Animation References (스마트폰 실제 시간대 자동 연동)
   // -------------------------------------------------------------
-  const [isLightsOff, setIsLightsOff] = useState(false);
+  const checkIsNightTime = useCallback(() => {
+    const currentHour = new Date().getHours();
+    // 밤 10시(22:00)부터 아침 7시(07:00)까지는 자동 소등 & 꿀잠 시간
+    return currentHour >= 22 || currentHour < 7;
+  }, []);
+
+  const [isNightMode, setIsNightMode] = useState(checkIsNightTime);
+  const isLightsOff = isNightMode;
   const [showWarmthModal, setShowWarmthModal] = useState(false);
-  const [livingRoutine, setLivingRoutine] = useState('happy'); // 'reading' | 'photo' | 'window' | 'napping' | 'happy'
+  const [livingRoutine, setLivingRoutine] = useState(checkIsNightTime() ? 'napping' : 'happy');
 
   const [dialogue, setDialogue] = useState(
     unreadWhispers && unreadWhispers.length > 0
       ? '쉿! 저한테 몰래 맡겨진 비밀 귓속말이 있어요! 💌'
-      : '가족들의 따뜻한 대화와 사랑을 먹고 자라는 중이에요 몽 💕'
+      : (checkIsNightTime()
+          ? '새근새근... 조용한 밤이에요. 몽이도 좋은 꿈 꾸고 있어요 zZ 🌙'
+          : '가족들의 따뜻한 대화와 사랑을 먹고 자라는 중이에요 몽 💕')
   );
 
   const [floatingHearts, setFloatingHearts] = useState([]); // [{ id, x, text }]
@@ -127,7 +136,7 @@ export default function PetmongGameEngine({
   // Fruit & Whisper Bobbing
   const whisperBobAnim = useRef(new Animated.Value(0)).current;
   const fruitFloatAnim = useRef(new Animated.Value(0)).current;
-  const lightsDimAnim = useRef(new Animated.Value(0)).current;
+  const lightsDimAnim = useRef(new Animated.Value(checkIsNightTime() ? 1 : 0)).current;
   const lastActionTimeRef = useRef(0);
 
   // Visitor Pet Animations
@@ -326,32 +335,70 @@ export default function PetmongGameEngine({
   };
 
   // -------------------------------------------------------------
-  // 8. 💡 소등 & 힐링 조명 토글 (Lights Out Routine)
+  // 8. 🌙 실시간 스마트폰 시계 연동 (낮/밤 자동 전환 & 토닥토닥 교감)
   // -------------------------------------------------------------
-  const handleToggleLights = () => {
+  useEffect(() => {
+    const syncTimeRoutine = () => {
+      const night = checkIsNightTime();
+      if (night !== isNightMode) {
+        setIsNightMode(night);
+        Animated.timing(lightsDimAnim, {
+          toValue: night ? 1 : 0,
+          duration: 900,
+          useNativeDriver: USE_NATIVE_DRIVER,
+        }).start();
+
+        if (night) {
+          setDialogue('하아암~ 밤 10시가 지나 방이 은은하게 소등되었어요... 쿨쿨 zZ 🌙');
+          walkToPosition(Math.round(SCREEN_WIDTH * 0.35), () => {
+            setLivingRoutine('napping');
+          }, 0.8);
+          if (onCareAction) onCareAction('SLEEP');
+        } else {
+          setLivingRoutine('happy');
+          setDialogue('좋은 아침이에요! 상쾌한 아침 햇살을 받으며 일어났어요 몽 ☀️');
+          if (onCareAction) onCareAction('WAKE');
+        }
+      }
+    };
+
+    // 30초마다 현재 시간 검사하여 실시간 전환
+    const timer = setInterval(syncTimeRoutine, 30000);
+    return () => clearInterval(timer);
+  }, [checkIsNightTime, isNightMode, lightsDimAnim, onCareAction, walkToPosition]);
+
+  // 마운트 시 밤 시간대면 자동으로 침대 위치 수면 모드 세팅
+  useEffect(() => {
+    if (checkIsNightTime()) {
+      setLivingRoutine('napping');
+      Animated.timing(lightsDimAnim, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: USE_NATIVE_DRIVER,
+      }).start();
+    }
+  }, [checkIsNightTime, lightsDimAnim]);
+
+  // 밤 시간대 토닥토닥 & 낮 시간대 활기찬 터치 교감
+  const handleNightComfort = () => {
     const now = Date.now();
     if (now - lastActionTimeRef.current < 600) return;
     lastActionTimeRef.current = now;
 
-    const next = !isLightsOff;
-    setIsLightsOff(next);
-
-    Animated.timing(lightsDimAnim, {
-      toValue: next ? 1 : 0,
-      duration: 650,
-      useNativeDriver: USE_NATIVE_DRIVER,
-    }).start();
-
-    if (next) {
-      setDialogue('하아암~ 조명이 꺼지니 솔솔 졸려요... 쿨쿨 zZ 🌙');
-      walkToPosition(SCREEN_WIDTH * 0.35, () => {
-        setLivingRoutine('napping');
-      }, 0.8);
-      if (onCareAction) onCareAction('SLEEP');
+    if (isNightMode) {
+      setDialogue('토닥토닥... 몽... 밤에도 가족이 곁에 있어줘서 마음이 포근해요 zZ 💕');
+      spawnHeartToast('+포근한 밤 🌙');
+      Animated.sequence([
+        Animated.timing(petHopY, { toValue: -12, duration: 160, useNativeDriver: USE_NATIVE_DRIVER }),
+        Animated.timing(petHopY, { toValue: 0, duration: 180, useNativeDriver: USE_NATIVE_DRIVER }),
+      ]).start();
     } else {
-      setLivingRoutine('happy');
-      setDialogue('좋은 아침! 푹 자고 일어났더니 힘이 솟아요 몽! ☀️');
-      if (onCareAction) onCareAction('WAKE');
+      setDialogue('화창한 낮이에요! 오늘도 우리 가족 모두 좋은 하루 되길 바라요 몽 ☀️');
+      spawnHeartToast('+행복 ☀️');
+      Animated.sequence([
+        Animated.timing(petHopY, { toValue: -20, duration: 160, useNativeDriver: USE_NATIVE_DRIVER }),
+        Animated.timing(petHopY, { toValue: 0, duration: 180, useNativeDriver: USE_NATIVE_DRIVER }),
+      ]).start();
     }
   };
 
@@ -371,7 +418,12 @@ export default function PetmongGameEngine({
       Animated.timing(petScaleY, { toValue: 1.0, duration: 120, useNativeDriver: USE_NATIVE_DRIVER }),
     ]).start();
 
-    spawnHeartToast('+3 친밀도 💕');
+    if (isNightMode) {
+      setDialogue('새근새근... 조용한 밤이에요. 가족의 따뜻한 손길에 기분 좋은 꿈을 꿔요 zZ 🌙');
+      spawnHeartToast('+3 토닥토닥 💕');
+    } else {
+      spawnHeartToast('+3 친밀도 💕');
+    }
     setShowWarmthModal(true);
   };
 
@@ -382,7 +434,7 @@ export default function PetmongGameEngine({
 
   return (
     <View style={styles.engineContainer} pointerEvents="box-none">
-      {/* 1. Real-time Lights Out Darkness Overlay */}
+      {/* 1. Real-time Lights Out Darkness Overlay (밤 10시 ~ 아침 7시 자동 소등) */}
       <Animated.View
         style={[
           styles.lightsOverlay,
@@ -393,25 +445,15 @@ export default function PetmongGameEngine({
             }),
           },
         ]}
-        pointerEvents={isLightsOff ? 'auto' : 'none'}
+        pointerEvents="none"
       >
-        {isLightsOff && (
-          <TouchableOpacity
-            style={styles.nightLampTapTarget}
-            onPress={handleToggleLights}
-            activeOpacity={0.85}
-          >
-            <View style={styles.nightLampGlow}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 4 }}>
-                <Text style={styles.nightZzzText}>zZ Z</Text>
-                <Moon size={20} color="#FBBF24" fill="#FBBF24" />
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-                <Text style={styles.nightTapHint}>화면을 탭하여 불켜기</Text>
-                <Lightbulb size={14} color="#FBBF24" />
-              </View>
+        {isNightMode && (
+          <View style={styles.nightAmbientHeader}>
+            <View style={styles.nightStatusBadge}>
+              <Moon size={13} color="#FBBF24" fill="#FBBF24" />
+              <Text style={styles.nightStatusBadgeText}>밤 꿀잠 시간 (22:00 ~ 07:00)</Text>
             </View>
-          </TouchableOpacity>
+          </View>
         )}
       </Animated.View>
 
@@ -420,8 +462,8 @@ export default function PetmongGameEngine({
         activeOpacity={1}
         style={styles.roomGameField}
         onPress={() => {
-          if (isLightsOff) {
-            handleToggleLights();
+          if (isNightMode) {
+            handleNightComfort();
           }
         }}
       >
@@ -650,26 +692,26 @@ export default function PetmongGameEngine({
           </View>
         </TouchableOpacity>
 
-        {/* 2. 조명 소등 / 힐링 수면 모드 버튼 */}
+        {/* 2. 실시간 스마트폰 시간대 (밤 꿀잠 모드 / 낮 활동 모드) 인디케이터 */}
         <TouchableOpacity
           style={[
             styles.warmthActionBtn,
-            isLightsOff && styles.warmthActionBtnDark,
+            isNightMode && styles.warmthActionBtnDark,
           ]}
-          onPress={handleToggleLights}
+          onPress={handleNightComfort}
           activeOpacity={0.8}
         >
-          {isLightsOff ? (
-            <Sun size={20} color="#FBBF24" fill="#FBBF24" />
+          {isNightMode ? (
+            <Moon size={20} color="#818CF8" fill="#818CF8" />
           ) : (
-            <Moon size={20} color="#6366F1" fill="#6366F1" />
+            <Sun size={20} color="#F59E0B" fill="#F59E0B" />
           )}
           <View>
-            <Text style={[styles.warmthActionBtnLabel, isLightsOff && { color: '#E2E8F0' }]}>
-              {isLightsOff ? '불켜기' : '조명 소등'}
+            <Text style={[styles.warmthActionBtnLabel, isNightMode && { color: '#E2E8F0' }]}>
+              {isNightMode ? '밤 꿀잠' : '낮 활동'}
             </Text>
-            <Text style={[styles.warmthActionBtnVal, isLightsOff && { color: '#FBBF24' }]}>
-              {isLightsOff ? '아침' : '꿀잠'}
+            <Text style={[styles.warmthActionBtnVal, isNightMode && { color: '#FBBF24' }]}>
+              {isNightMode ? '토닥토닥' : '활기참'}
             </Text>
           </View>
         </TouchableOpacity>
@@ -821,36 +863,35 @@ const styles = StyleSheet.create({
     backgroundColor: '#0F172A',
     zIndex: 40,
   },
-  nightLampTapTarget: {
+  nightAmbientHeader: {
     position: 'absolute',
-    top: 0,
+    top: 55,
     left: 0,
     right: 0,
-    bottom: 0,
-    justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 50,
   },
-  nightLampGlow: {
-    width: 170,
-    height: 170,
-    borderRadius: 85,
-    backgroundColor: 'rgba(254, 240, 138, 0.25)',
-    justifyContent: 'center',
+  nightStatusBadge: {
+    flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(254, 240, 138, 0.45)',
+    backgroundColor: 'rgba(30, 41, 59, 0.85)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(251, 191, 36, 0.45)',
+    gap: 6,
+    shadowColor: '#FBBF24',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 4,
   },
-  nightZzzText: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: '#FEF08A',
-    letterSpacing: 4,
-  },
-  nightTapHint: {
+  nightStatusBadgeText: {
     fontSize: 11,
-    fontWeight: '700',
-    color: 'rgba(254, 240, 138, 0.85)',
-    marginTop: 6,
+    fontWeight: '800',
+    color: '#FEF08A',
+    letterSpacing: 0.3,
   },
   roomGameField: {
     position: 'absolute',

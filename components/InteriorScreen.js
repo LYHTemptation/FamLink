@@ -1714,37 +1714,10 @@ Crucial requirements:
           )}
         </View>
 
-        {/* Top Right Action Icons (2 Actions: 귓속말, 거실 꾸미기) */}
+        {/* Top Right Action Icons (거실 테마, 외형 변경) */}
         <View style={styles.topActionsRow}>
-          {/* 1. Secret Whisper Courier Button */}
-          {displayedCharacter && (
-            <TouchableOpacity
-              style={[
-                styles.topActionIconBtn,
-                styles.topActionIconBtnPink,
-                unreadWhispers.length > 0 && styles.topActionIconBtnPinkActive,
-              ]}
-              onPress={() => {
-                if (unreadWhispers.length > 0) {
-                  setActiveWhisperToRead(unreadWhispers[0]);
-                  setWhisperReadModalVisible(true);
-                } else {
-                  setWhisperWriteModalVisible(true);
-                }
-              }}
-              activeOpacity={0.8}
-            >
-              <Mail size={14} color="#FF4D6D" />
-              <Text style={[styles.topActionBtnText, { color: '#FF4D6D' }]}>
-                귓속말{unreadWhispers.length > 0 ? ` (${unreadWhispers.length})` : ' 💌'}
-              </Text>
-              {unreadWhispers.length > 0 && (
-                <View style={styles.unreadBadgeDot} />
-              )}
-            </TouchableOpacity>
-          )}
 
-          {/* 2. Decorate & Customize Hub (Room Theme + Appearance) */}
+          {/* 2. Room Theme Picker */}
           <TouchableOpacity
             style={[styles.topActionIconBtn, styles.topActionIconBtnPurple]}
             onPress={() => {
@@ -1756,6 +1729,21 @@ Crucial requirements:
             <Palette size={14} color="#7C3AED" />
             <Text style={[styles.topActionBtnText, { color: '#7C3AED' }]}>
               거실 테마
+            </Text>
+          </TouchableOpacity>
+
+          {/* 3. Reincarnate / Create New Petmong (500P) */}
+          <TouchableOpacity
+            style={[styles.topActionIconBtn, styles.topActionIconBtnCoral]}
+            onPress={() => {
+              setDecorModalTab('appearance');
+              setDecorModalVisible(true);
+            }}
+            activeOpacity={0.8}
+          >
+            <Sparkles size={14} color="#FF6B47" />
+            <Text style={[styles.topActionBtnText, { color: '#FF6B47' }]}>
+              {displayedCharacter ? '외형 변경 (500P)' : '새로 만들기'}
             </Text>
           </TouchableOpacity>
         </View>

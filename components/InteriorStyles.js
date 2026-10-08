@@ -1600,6 +1600,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFE4E8',
     borderColor: '#FF4D6D',
   },
+  topActionIconBtnCoral: {
+    backgroundColor: '#FFF5F2',
+    borderColor: '#FFE0D6',
+  },
   unreadBadgeDot: {
     position: 'absolute',
     top: -2,
