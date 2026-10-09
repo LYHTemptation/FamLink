@@ -30,7 +30,6 @@ import {
   Gamepad2,
   Droplets,
   Flame,
-  RefreshCw,
   ChevronRight,
   Check,
 } from 'lucide-react-native';
@@ -44,6 +43,7 @@ import {
   getPetmongStageImages,
   savePetmongStageImage,
   generateStageAiImage,
+  startBackgroundStagePreGeneration,
   detectSpecies,
 } from '../lib/petmongEvolutionService';
 
@@ -96,7 +96,7 @@ export default function PetmongGrowthBookModal({
 }) {
   const [selectedStageNum, setSelectedStageNum] = useState(1);
   const [stageImages, setStageImages] = useState({});
-  const [generatingStage, setGeneratingStage] = useState(null);
+  const [generatingStages, setGeneratingStages] = useState({});
 
   // Active family petmong
   const activeChar = character || null;
@@ -113,7 +113,7 @@ export default function PetmongGrowthBookModal({
     }
   }, [activeChar?.id, visible]);
 
-  // Load cached stage images for activeChar
+  // Load cached stage images for activeChar and generate any missing stages
   const loadStageImages = useCallback(async () => {
     if (!activeChar?.id) return;
     try {
@@ -124,10 +124,27 @@ export default function PetmongGrowthBookModal({
         await savePetmongStageImage(activeChar.id, 1, activeChar.image_url);
       }
       setStageImages(cached);
+
+      // If any stages (2, 3, 4) are missing, trigger sequential generation
+      if (activeChar.image_url && (!cached[2] || !cached[3] || !cached[4])) {
+        const missing = [2, 3, 4].filter(s => !cached[s]);
+        setGeneratingStages(prev => {
+          const next = { ...prev };
+          missing.forEach(s => { next[s] = true; });
+          return next;
+        });
+
+        startBackgroundStagePreGeneration(activeChar, (stage, url) => {
+          setStageImages(prev => ({ ...prev, [stage]: url }));
+          setGeneratingStages(prev => ({ ...prev, [stage]: false }));
+        }).finally(() => {
+          setGeneratingStages({});
+        });
+      }
     } catch (err) {
       console.warn('loadStageImages error:', err);
     }
-  }, [activeChar?.id, activeChar?.image_url]);
+  }, [activeChar]);
 
   useEffect(() => {
     if (visible && activeChar?.id) {
@@ -135,31 +152,22 @@ export default function PetmongGrowthBookModal({
     }
   }, [visible, activeChar?.id, loadStageImages]);
 
-  // Manual generation or re-roll handler
-  const handleGenerateStage = async (stageNum) => {
-    if (!activeChar?.image_url) {
-      Alert.alert('알림', '사진으로 생성된 반려몽만 AI 성장이 가능합니다.');
-      return;
-    }
-    if (generatingStage !== null) return;
-
-    try {
-      setGeneratingStage(stageNum);
-      const evolvedUrl = await generateStageAiImage(activeChar, stageNum);
-      if (evolvedUrl) {
-        setStageImages(prev => ({ ...prev, [stageNum]: evolvedUrl }));
-        Alert.alert(
-          '성장 완료! ✨',
-          `${getStageNameWithPet(stageNum, activeChar.name)} 모습이 성공적으로 탄생했습니다!`
-        );
+  const handleSelectStage = useCallback(async (sNum) => {
+    setSelectedStageNum(sNum);
+    if (!stageImages[sNum] && activeChar?.id && activeChar?.image_url && !generatingStages[sNum]) {
+      setGeneratingStages(prev => ({ ...prev, [sNum]: true }));
+      try {
+        const url = await generateStageAiImage(activeChar, sNum);
+        if (url) {
+          setStageImages(prev => ({ ...prev, [sNum]: url }));
+        }
+      } catch (e) {
+        console.warn(`On-demand stage ${sNum} generation error:`, e);
+      } finally {
+        setGeneratingStages(prev => ({ ...prev, [sNum]: false }));
       }
-    } catch (err) {
-      console.error('handleGenerateStage error:', err);
-      Alert.alert('생성 안내', 'AI 성장 모습 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
-    } finally {
-      setGeneratingStage(null);
     }
-  };
+  }, [stageImages, activeChar, generatingStages]);
 
   if (!visible) return null;
 
@@ -260,7 +268,7 @@ export default function PetmongGrowthBookModal({
                           shadowOpacity: 0.18,
                         },
                       ]}
-                      onPress={() => setSelectedStageNum(sNum)}
+                      onPress={() => handleSelectStage(sNum)}
                       activeOpacity={0.8}
                     >
                       <View
@@ -363,19 +371,19 @@ export default function PetmongGrowthBookModal({
                     },
                   ]}
                 >
-                  {generatingStage === selectedStageNum ? (
-                    <View style={styles.generatingBox}>
-                      <ActivityIndicator size="large" color={selectedStageData.badgeColor} />
-                      <Text style={[styles.generatingText, { color: selectedStageData.badgeColor }]}>
-                        AI로 {getStageNameWithPet(selectedStageNum, activeChar?.name)} 그리는 중... 🎨
-                      </Text>
-                    </View>
-                  ) : stageImages[selectedStageNum] ? (
+                  {stageImages[selectedStageNum] ? (
                     <Image
                       source={{ uri: stageImages[selectedStageNum] }}
                       style={styles.petShowcaseImage}
                       resizeMode="contain"
                     />
+                  ) : generatingStages[selectedStageNum] ? (
+                    <View style={styles.stageLoadingWrap}>
+                      <ActivityIndicator size="small" color="#FF6B47" />
+                      <Text style={styles.stageLoadingText}>
+                        {selectedStageNum}단계 AI 생성 중... ✨
+                      </Text>
+                    </View>
                   ) : activeChar?.image_url ? (
                     <Image
                       source={{ uri: activeChar.image_url }}
@@ -398,47 +406,17 @@ export default function PetmongGrowthBookModal({
                 />
               </View>
 
-              {/* AI Image Generation / Reroll Controls */}
-              {activeChar?.image_url && (
+              {/* Status Badge only (No re-roll: appearance is managed via 500P Reincarnation) */}
+              {activeChar?.image_url && stageImages[selectedStageNum] && (
                 <View style={styles.aiActionWrap}>
-                  {stageImages[selectedStageNum] ? (
-                    <View style={styles.aiAppliedRow}>
-                      <View style={styles.aiSuccessBadge}>
-                        <Sparkles size={12} color="#10B981" style={{ marginRight: 4 }} />
-                        <Text style={styles.aiSuccessBadgeText}>
-                          {selectedStageNum === 1 ? '초기 입주 원본 모습' : 'AI 맞춤 성장 모습 적용됨'}
-                        </Text>
-                      </View>
-                      {selectedStageNum > 1 && (
-                        <TouchableOpacity
-                          style={styles.rerollBtn}
-                          onPress={() => handleGenerateStage(selectedStageNum)}
-                          disabled={generatingStage !== null}
-                          activeOpacity={0.75}
-                        >
-                          <RefreshCw size={11} color="#475569" style={{ marginRight: 4 }} />
-                          <Text style={styles.rerollBtnText}>다시 그리기</Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  ) : (
-                    <TouchableOpacity
-                      style={[
-                        styles.triggerAiBtn,
-                        { backgroundColor: selectedStageData.badgeColor },
-                      ]}
-                      onPress={() => handleGenerateStage(selectedStageNum)}
-                      disabled={generatingStage !== null}
-                      activeOpacity={0.8}
-                    >
-                      <Sparkles size={14} color="#FFFFFF" style={{ marginRight: 6 }} />
-                      <Text style={styles.triggerAiBtnText}>
-                        {generatingStage === selectedStageNum
-                          ? 'AI 성장 모습 생성 중...'
-                          : `✨ ${getStageNameWithPet(selectedStageNum, activeChar?.name)} 모습 그리기`}
+                  <View style={styles.aiAppliedRow}>
+                    <View style={styles.aiSuccessBadge}>
+                      <Sparkles size={12} color="#10B981" style={{ marginRight: 4 }} />
+                      <Text style={styles.aiSuccessBadgeText}>
+                        {selectedStageNum === 1 ? '초기 입주 원본 모습' : 'AI 맞춤 성장 모습'}
                       </Text>
-                    </TouchableOpacity>
-                  )}
+                    </View>
+                  </View>
                 </View>
               )}
 
@@ -786,6 +764,20 @@ const styles = StyleSheet.create({
   petShowcaseEmoji: {
     fontSize: 72,
   },
+  stageLoadingWrap: {
+    width: 120,
+    height: 120,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  stageLoadingText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FF6B47',
+    textAlign: 'center',
+    marginTop: 6,
+  },
   pedestalShadow: {
     height: 14,
     borderRadius: 7,
@@ -794,18 +786,6 @@ const styles = StyleSheet.create({
     bottom: 22,
     zIndex: 1,
   },
-  generatingBox: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 10,
-  },
-  generatingText: {
-    fontSize: 11,
-    fontWeight: '800',
-    marginTop: 8,
-    textAlign: 'center',
-  },
-
   // AI Actions
   aiActionWrap: {
     marginTop: 10,
@@ -831,38 +811,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     color: '#15803D',
-  },
-  rerollBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#CBD5E1',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-  rerollBtnText: {
-    fontSize: 10.5,
-    fontWeight: '700',
-    color: '#475569',
-  },
-  triggerAiBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    borderRadius: 18,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  triggerAiBtnText: {
-    fontSize: 12.5,
-    fontWeight: '800',
-    color: '#FFFFFF',
   },
 
   // Stage Lore

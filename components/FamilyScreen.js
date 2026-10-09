@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
-import { Users, Heart, Award, ShieldCheck, Smile, Edit3, LogOut, Sparkles, Check, Camera, Trash2 } from 'lucide-react-native';
+import { Users, Heart, Award, ShieldCheck, Smile, Edit3, LogOut, Sparkles, Check, Camera, Trash2, FileText } from 'lucide-react-native';
 import { MoodIcon, MOOD_ITEMS, IconCopy, IconShare, IconClose, IconChevronRight } from './icons';
 import { colors, typography, commonStyles } from '../theme';
 import UserAvatar from './UserAvatar';
@@ -42,6 +42,8 @@ export default function FamilyScreen({
   onNavigateScreen,
 }) {
   const [modalVisible, setModalVisible] = useState(false);
+  const [policyModalVisible, setPolicyModalVisible] = useState(false);
+  const [activePolicyTab, setActivePolicyTab] = useState('privacy'); // 'privacy' | 'terms'
   const [editName, setEditName] = useState(currentUserProfile?.name || '');
   const [editRole, setEditRole] = useState(currentUserProfile?.role || '');
   const [selectedAvatar, setSelectedAvatar] = useState(currentUserProfile?.avatar || '👦');
@@ -300,84 +302,225 @@ export default function FamilyScreen({
         })}
       </View>
 
-      {/* Account & Logout Card */}
+      {/* Account & Settings Card */}
       <View style={styles.accountCard}>
         <View style={styles.accountHeader}>
-          <Users size={16} color="#8E8E93" style={{ marginRight: 6 }} />
+          <Users size={16} color="#78716C" style={{ marginRight: 6 }} />
           <Text style={styles.accountHeaderTitle}>내 계정 정보</Text>
         </View>
-        <View style={styles.accountContentRow}>
+
+        {/* 1. 프로필 정보 및 수정 버튼 (가로 정렬, 계정 정보 최대 너비 확보) */}
+        <View style={styles.accountProfileRow}>
+          <UserAvatar avatar={currentUserProfile?.avatar} size={46} style={{ marginRight: 12 }} />
           <View style={styles.accountInfoCol}>
-            <UserAvatar avatar={currentUserProfile?.avatar} size={42} style={{ marginRight: 10 }} />
-            <View>
-              <Text style={styles.accountNameText}>
-                {currentUserProfile?.name || '내 계정'} ({currentUserProfile?.role || '가족'})
-              </Text>
-              {currentUserProfile?.email ? (
-                <Text style={styles.accountEmailText}>{currentUserProfile.email}</Text>
-              ) : null}
-            </View>
+            <Text style={styles.accountNameText} numberOfLines={1}>
+              {currentUserProfile?.name || '내 계정'}
+              <Text style={styles.accountRoleTagText}> ({currentUserProfile?.role || '가족'})</Text>
+            </Text>
+            {currentUserProfile?.email ? (
+              <Text style={styles.accountEmailText} numberOfLines={1}>{currentUserProfile.email}</Text>
+            ) : null}
           </View>
-
-          <View style={styles.accountActionCol}>
-            <TouchableOpacity
-              style={styles.accountEditBtn}
-              onPress={openEditModal}
-              activeOpacity={0.8}
-            >
-              <Edit3 size={13} color="#FF6B47" style={{ marginRight: 4 }} />
-              <Text style={styles.accountEditBtnText}>프로필 수정</Text>
-            </TouchableOpacity>
-
-            {onLogout && (
-              <TouchableOpacity
-                style={styles.accountLogoutBtn}
-                onPress={onLogout}
-                activeOpacity={0.8}
-              >
-                <LogOut size={13} color="#8E8E93" style={{ marginRight: 4 }} />
-                <Text style={styles.accountLogoutBtnText}>로그아웃</Text>
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity
-              style={styles.accountDeleteBtn}
-              onPress={handleDeleteAccountClick}
-              activeOpacity={0.8}
-            >
-              <Trash2 size={13} color="#EF4444" style={{ marginRight: 4 }} />
-              <Text style={styles.accountDeleteBtnText}>회원 탈퇴</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            style={styles.accountEditBtn}
+            onPress={openEditModal}
+            activeOpacity={0.8}
+          >
+            <Edit3 size={13} color="#FF6B47" style={{ marginRight: 4 }} />
+            <Text style={styles.accountEditBtnText}>프로필 수정</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* 1.3 개인정보 처리방침 & 서비스 이용약관 (Apple Guideline 5.1.1) */}
-        <View style={styles.policyRow}>
+        {/* 2. 약관 및 운영 정책 전용 페이지 바로가기 (리스트형) */}
+        <View style={styles.accountPolicyBox}>
           <TouchableOpacity
-            style={styles.policyBtn}
+            style={styles.accountPolicyRow}
             onPress={() => {
-              Alert.alert(
-                '개인정보 처리방침 (Privacy Policy)',
-                'FamLink는 가족 간 프라이빗 소통과 실물 포토북 배송을 위한 최소한의 개인정보만을 수집하며, 제3자 광고 데이터 판매를 절대 하지 않습니다.\n\n수집 항목: 계정 이메일, 가족 호칭, 가족 업로드 사진, 대화 내역\n보유 기간: 회원 탈퇴 시 즉시 영구 파기\n\n문의: privacy@famlink.com'
-              );
+              setActivePolicyTab('terms');
+              setPolicyModalVisible(true);
             }}
+            activeOpacity={0.7}
           >
-            <Text style={styles.policyBtnText}>개인정보 처리방침</Text>
+            <View style={styles.accountPolicyLeft}>
+              <FileText size={14} color="#78716C" style={{ marginRight: 8 }} />
+              <Text style={styles.accountPolicyTitle}>서비스 이용약관</Text>
+            </View>
+            <IconChevronRight size={14} color="#A8A29E" />
           </TouchableOpacity>
-          <Text style={styles.policyDivider}>•</Text>
+
+          <View style={styles.accountPolicyDivider} />
+
           <TouchableOpacity
-            style={styles.policyBtn}
+            style={styles.accountPolicyRow}
             onPress={() => {
-              Alert.alert(
-                '서비스 이용약관',
-                'FamLink 서비스 이용약관:\n1. 본 서비스는 가족 구성원 간의 안전한 소통 공간을 제공합니다.\n2. 실물 포토북 주문 시 POD 인쇄 및 택배 배송이 진행됩니다.\n3. 불법적이거나 타인에게 유해한 콘텐츠 게시를 엄격히 금지합니다.'
-              );
+              setActivePolicyTab('privacy');
+              setPolicyModalVisible(true);
             }}
+            activeOpacity={0.7}
           >
-            <Text style={styles.policyBtnText}>서비스 이용약관</Text>
+            <View style={styles.accountPolicyLeft}>
+              <ShieldCheck size={14} color="#78716C" style={{ marginRight: 8 }} />
+              <Text style={styles.accountPolicyTitle}>개인정보 처리방침</Text>
+            </View>
+            <IconChevronRight size={14} color="#A8A29E" />
+          </TouchableOpacity>
+        </View>
+
+        {/* 3. 하단 계정 액션 (로그아웃 & 회원 탈퇴) */}
+        <View style={styles.accountBottomActionRow}>
+          {onLogout && (
+            <TouchableOpacity
+              style={styles.accountLogoutBtn}
+              onPress={onLogout}
+              activeOpacity={0.8}
+            >
+              <LogOut size={13} color="#78716C" style={{ marginRight: 4 }} />
+              <Text style={styles.accountLogoutBtnText}>로그아웃</Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            style={styles.accountDeleteBtn}
+            onPress={handleDeleteAccountClick}
+            activeOpacity={0.8}
+          >
+            <Trash2 size={13} color="#EF4444" style={{ marginRight: 4 }} />
+            <Text style={styles.accountDeleteBtnText}>회원 탈퇴</Text>
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Terms & Privacy Policy Dedicated Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={policyModalVisible}
+        onRequestClose={() => setPolicyModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={[styles.modalView, { maxHeight: '88%', paddingBottom: 20 }]}>
+            {/* Header */}
+            <View style={styles.modalHeaderRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <ShieldCheck size={18} color="#FF6B47" />
+                <Text style={styles.modalHeader}>운영 정책 및 약관</Text>
+              </View>
+              <TouchableOpacity onPress={() => setPolicyModalVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <IconClose size={20} color="#8E8E93" />
+              </TouchableOpacity>
+            </View>
+
+            {/* 2-Tab Bar */}
+            <View style={styles.policyTabBar}>
+              <TouchableOpacity
+                style={[styles.policyTabBtn, activePolicyTab === 'privacy' && styles.policyTabBtnActive]}
+                onPress={() => setActivePolicyTab('privacy')}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.policyTabBtnText, activePolicyTab === 'privacy' && styles.policyTabBtnTextActive]}>
+                  개인정보 처리방침
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.policyTabBtn, activePolicyTab === 'terms' && styles.policyTabBtnActive]}
+                onPress={() => setActivePolicyTab('terms')}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.policyTabBtnText, activePolicyTab === 'terms' && styles.policyTabBtnTextActive]}>
+                  서비스 이용약관
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Content Body */}
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 12 }}>
+              {activePolicyTab === 'privacy' ? (
+                <View style={styles.policyContentCard}>
+                  <Text style={styles.policySectionHeading}>FamLink 개인정보 처리방침</Text>
+                  <Text style={styles.policyMetaText}>최종 수정일: 2026년 10월 9일 (Apple Guideline 5.1.1 준수)</Text>
+
+                  <Text style={styles.policyArticleTitle}>제1조 (개인정보 수집 항목 및 방법)</Text>
+                  <Text style={styles.policyBodyText}>
+                    FamLink는 가족 간 프라이빗 소통 및 실물 포토북 배송을 위한 최소한의 개인정보만을 수집합니다.{'\n'}
+                    • 필수 수집 항목: 로그인 이메일, 가족 내 호칭/이름, 프로필 아바타{'\n'}
+                    • 서비스 이용 시 생성 정보: 가족 대화 내역, 공유 캘린더 일정, 스몰톡 답변, 업로드 사진{'\n'}
+                    • 포토북 제작 주문 시: 수령인 이름, 배송지 주소, 연락처 전화번호
+                  </Text>
+
+                  <Text style={styles.policyArticleTitle}>제2조 (개인정보 수집 및 이용 목적)</Text>
+                  <Text style={styles.policyBodyText}>
+                    1. 가족 구성원 간의 실시간 암호화 대화 및 스몰톡 질문 매칭{'\n'}
+                    2. 반려몽 가상 펫 육성 게이미피케이션 및 온기 데이터 동기화{'\n'}
+                    3. 실물 양장본 포토북 POD(Print on Demand) 주문 제작 및 배송
+                  </Text>
+
+                  <Text style={styles.policyArticleTitle}>제3조 (개인정보의 보유 및 파기 - 회원 탈퇴 연동)</Text>
+                  <Text style={styles.policyBodyText}>
+                    FamLink는 이용자가 회원 탈퇴를 요청하는 즉시 해당 이용자의 계정, 프로필, 작성 데이터 일체를 서버 및 로컬 데이터베이스에서 지체 없이 영구 파기합니다.{'\n'}
+                    회원 탈퇴는 앱 내 [가족] 탭의 [내 계정 정보] → [회원 탈퇴] 버튼을 통해 언제든 즉시 실행할 수 있습니다.
+                  </Text>
+
+                  <Text style={styles.policyArticleTitle}>제4조 (제3자 데이터 판매 금지 및 보안)</Text>
+                  <Text style={styles.policyBodyText}>
+                    FamLink는 어떠한 경우에도 가족들의 사진, 대화, 개인정보를 광고 목적으로 제3자에게 판매하거나 마케팅 데이터로 제공하지 않습니다. 모든 데이터는 엄격한 접근 제어(RLS) 하에 안전하게 보호됩니다.
+                  </Text>
+
+                  <Text style={styles.policyArticleTitle}>제5조 (개인정보 보호책임자 및 문의처)</Text>
+                  <Text style={styles.policyBodyText}>
+                    • 개인정보 보호책임 부서: FamLink Privacy Team{'\n'}
+                    • 문의 이메일: privacy@famlink.com
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.policyContentCard}>
+                  <Text style={styles.policySectionHeading}>FamLink 서비스 이용약관</Text>
+                  <Text style={styles.policyMetaText}>최종 수정일: 2026년 10월 9일</Text>
+
+                  <Text style={styles.policyArticleTitle}>제1조 (목적)</Text>
+                  <Text style={styles.policyBodyText}>
+                    본 약관은 FamLink(이하 "서비스")가 제공하는 가족 전용 메신저, 스몰톡 문답, 반려몽 육성, 공유 캘린더 및 AI 포토북 출판 서비스의 이용 조건 및 절차를 규정함을 목적으로 합니다.
+                  </Text>
+
+                  <Text style={styles.policyArticleTitle}>제2조 (가족 그룹 및 계정 관리)</Text>
+                  <Text style={styles.policyBodyText}>
+                    1. 이용자는 초대 코드(Family Code)를 통해 가족 구성원과 비공개 그룹을 형성합니다.{'\n'}
+                    2. 계정 정보는 본인이 직접 관리하여야 하며, 타인에게 양도하거나 대여할 수 없습니다.
+                  </Text>
+
+                  <Text style={styles.policyArticleTitle}>제3조 (실물 양장본 포토북 POD 서비스)</Text>
+                  <Text style={styles.policyBodyText}>
+                    1. 가족 스튜디오에서 편집한 150×210mm A5 하드커버 양장본은 주문 시 맞춤 POD 방식으로 실물 인쇄됩니다.{'\n'}
+                    2. 가족들이 모은 포인트는 주문 시 정가 대비 할인 혜택으로 차감 적용될 수 있습니다.{'\n'}
+                    3. 인쇄가 개시된 맞춤 주문 제작 상품의 특성상 단순 변심에 의한 취소는 제한될 수 있습니다.
+                  </Text>
+
+                  <Text style={styles.policyArticleTitle}>제4조 (이용자의 의무)</Text>
+                  <Text style={styles.policyBodyText}>
+                    이용자는 음란, 폭력, 타인의 권리를 침해하는 유해 콘텐츠를 게시할 수 없으며, 플랫폼의 건전한 가족 소통 환경을 준수해야 합니다.
+                  </Text>
+
+                  <Text style={styles.policyArticleTitle}>제5조 (서비스 종료 및 회원 탈퇴)</Text>
+                  <Text style={styles.policyBodyText}>
+                    이용자는 언제든지 앱 내 설정을 통해 회원 탈퇴를 진행할 수 있으며, 탈퇴 시 관련 데이터는 관련 법령이 정한 바에 따라 안전하게 즉시 파기 처리됩니다.
+                  </Text>
+                </View>
+              )}
+            </ScrollView>
+
+            {/* Bottom Close CTA */}
+            <TouchableOpacity
+              style={styles.policyModalCloseCta}
+              onPress={() => setPolicyModalVisible(false)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.policyModalCloseCtaText}>확인</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* Profile & Mood Edit Modal */}
       <Modal
@@ -888,19 +1031,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#78716C',
   },
-  accountContentRow: {
+  accountProfileRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    marginBottom: 14,
   },
   accountInfoCol: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 10,
-  },
-  accountAvatar: {
-    fontSize: 26,
+    justifyContent: 'center',
     marginRight: 10,
   },
   accountNameText: {
@@ -908,15 +1046,15 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#1C1917',
   },
+  accountRoleTagText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#78716C',
+  },
   accountEmailText: {
     fontSize: 11,
     color: '#78716C',
     marginTop: 2,
-  },
-  accountActionCol: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
   },
   accountEditBtn: {
     flexDirection: 'row',
@@ -932,6 +1070,41 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#FF6B47',
+  },
+  accountPolicyBox: {
+    backgroundColor: '#FAF8F3',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#F5F0E8',
+    overflow: 'hidden',
+    marginBottom: 14,
+  },
+  accountPolicyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
+  accountPolicyLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  accountPolicyTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#44403C',
+  },
+  accountPolicyDivider: {
+    height: 1,
+    backgroundColor: '#F5F0E8',
+    marginHorizontal: 12,
+  },
+  accountBottomActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
   },
   accountLogoutBtn: {
     flexDirection: 'row',
@@ -952,7 +1125,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FEF2F2',
-    paddingHorizontal: 10,
+    paddingHorizontal: 11,
     paddingVertical: 8,
     borderRadius: 12,
     borderWidth: 1,
@@ -963,29 +1136,82 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#EF4444',
   },
-  policyRow: {
+  policyTabBar: {
     flexDirection: 'row',
+    backgroundColor: '#FAF8F3',
+    borderRadius: 12,
+    padding: 4,
+    marginVertical: 10,
+    borderWidth: 1,
+    borderColor: '#F5F0E8',
+  },
+  policyTabBtn: {
+    flex: 1,
+    paddingVertical: 8,
     alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 14,
-    paddingTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#F5F0E8',
-    gap: 8,
+    borderRadius: 8,
   },
-  policyBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 6,
+  policyTabBtnActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  policyBtnText: {
+  policyTabBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#78716C',
+  },
+  policyTabBtnTextActive: {
+    fontWeight: '800',
+    color: '#FF6B47',
+  },
+  policyContentCard: {
+    backgroundColor: '#FAF8F3',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#F5F0E8',
+  },
+  policySectionHeading: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#1C1917',
+    marginBottom: 4,
+  },
+  policyMetaText: {
     fontSize: 11,
     color: '#A8A29E',
-    fontWeight: '600',
-    textDecorationLine: 'underline',
+    marginBottom: 14,
+    fontWeight: '500',
   },
-  policyDivider: {
-    fontSize: 10,
-    color: '#D6D3D1',
+  policyArticleTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#292524',
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  policyBodyText: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#57534E',
+    fontWeight: '500',
+  },
+  policyModalCloseCta: {
+    backgroundColor: '#FF6B47',
+    height: 48,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  policyModalCloseCtaText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
   },
   modalOverlay: commonStyles.modalOverlay,
   modalView: commonStyles.modalBottomSheet,

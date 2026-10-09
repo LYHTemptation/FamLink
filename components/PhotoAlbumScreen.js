@@ -782,7 +782,7 @@ export default function PhotoAlbumScreen({
                     </TouchableOpacity>
 
                     <Text style={[styles.bookFamilySign, { color: currentTheme.text }]}>
-                      {currentUserProfile?.name || '가족'}네 따뜻한 보금자리 • FamLink Press
+                      우리 가족의 따뜻한 이야기 • FamLink Press
                     </Text>
                   </View>
                 </View>

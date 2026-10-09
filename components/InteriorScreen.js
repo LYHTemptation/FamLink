@@ -3,14 +3,12 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import UserAvatar from './UserAvatar';
 import PetmongGameEngine from './PetmongGameEngine';
 import {
-  StyleSheet,
   Text,
   View,
   TouchableOpacity,
   ScrollView,
   Modal,
   Alert,
-  PanResponder,
   Dimensions,
   Animated,
   TextInput,
@@ -18,8 +16,6 @@ import {
   Image,
   ActivityIndicator,
   KeyboardAvoidingView,
-  TouchableWithoutFeedback,
-  Keyboard,
   Easing,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -28,39 +24,23 @@ import { Image as ExpoImage } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '../lib/supabase';
 import {
-  ShoppingBag,
-  Trash2,
-  RotateCw,
   X,
-  Trophy,
   Sparkles,
   Heart,
   Gift,
   Smile,
   ChevronRight,
-  ChevronDown,
-  ChevronUp,
   Camera,
-  MessageCircle,
-  Plus,
-  Users,
-  Sun,
-  Moon,
-  Lock,
   Check,
-  Layers,
   Palette,
   BookOpen,
   Mail,
   Send,
 } from 'lucide-react-native';
-import { MoodIcon } from './icons';
 import {
   getEvolutionStage,
   getEvolvedEmoji,
   isMilestoneLevel,
-  EVOLUTION_STAGES,
-  getStageEvolutionPrompt,
   getStageNameWithPet,
   getRequiredExpForLevel,
 } from '../lib/petmongEvolution';
@@ -68,6 +48,7 @@ import PetmongGrowthBookModal from './PetmongGrowthBookModal';
 import {
   getPetmongStageImages,
   savePetmongStageImage,
+  resetPetmongStageImages,
   generateStageAiImage,
   startBackgroundStagePreGeneration,
   createPetmongSvg,
@@ -75,10 +56,7 @@ import {
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
-const BASE_CANVAS_SIZE = SCREEN_WIDTH - 64; // Account for scrollContent padding 32 + canvasCard padding 32
-const MAX_DAILY_TOUCH = 10; // Daily touch EXP reward limit (10 times = +30 EXP)
 const MAX_DAILY_CARE = 2; // Daily care limit when visiting other family members (2 times = +2P)
-const MAX_ACTIVE_ROAMING = 3; // Maximum active wandering family pets simultaneously
 
 // High-Res 3 Sumone-Style Empty Room Shell Backgrounds & Classic Day/Night
 const ROOM_BACKGROUNDS = {
@@ -106,7 +84,6 @@ const ROOM_THEMES = [
   { id: 'night', name: '달빛 포근한 밤', emoji: '🌙', desc: '조용하고 감성적인 달밤 룸' },
 ];
 
-const EMOJI_OPTIONS = ['🐶', '🐱', '🐰', '🐻', '🐥', '🦊', '🦌', '🐹', '🐲', '🦭'];
 const PERSONALITY_OPTIONS = ['다정한', '장난꾸러기', '잠꾸러기', '애교쟁이', '호기심많은'];
 
 const PETMONG_DIALOGUES = {
@@ -224,11 +201,17 @@ function makeBackgroundTransparent(imageUrl, threshold = 232) {
           queue.push(w - 1, y);
         }
 
-        const isNearWhite = (idx) => {
+        const isBackgroundPixel = (idx) => {
           const r = data[idx];
           const g = data[idx + 1];
           const b = data[idx + 2];
-          return r >= threshold && g >= threshold && b >= threshold;
+          // Pure / near-white background
+          if (r >= threshold && g >= threshold && b >= threshold) return true;
+          // Checkerboard transparency tile pattern (bright grayscale tiles where r, g, b are almost identical and brightness >= 175)
+          const maxVal = Math.max(r, g, b);
+          const minVal = Math.min(r, g, b);
+          if (minVal >= 175 && (maxVal - minVal) <= 18) return true;
+          return false;
         };
 
         let head = 0;
@@ -241,7 +224,7 @@ function makeBackgroundTransparent(imageUrl, threshold = 232) {
           visited[pixelIdx] = 1;
 
           const dataIdx = pixelIdx * 4;
-          if (isNearWhite(dataIdx)) {
+          if (isBackgroundPixel(dataIdx)) {
             data[dataIdx + 3] = 0; // Alpha = 0 (Transparent)
 
             // Add 4-way neighbors
@@ -266,219 +249,7 @@ function makeBackgroundTransparent(imageUrl, threshold = 232) {
   });
 }
 
-// Roaming Family Member's Petmong Component (Wandering AI Engine for up to 9 members)
-const SPAWN_ZONES = [
-  { x: 14, y: 38 }, // Zone 0: Left-Top
-  { x: 70, y: 38 }, // Zone 1: Right-Top
-  { x: 10, y: 50 }, // Zone 2: Far-Left Mid
-  { x: 76, y: 48 }, // Zone 3: Far-Right Mid
-  { x: 22, y: 56 }, // Zone 4: Left-Bottom
-  { x: 66, y: 58 }, // Zone 5: Right-Bottom
-  { x: 44, y: 35 }, // Zone 6: Center-Upper
-  { x: 28, y: 36 }, // Zone 7: Left-Upper
-  { x: 58, y: 35 }, // Zone 8: Right-Upper
-];
 
-const RoamingFamilyPetmong = React.memo(({
-  char,
-  owner,
-  index,
-  onPress,
-  subBubbleCharId,
-  subBubbleText,
-}) => {
-  // Stagger initial spawn positions across 9 distinct room zones to avoid clustering
-  const spawn = SPAWN_ZONES[index % SPAWN_ZONES.length];
-  const initialX = spawn.x + (index % 3) * 2;
-  const initialY = spawn.y + (index % 2) * 2;
-
-  const currentX = useRef(initialX);
-  const currentY = useRef(initialY);
-
-  const posAnim = useRef(new Animated.ValueXY({ x: initialX, y: initialY })).current;
-  const scaleXAnim = useRef(new Animated.Value(1)).current;
-  const bobAnim = useRef(new Animated.Value(0)).current;
-  const tapBounceAnim = useRef(new Animated.Value(0)).current;
-  const [idleEmote, setIdleEmote] = useState(null);
-  const isMountedRef = useRef(true);
-  const walkTimerRef = useRef(null);
-
-  useEffect(() => {
-    isMountedRef.current = true;
-
-    // Bobbing loop for footstep vibration
-    const bobLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(bobAnim, { toValue: -3.5, duration: 220, useNativeDriver: USE_NATIVE_DRIVER }),
-        Animated.timing(bobAnim, { toValue: 0, duration: 220, useNativeDriver: USE_NATIVE_DRIVER }),
-      ])
-    );
-
-    const wander = () => {
-      if (!isMountedRef.current) return;
-
-      // Pick a random target within open floor areas
-      const isSide = Math.random() > 0.3;
-      let nextX, nextY;
-      if (isSide) {
-        nextX = Math.random() > 0.5 
-          ? Math.round(10 + Math.random() * 22)   // 10% ~ 32% (Left open floor)
-          : Math.round(62 + Math.random() * 22);  // 62% ~ 84% (Right open floor)
-        nextY = Math.round(36 + Math.random() * 24); // 36% ~ 60%
-      } else {
-        nextX = Math.round(14 + Math.random() * 68); // 14% ~ 82% (Upper back floor)
-        nextY = Math.round(30 + Math.random() * 12); // 30% ~ 42%
-      }
-
-      const dx = nextX - currentX.current;
-      const dy = nextY - currentY.current;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-
-      // Face direction of walk
-      if (dx < -2) {
-        Animated.timing(scaleXAnim, { toValue: -1, duration: 160, useNativeDriver: USE_NATIVE_DRIVER }).start();
-      } else if (dx > 2) {
-        Animated.timing(scaleXAnim, { toValue: 1, duration: 160, useNativeDriver: USE_NATIVE_DRIVER }).start();
-      }
-
-      const duration = Math.max(2000, Math.min(4500, dist * 70));
-
-      setIdleEmote(null);
-      bobLoop.start();
-
-      Animated.timing(posAnim, {
-        toValue: { x: nextX, y: nextY },
-        duration,
-        easing: Easing.inOut(Easing.sin),
-        useNativeDriver: false,
-      }).start(({ finished }) => {
-        if (!isMountedRef.current) return;
-        currentX.current = nextX;
-        currentY.current = nextY;
-        bobLoop.stop();
-        bobAnim.setValue(0);
-
-        if (finished) {
-          // Arrival emotion bubble (sleep, heart, mood, sparkles, music)
-          if (Math.random() < 0.65) {
-            const ownerMood = owner?.mood || '😊';
-            const emotes = [ownerMood, '💤', '❤️', '🐾', '✨', '🎵', '🌿', '🍀'];
-            const chosen = emotes[Math.floor(Math.random() * emotes.length)];
-            setIdleEmote(chosen);
-            setTimeout(() => {
-              if (isMountedRef.current) setIdleEmote(null);
-            }, 2600);
-          }
-
-          const nextDelay = 4500 + (index % 3) * 2500 + Math.random() * 4000;
-          walkTimerRef.current = setTimeout(wander, nextDelay);
-        }
-      });
-    };
-
-    // Stagger initial start times across all family members
-    const initialDelay = 1200 + index * 1600;
-    walkTimerRef.current = setTimeout(wander, initialDelay);
-
-    return () => {
-      isMountedRef.current = false;
-      if (walkTimerRef.current) clearTimeout(walkTimerRef.current);
-      bobLoop.stop();
-    };
-  }, [index, owner?.mood]);
-
-  const handlePress = () => {
-    // Tap reaction: happy jump
-    Animated.sequence([
-      Animated.timing(tapBounceAnim, { toValue: -12, duration: 120, useNativeDriver: USE_NATIVE_DRIVER }),
-      Animated.spring(tapBounceAnim, { toValue: 0, friction: 3, tension: 60, useNativeDriver: USE_NATIVE_DRIVER }),
-    ]).start();
-    onPress(char);
-  };
-
-  const isBubbleShowing = subBubbleCharId === char.id;
-
-  return (
-    <Animated.View
-      style={[
-        styles.roamingCharWrapper,
-        {
-          left: posAnim.x.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] }),
-          top: posAnim.y.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] }),
-          zIndex: posAnim.y.interpolate({ inputRange: [0, 100], outputRange: [4, 25] }),
-        },
-      ]}
-    >
-      {/* Speech Bubble when tapped */}
-      {isBubbleShowing && (
-        <View style={styles.subSpeechBubble}>
-          <Text style={styles.subSpeechBubbleText}>{subBubbleText}</Text>
-          <View style={styles.subSpeechBubbleArrow} />
-        </View>
-      )}
-
-      {/* Idle Emote Bubble (e.g. 💤, ❤️, owner's mood) */}
-      {!isBubbleShowing && idleEmote && (
-        <View style={styles.idleEmoteBadge}>
-          <Text style={styles.idleEmoteText}>{idleEmote}</Text>
-        </View>
-      )}
-
-      <TouchableOpacity
-        activeOpacity={0.8}
-        onPress={handlePress}
-        style={styles.roamingCharTouch}
-      >
-        <Animated.View
-          style={{
-            transform: [
-              { scaleX: scaleXAnim },
-              { translateY: Animated.add(bobAnim, tapBounceAnim) },
-            ],
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          {char.image_url ? (
-            <View style={styles.subCharImageWrapper}>
-              {Platform.OS === 'web' ? (
-                <img
-                  src={char.image_url}
-                  alt={char.name}
-                  style={{
-                    width: 34,
-                    height: 34,
-                    objectFit: 'contain',
-                    mixBlendMode: 'multiply',
-                    display: 'block',
-                    pointerEvents: 'none',
-                    userSelect: 'none',
-                  }}
-                />
-              ) : (
-                <Image source={{ uri: char.image_url }} style={styles.subCharImage} resizeMode="contain" />
-              )}
-            </View>
-          ) : (
-            <Text style={styles.subCharEmoji}>{char.emoji || '🐱'}</Text>
-          )}
-        </Animated.View>
-
-        {/* Footstep shadow on floor */}
-        <View style={styles.subCharShadow} />
-
-        {/* Owner & Pet Name Tag */}
-        <View style={styles.subCharLabelBox}>
-          <View style={styles.subCharOwnerRow}>
-            <UserAvatar avatar={owner?.avatar} size={14} style={{ marginRight: 4 }} />
-            <Text style={styles.subCharOwnerName}>{owner?.name || '가족'}의</Text>
-          </View>
-          <Text style={styles.subCharLabelText}>{char.name} (Lv.{char.level || 1})</Text>
-        </View>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-});
 
 export default function InteriorScreen({
   points,
@@ -539,16 +310,6 @@ export default function InteriorScreen({
     w => w.to_user_id === currentUserProfile?.id && !w.is_read
   );
 
-  // Touch & Dialogue States (Sumone Style)
-  const bounceAnim = useRef(new Animated.Value(0)).current;
-  const heartAnim = useRef(new Animated.Value(0)).current;
-  const bubbleAnim = useRef(new Animated.Value(0)).current;
-  const [bubbleVisible, setBubbleVisible] = useState(false);
-  const [bubbleText, setBubbleText] = useState('');
-  const bubbleTimerRef = useRef(null);
-  const [heartVisible, setHeartVisible] = useState(false);
-  const [dailyTouchCount, setDailyTouchCount] = useState(0);
-
   // Level Up Modal State
   const [levelUpModalVisible, setLevelUpModalVisible] = useState(false);
   const [levelUpInfo, setLevelUpInfo] = useState({ name: '', level: 1 });
@@ -592,6 +353,28 @@ export default function InteriorScreen({
   const displayedOwner = currentUserProfile;
   const isVisitingOther = false;
 
+  // Current evolution stage based on level (1, 2, 3, 4)
+  const currentCharStageNum = getEvolutionStage(displayedCharacter?.level || 1).stage;
+  const [activeStageImageUrl, setActiveStageImageUrl] = useState(null);
+
+  useEffect(() => {
+    if (displayedCharacter?.id) {
+      getPetmongStageImages(displayedCharacter.id).then(stages => {
+        if (stages && stages[currentCharStageNum]) {
+          setActiveStageImageUrl(stages[currentCharStageNum]);
+        } else if (stages && stages[1]) {
+          setActiveStageImageUrl(stages[1]);
+        } else {
+          setActiveStageImageUrl(displayedCharacter.image_url);
+        }
+      }).catch(() => {
+        setActiveStageImageUrl(displayedCharacter.image_url);
+      });
+    } else {
+      setActiveStageImageUrl(null);
+    }
+  }, [displayedCharacter?.id, displayedCharacter?.level, displayedCharacter?.image_url, currentCharStageNum]);
+
   // Background Pre-Generation of Missing Stages for Active User's Character
   useEffect(() => {
     if (myCharacter?.id && myCharacter?.image_url) {
@@ -600,11 +383,15 @@ export default function InteriorScreen({
           savePetmongStageImage(myCharacter.id, 1, myCharacter.image_url);
         }
         if (!stages[2] || !stages[3] || !stages[4]) {
-          startBackgroundStagePreGeneration(myCharacter);
+          startBackgroundStagePreGeneration(myCharacter, (stg, url) => {
+            if (stg === currentCharStageNum) {
+              setActiveStageImageUrl(url);
+            }
+          });
         }
       }).catch(() => {});
     }
-  }, [myCharacter?.id, myCharacter?.image_url]);
+  }, [myCharacter?.id, myCharacter?.image_url, currentCharStageNum]);
 
   // 🎮 Real-time Petmong Game Vitals (Centralized via App.js & Supabase)
   const [localPetVitals, setLocalPetVitals] = useState({
@@ -692,9 +479,6 @@ export default function InteriorScreen({
       }
     }
   };
-
-  // 1가족 1반려몽 구조: 단일 대표 펫이 거실 중심에서 자유롭게 활동
-  const roamingList = [];
 
   useEffect(() => {
     if (familyId) {
@@ -924,15 +708,17 @@ export default function InteriorScreen({
     setWhisperWriteModalVisible(true);
   };
 
+  const effectiveImageUrl = activeStageImageUrl || displayedCharacter?.image_url;
+
   useEffect(() => {
-    if (displayedCharacter?.image_url) {
-      if (transparentImageCache.has(displayedCharacter.image_url)) {
-        setDisplayedTransparentUrl(transparentImageCache.get(displayedCharacter.image_url));
+    if (effectiveImageUrl) {
+      if (transparentImageCache.has(effectiveImageUrl)) {
+        setDisplayedTransparentUrl(transparentImageCache.get(effectiveImageUrl));
       } else {
-        makeBackgroundTransparent(displayedCharacter.image_url).then(url => {
+        makeBackgroundTransparent(effectiveImageUrl).then(url => {
           setDisplayedTransparentUrl(url);
           // Persist the clean transparent PNG to Supabase so it permanently never has a white background
-          if (displayedCharacter.id && !displayedCharacter.image_url.startsWith('data:image/png')) {
+          if (displayedCharacter?.id && !effectiveImageUrl.startsWith('data:image/png')) {
             supabase
               .from('petmong_characters')
               .update({ image_url: url })
@@ -941,12 +727,14 @@ export default function InteriorScreen({
                 console.log('Successfully persisted transparent petmong character image in DB');
               });
           }
+        }).catch(() => {
+          setDisplayedTransparentUrl(effectiveImageUrl);
         });
       }
     } else {
       setDisplayedTransparentUrl(null);
     }
-  }, [displayedCharacter?.id, displayedCharacter?.image_url]);
+  }, [displayedCharacter?.id, effectiveImageUrl]);
 
   // Method B: Image-to-Image AI Stage Evolution (Pre-generation Check & Instant Apply)
   const triggerAiEvolution = async (char, stage) => {
@@ -1064,23 +852,12 @@ export default function InteriorScreen({
   useEffect(() => {
     if (!currentUserProfile?.id) return;
     const today = new Date().toISOString().split('T')[0];
-    const key = `PETMONG_TOUCH_${currentUserProfile.id}_${today}`;
-
-    // 1. Load daily touch count from local storage
-    AsyncStorage.getItem(key).then(val => {
-      if (val !== null) {
-        setDailyTouchCount(parseInt(val, 10) || 0);
-      } else {
-        setDailyTouchCount(0);
-      }
-    }).catch(err => console.log('Error loading daily touch count:', err));
-
-    // 2. Load daily care count
+    // 1. Load daily care count
     AsyncStorage.getItem(`PETMONG_DAILY_CARE_${currentUserProfile.id}_${today}`).then(val => {
       if (val !== null) setDailyCareCount(parseInt(val, 10) || 0);
     }).catch(() => {});
 
-    // 3. Fetch ground-truth count from Supabase petmong_activities for cross-device sync
+    // 2. Fetch ground-truth count from Supabase petmong_activities for cross-device sync
     if (familyId) {
       // Query recent room theme updates for all members
       supabase
@@ -1102,24 +879,6 @@ export default function InteriorScreen({
           }
         })
         .catch(err => console.log('Error fetching DB room themes:', err));
-    }
-
-    if (myCharacter?.id) {
-      const todayStart = `${today}T00:00:00.000Z`;
-      supabase
-        .from('petmong_activities')
-        .select('action_type')
-        .eq('actor_id', myCharacter.id)
-        .ilike('action_type', '%반려몽 쓰다듬기%')
-        .gte('created_at', todayStart)
-        .then(({ data, error }) => {
-          if (data && !error) {
-            const dbCount = data.length;
-            setDailyTouchCount(prev => Math.max(prev, dbCount));
-            AsyncStorage.setItem(key, String(dbCount)).catch(() => {});
-          }
-        })
-        .catch(err => console.log('Error syncing touch count with DB:', err));
     }
   }, [currentUserProfile?.id, myCharacter?.id, familyId, familyMembers.length]);
 
@@ -1209,21 +968,22 @@ export default function InteriorScreen({
       return;
     }
 
-    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (permissionResult.granted === false) {
-      Alert.alert('권한 필요', '사진첩 접근 권한이 필요합니다.');
-      return;
-    }
+    const executePickImage = async () => {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (permissionResult.granted === false) {
+        Alert.alert('권한 필요', '사진첩 접근 권한이 필요합니다.');
+        return;
+      }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.5,
-      base64: true,
-    });
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.5,
+        base64: true,
+      });
 
-    if (!result.canceled && result.assets[0].base64) {
+      if (!result.canceled && result.assets[0].base64) {
       setIsGenerating(true);
       const clientApiKey = (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_GEMINI_API_KEY) || '';
       let generatedImageUrl = null;
@@ -1236,7 +996,8 @@ export default function InteriorScreen({
         try {
           const cleanBase64 = result.assets[0].base64.replace(/^data:image\/\w+;base64,/, '');
 
-          // Step 1: Vision analysis via active gemini-2.5-flash
+          // Step 1: Deep Vision analysis via active gemini-2.5-flash
+          let visualFeatureDescription = '';
           try {
             const visionResp = await fetch(
               `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${clientApiKey}`,
@@ -1246,7 +1007,7 @@ export default function InteriorScreen({
                 body: JSON.stringify({
                   contents: [{
                     parts: [
-                      { text: 'Analyze this photo (person, pet, or avatar). Which of our 10 animal lineages does this image match best in facial features, expression, or vibe? Choose exactly one from [canine, feline, rabbit, bear, bird, fox, deer, rodent, dragon, aquatic]. Return a single line with format: SPECIES: [chosen_species], COLOR: #HEXCOLOR, VIBE: 1-sentence vibe. Color must be a pleasing pastel hex code.' },
+                      { text: 'Analyze this photo in depth. What are the subject\'s most charming and distinctive visual features (facial expression, eye sparkle and shape, warm smile, hairstyle or ears/fur texture, signature accessories, and overall lovely energy)? Describe them in 2-3 vivid sentences so they can be captured as an irresistibly cute, lovable 2D pet creature mascot.' },
                       { inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } }
                     ]
                   }]
@@ -1256,21 +1017,17 @@ export default function InteriorScreen({
 
             if (visionResp.ok) {
               const vData = await visionResp.json();
-              const txt = vData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-              const match = txt.match(/#[0-9a-fA-F]{6}/);
-              if (match) detectedColor = match[0];
+              visualFeatureDescription = vData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
 
-              const lower = txt.toLowerCase();
-              if (lower.includes('canine') || lower.includes('dog') || lower.includes('wolf')) detectedSpecies = 'canine';
-              else if (lower.includes('feline') || lower.includes('cat') || lower.includes('tiger') || lower.includes('panther')) detectedSpecies = 'feline';
-              else if (lower.includes('rabbit') || lower.includes('bunny') || lower.includes('hare')) detectedSpecies = 'rabbit';
+              // Optional helper parsing for fallback SVG/emoji only (not passed to prompt)
+              const lower = visualFeatureDescription.toLowerCase();
+              if (lower.includes('dog') || lower.includes('puppy') || lower.includes('canine')) detectedSpecies = 'canine';
+              else if (lower.includes('cat') || lower.includes('kitten') || lower.includes('feline')) detectedSpecies = 'feline';
+              else if (lower.includes('rabbit') || lower.includes('bunny')) detectedSpecies = 'rabbit';
               else if (lower.includes('bear') || lower.includes('panda')) detectedSpecies = 'bear';
-              else if (lower.includes('bird') || lower.includes('avian') || lower.includes('chick') || lower.includes('phoenix')) detectedSpecies = 'bird';
-              else if (lower.includes('fox') || lower.includes('kitsune')) detectedSpecies = 'fox';
-              else if (lower.includes('deer') || lower.includes('elk') || lower.includes('stag')) detectedSpecies = 'deer';
-              else if (lower.includes('rodent') || lower.includes('hamster') || lower.includes('squirrel')) detectedSpecies = 'rodent';
-              else if (lower.includes('dragon') || lower.includes('wyvern')) detectedSpecies = 'dragon';
-              else if (lower.includes('aquatic') || lower.includes('seal') || lower.includes('whale') || lower.includes('otter')) detectedSpecies = 'aquatic';
+              else if (lower.includes('bird') || lower.includes('chick')) detectedSpecies = 'bird';
+              else if (lower.includes('fox')) detectedSpecies = 'fox';
+              else if (lower.includes('hamster') || lower.includes('rodent')) detectedSpecies = 'rodent';
             }
           } catch (visionErr) {
             console.warn('Vision photo analysis fallback:', visionErr);
@@ -1281,22 +1038,25 @@ export default function InteriorScreen({
           for (const m of imgCandidates) {
             try {
               const personalityTraitMap = {
-                '다정한': 'affectionate, gentle and warm smiling expression',
-                '장난꾸러기': 'playful, mischievous expression with a cheeky grin',
-                '잠꾸러기': 'sleepy, cozy expression with eyelids drooping sleepily',
-                '애교쟁이': 'super cute, charming and loving sparkling eyes expression',
-                '호기심많은': 'curious, wide-eyed inquisitive expression',
+                '다정한': 'affectionate, gentle and warm smiling expression with loving eyes',
+                '장난꾸러기': 'playful, mischievous expression with a cheeky grin and lively sparkle',
+                '잠꾸러기': 'sleepy, cozy expression with eyelids drooping comfortably',
+                '애교쟁이': 'super cute, charming and loving sparkling eyes with blushy cheeks',
+                '호기심많은': 'curious, wide-eyed inquisitive expression tilted with wonder',
               };
               const trait = personalityTraitMap[newPersonality] || `${newPersonality} expression`;
               const targetStageNum = familyPetmong?.level ? (familyPetmong.level >= 20 ? 4 : familyPetmong.level >= 10 ? 3 : familyPetmong.level >= 5 ? 2 : 1) : 1;
               const finalPrompt = `IMAGE-TO-IMAGE CREATURE MASCOT GENERATION:
-Transform the uploaded input photo into a 2D flat kawaii vector pet creature mascot hatched from an egg in the 'Sumone' app art style (Stage ${targetStageNum}).
-Crucial requirements:
-1. Inherit the facial features, eye shape, distinct expression, and joyful warm vibe directly from the provided input image.
-2. Species archetype: cute ${detectedSpecies} lineage creature.
-3. Primary theme color: ${detectedColor}, expressing ${trait}.
-4. Vector art: Minimalist, clean thick lines, pastel tones, zero realistic human skin photorealism, fully rendered as an adorable creature mascot.
-5. Plain solid pure white background (#FFFFFF), centered character.`;
+Transform the uploaded photo into an irresistibly cute, lovable 2D flat kawaii pet creature mascot (Stage ${targetStageNum}) in the charming 'Sumone' app art style.
+
+Visual Analysis of the Photo:
+${visualFeatureDescription || 'Faithfully capture the cheerful facial expression, sweet eyes, and lovely aura from the provided photo.'}
+
+Core Design Instructions:
+1. Reinterpret the Subject: Seamlessly translate the subject's distinct facial expression, eye characteristics, lovely smile, and unique charm from the photo into an endearing creature face.
+2. Personality & Mood: Radiate an adorable ${trait}.
+3. Aesthetics: Minimalist 2D flat kawaii vector art, clean bold outlines, soft gentle pastel tones, rounded cuddly silhouette, iconic and lovable proportions, zero realistic human skin photorealism.
+4. Plain solid pure white background (#FFFFFF) only: Zero background elements, no scenery, no borders, NEVER draw checkerboard grid, NEVER draw checkered tiles or fake transparency squares. Centered standalone character on clean pure white canvas.`;
 
               const imgResp = await fetch(
                 `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${clientApiKey}`,
@@ -1337,33 +1097,9 @@ Crucial requirements:
           detailedError = clientErr?.message || String(clientErr);
         }
       } else {
-        // Fallback: Supabase Edge Function if clientApiKey is not set
-        try {
-          const { data, error } = await supabase.functions.invoke('generate-petmong', {
-            body: {
-              imageBase64: result.assets[0].base64,
-              personality: newPersonality,
-            }
-          });
-
-          if (error) {
-            let errMsg = error.message;
-            if (error.context) {
-              try {
-                const errJson = await error.context.json();
-                if (errJson?.error) errMsg = errJson.error;
-              } catch (_) {}
-            }
-            throw new Error(errMsg);
-          }
-
-          if (data?.imageUrl) {
-            generatedImageUrl = data.imageUrl;
-          }
-        } catch (edgeErr) {
-          console.warn('Edge Function create error:', edgeErr);
-          detailedError = edgeErr?.message || String(edgeErr);
-        }
+        // Fallback: Seamless Vector Petmong Generation if clientApiKey is not set
+        const targetStageNum = familyPetmong?.level ? (familyPetmong.level >= 20 ? 4 : familyPetmong.level >= 10 ? 3 : familyPetmong.level >= 5 ? 2 : 1) : 1;
+        generatedImageUrl = createPetmongSvg(targetStageNum, detectedColor, newPersonality, detectedSpecies);
       }
 
       // 3. If generation succeeded, save/update in database
@@ -1394,7 +1130,8 @@ Crucial requirements:
               emoji: matchedEmoji,
               image_url: generatedImageUrl,
               personality: newPersonality,
-              updated_at: new Date().toISOString(),
+              level: 1,
+              exp: 0,
             };
 
             const { data: updatedChar, error: updateError } = await supabase
@@ -1420,13 +1157,17 @@ Crucial requirements:
 
             setIsGenerating(false);
             setMyCharacter(updatedChar);
+            setActiveStageImageUrl(updatedChar.image_url);
             setCreateModalVisible(false);
             setPetmongCharacters(prev => prev.map(c => c.id === updatedChar.id ? updatedChar : c));
-            Alert.alert('외형 변경 완료! ✨', `500 P를 사용하여 ${newName.trim()}(이)의 외형이 새롭게 환생했습니다! 기존 레벨과 경험치는 그대로 유지됩니다.`);
+            Alert.alert('외형 환생 완료! ✨', `500 P를 사용하여 ${newName.trim()}(이)가 새로운 외형으로 환생했습니다! 1단계 아기몽부터 새로운 성장이 시작됩니다 🌱`);
 
             if (updatedChar.id && updatedChar.image_url) {
-              const currentStage = (updatedChar.level >= 20 ? 4 : updatedChar.level >= 10 ? 3 : updatedChar.level >= 5 ? 2 : 1);
-              savePetmongStageImage(updatedChar.id, currentStage, updatedChar.image_url);
+              await resetPetmongStageImages(updatedChar.id);
+              await savePetmongStageImage(updatedChar.id, 1, updatedChar.image_url);
+              startBackgroundStagePreGeneration(updatedChar, (stage, url) => {
+                console.log(`[Stage Pre-Gen] Stage ${stage} completed for ${updatedChar.name}`);
+              });
             }
             return;
           } else {
@@ -1498,13 +1239,14 @@ Crucial requirements:
               try {
                 setIsGenerating(true);
                 if (isModifying && familyPetmong?.id) {
-                  if (onDeductPoints) await onDeductPoints(500, '반려몽 외형 변경');
+                  if (onDeductPoints) await onDeductPoints(500, '반려몽 외형 변경/환생');
                   const updateData = {
                     name: newName.trim(),
                     emoji: '🐣',
                     image_url: null,
                     personality: newPersonality,
-                    updated_at: new Date().toISOString(),
+                    level: 1,
+                    exp: 0,
                   };
                   const { data: updatedChar, error: updateError } = await supabase
                     .from('petmong_characters')
@@ -1515,9 +1257,10 @@ Crucial requirements:
                   if (updateError) throw updateError;
                   setIsGenerating(false);
                   setMyCharacter(updatedChar);
+                  setActiveStageImageUrl(null);
                   setCreateModalVisible(false);
                   setPetmongCharacters(prev => prev.map(c => c.id === updatedChar.id ? updatedChar : c));
-                  Alert.alert('외형 변경 완료! ✨', '기본 꼬물이 몽이 외형으로 변경되었습니다!');
+                  Alert.alert('외형 환생 완료! ✨', '기본 꼬물이 몽이 외형으로 환생했습니다! 1단계 아기몽부터 새롭게 성장합니다 🌱');
                   return;
                 }
 
@@ -1554,6 +1297,26 @@ Crucial requirements:
     }
   };
 
+    if (isModifying) {
+      Alert.alert(
+        '반려몽 외형 환생 (500 P)',
+        `500 P를 사용하여 새로운 사진으로 외형을 환생시키겠습니까?\n\n※ 환생 시 레벨과 경험치는 1단계 아기몽(Lv.1, EXP 0)으로 초기화되어 처음부터 새롭게 성장합니다.`,
+        [
+          { text: '취소', style: 'cancel' },
+          {
+            text: '사진 선택하고 환생하기',
+            onPress: () => {
+              executePickImage();
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    executePickImage();
+  };
+
   // Handle Quick Character Creation & Appearance Change with Emoji (500P for modification)
   const handleCreateWithEmoji = async () => {
     if (!newName.trim()) {
@@ -1567,50 +1330,53 @@ Crucial requirements:
       return;
     }
 
-    try {
-      setIsGenerating(true);
+    const executeEmojiChange = async () => {
+      try {
+        setIsGenerating(true);
 
-      if (isModifying && familyPetmong?.id) {
-        if (onDeductPoints) {
-          await onDeductPoints(500, '반려몽 외형 변경');
+        if (isModifying && familyPetmong?.id) {
+          if (onDeductPoints) {
+            await onDeductPoints(500, '반려몽 외형 변경/환생');
+          }
+
+          const updateData = {
+            name: newName.trim(),
+            emoji: newEmoji || '🐶',
+            image_url: null,
+            personality: newPersonality,
+            level: 1,
+            exp: 0,
+          };
+
+          const { data: updatedChar, error: updateError } = await supabase
+            .from('petmong_characters')
+            .update(updateData)
+            .eq('id', familyPetmong.id)
+            .select()
+            .single();
+
+          if (updateError) throw updateError;
+
+          try {
+            await supabase.from('petmong_activities').insert({
+              character_id: familyPetmong.id,
+              user_id: currentUserProfile.id,
+              activity_type: 'REINCARNATION',
+              notes: `${currentUserProfile.name || '가족'}님이 500P로 우리 반려몽의 모습을 ${newEmoji}로 변경했습니다!`,
+              exp_earned: 0,
+            });
+          } catch (actErr) {
+            console.warn('Activity log error:', actErr);
+          }
+
+          setIsGenerating(false);
+          setMyCharacter(updatedChar);
+          setActiveStageImageUrl(null);
+          setCreateModalVisible(false);
+          setPetmongCharacters(prev => prev.map(c => c.id === updatedChar.id ? updatedChar : c));
+          Alert.alert('외형 환생 완료! ✨', `500 P를 사용하여 ${newName.trim()}(이)의 외형이 새롭게 환생했습니다! 1단계 아기몽부터 새롭게 성장합니다 🌱`);
+          return;
         }
-
-        const updateData = {
-          name: newName.trim(),
-          emoji: newEmoji || '🐶',
-          image_url: null,
-          personality: newPersonality,
-          updated_at: new Date().toISOString(),
-        };
-
-        const { data: updatedChar, error: updateError } = await supabase
-          .from('petmong_characters')
-          .update(updateData)
-          .eq('id', familyPetmong.id)
-          .select()
-          .single();
-
-        if (updateError) throw updateError;
-
-        try {
-          await supabase.from('petmong_activities').insert({
-            character_id: familyPetmong.id,
-            user_id: currentUserProfile.id,
-            activity_type: 'REINCARNATION',
-            notes: `${currentUserProfile.name || '가족'}님이 500P로 우리 반려몽의 모습을 ${newEmoji}로 변경했습니다!`,
-            exp_earned: 0,
-          });
-        } catch (actErr) {
-          console.warn('Activity log error:', actErr);
-        }
-
-        setIsGenerating(false);
-        setMyCharacter(updatedChar);
-        setCreateModalVisible(false);
-        setPetmongCharacters(prev => prev.map(c => c.id === updatedChar.id ? updatedChar : c));
-        Alert.alert('외형 변경 완료! ✨', `500 P를 사용하여 ${newName.trim()}(이)의 외형이 새롭게 변경되었습니다!`);
-        return;
-      }
 
       // Initial Free Creation
       const newCharData = {
@@ -1643,6 +1409,26 @@ Crucial requirements:
       Alert.alert('오류 발생', '반려몽 생성에 실패했습니다. 다시 시도해주세요.');
     }
   };
+
+  if (isModifying) {
+    Alert.alert(
+      '반려몽 외형 환생 (500 P)',
+      `500 P를 사용하여 ${newEmoji || '새로운'} 모습으로 외형을 환생시키겠습니까?\n\n※ 환생 시 레벨과 경험치는 1단계 아기몽(Lv.1, EXP 0)으로 초기화되어 처음부터 새롭게 성장합니다.`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '환생하기',
+          onPress: () => {
+            executeEmojiChange();
+          },
+        },
+      ]
+    );
+    return;
+  }
+
+  executeEmojiChange();
+};
 
   // Handle Interaction
   const handleInteract = (actionType) => {
@@ -1765,7 +1551,7 @@ Crucial requirements:
           dailyCareCount={dailyCareCount}
           maxDailyCare={MAX_DAILY_CARE}
           onCareAction={handleGameCareAction}
-          transparentUrl={displayedTransparentUrl || transparentImageCache.get(displayedCharacter.image_url)}
+          transparentUrl={displayedTransparentUrl || effectiveImageUrl || transparentImageCache.get(displayedCharacter.image_url)}
           onOpenGrowthBook={() => {
             setGrowthBookTargetChar(displayedCharacter || myCharacter);
             setGrowthBookInitialTab('growth');
@@ -1920,29 +1706,35 @@ Crucial requirements:
                 <View>
                   <Text style={styles.modalSubDesc}>
                     {displayedCharacter
-                      ? '가족 사진을 올려 반려몽의 외형을 새롭게 바꿀 수 있어요! 기존 누적 레벨과 경험치는 그대로 영구 보존됩니다.'
+                      ? '가족 사진을 올려 반려몽의 외형을 새롭게 환생시킬 수 있어요! 1단계 아기몽(Lv.1, EXP 0)부터 새로운 성장 여정이 시작됩니다.'
                       : '가족 사진이나 이미지를 올리면 AI가 우리 가족을 지켜줄 든든하고 귀여운 맞춤 수호 반려몽을 만들어 드려요!'}
                   </Text>
 
                   {/* Point info badge for modification */}
                   {displayedCharacter && (
                     <View style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      backgroundColor: (points || 0) >= 500 ? '#F5F3FF' : '#FFF1F2',
-                      paddingHorizontal: 14,
-                      paddingVertical: 9,
-                      borderRadius: 12,
+                      backgroundColor: '#FFFBEB',
+                      borderColor: '#FDE68A',
                       borderWidth: 1,
-                      borderColor: (points || 0) >= 500 ? '#DDD6FE' : '#FECDD3',
-                      marginBottom: 12,
+                      borderRadius: 14,
+                      padding: 12,
+                      marginBottom: 14,
                     }}>
-                      <Text style={{ fontSize: 12.5, fontWeight: '700', color: (points || 0) >= 500 ? '#6D28D9' : '#BE123C' }}>
-                        🪄 외형 변경 비용: 500 P
-                      </Text>
-                      <Text style={{ fontSize: 12, fontWeight: '800', color: (points || 0) >= 500 ? '#7C3AED' : '#E11D48' }}>
-                        가족 보유: {points || 0} P {(points || 0) >= 500 ? '✅' : '❌ (부족)'}
+                      <View style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        marginBottom: 6,
+                      }}>
+                        <Text style={{ fontSize: 13, fontWeight: '800', color: (points || 0) >= 500 ? '#7C3AED' : '#BE123C' }}>
+                          🪄 외형 환생 비용: 500 P
+                        </Text>
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: (points || 0) >= 500 ? '#059669' : '#E11D48' }}>
+                          가족 보유: {points || 0} P {(points || 0) >= 500 ? '✅' : '❌ (부족)'}
+                        </Text>
+                      </View>
+                      <Text style={{ fontSize: 11.5, color: '#92400E', fontWeight: '600', lineHeight: 16 }}>
+                        💡 <Text style={{ fontWeight: '800' }}>환생 안내:</Text> 새로운 외형으로 변경 시 레벨과 경험치가 1단계 아기몽(Lv.1, EXP 0)으로 초기화되며, 성장 단계(2~4단계)도 새로운 외형에 맞춰 처음부터 다시 진화합니다.
                       </Text>
                     </View>
                   )}

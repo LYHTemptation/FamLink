@@ -34,7 +34,6 @@ import UserAvatar from './UserAvatar';
 import SnackCatchGame from './minigames/SnackCatchGame';
 import KeepyUppyGame from './minigames/KeepyUppyGame';
 import BubblePopGame from './minigames/BubblePopGame';
-import DreamConstellationGame from './minigames/DreamConstellationGame';
 import { stripEmojis } from '../utils/topics';
 
 // 한국형 생활 행동 기반 아이콘 & 카테고리 스마트 매퍼
@@ -97,7 +96,6 @@ export default function SmallTalkScreen({
   points = 0,
   pointHistory = [],
   onAddResponse,
-  onDeductPoints,
   familyMembers = [],
   messages = [],
   onSendOrderNotice,
@@ -133,11 +131,10 @@ export default function SmallTalkScreen({
   // 로컬 집안일 상태
   const [fallbackChores, setFallbackChores] = useState([]);
 
-  // 1. 체류형 4대 반려몽 미니게임 모달 상태
+  // 1. 체류형 3대 반려몽 미니게임 모달 상태
   const [isSnackGameVisible, setIsSnackGameVisible] = useState(false);
   const [isKeepyUppyGameVisible, setIsKeepyUppyGameVisible] = useState(false);
   const [isBubbleGameVisible, setIsBubbleGameVisible] = useState(false);
-  const [isDreamGameVisible, setIsDreamGameVisible] = useState(false);
 
   // 사용자별(개인별) 일일 미니게임 성장 보상 한도 (1인당 하루 최대 3회)
   const DAILY_GAME_REWARD_LIMIT = 3;
@@ -949,30 +946,6 @@ export default function SmallTalkScreen({
                   </View>
                   <Text style={styles.gameChevron}>›</Text>
                 </TouchableOpacity>
-
-                {/* 펫게임 4: 꿈나라 별자리 잇기 */}
-                <TouchableOpacity
-                  style={styles.gameActionCard}
-                  onPress={() => setIsDreamGameVisible(true)}
-                  activeOpacity={0.85}
-                >
-                  <View style={[styles.gameLargeIconBox, { backgroundColor: '#C7D2FE' }]}>
-                    <Text style={styles.gameLargeIcon}>🌙</Text>
-                  </View>
-                  <View style={styles.gameInfoCol}>
-                    <View style={styles.gameTitleRow}>
-                      <Text style={styles.gameTitleText}>꿈나라 별자리 잇기</Text>
-                      <View style={[styles.gameBadgePill, { backgroundColor: '#C7D2FE' }]}>
-                        <Text style={[styles.gameBadgePillText, { color: '#4338CA' }]}>은하수 탐색</Text>
-                      </View>
-                    </View>
-                    <Text style={styles.gameDescText}>무수히 쏟아지는 밤하늘 은하수에서 신비로운 별자리를 찾아 이어보세요!</Text>
-                    <Text style={[styles.gamePointsText, { color: canEarnReward ? '#16A34A' : '#78716C' }]}>
-                      {canEarnReward ? '+15 ~ +50 EXP 획득 🌱' : '자유 연습 모드 🎯 (EXP 완료)'}
-                    </Text>
-                  </View>
-                  <Text style={styles.gameChevron}>›</Text>
-                </TouchableOpacity>
               </View>
             </View>
 
@@ -1240,17 +1213,6 @@ export default function SmallTalkScreen({
         onClose={() => setIsBubbleGameVisible(false)}
         onGameComplete={(result) => handleCompletePetmongGame('비누방울 머지', result)}
       />
-
-      {/* 4. 꿈나라 별자리 잇기 */}
-      <DreamConstellationGame
-        visible={isDreamGameVisible}
-        character={petCharacter}
-        transparentUrl={petCharacter?.image_url}
-        canEarnReward={canEarnReward}
-        remainingRewards={remainingRewards}
-        onClose={() => setIsDreamGameVisible(false)}
-        onGameComplete={(result) => handleCompletePetmongGame('꿈나라 별자리 잇기', result)}
-      />
     </View>
   );
 }
@@ -1316,16 +1278,16 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
 
-  // 2. 오늘의 대화 주제 카드 (Figma 14:1689)
+  // 2. 오늘의 대화 주제 카드 (Warm Cozy Living 피치 & 코랄 테마)
   dailyTalkCard: {
-    backgroundColor: '#FAF5FF', // 소프트 라벤더
+    backgroundColor: '#FFF5F2', // 소프트 피치 (Warm Cozy)
     borderRadius: 24,
     borderWidth: 1.2,
-    borderColor: '#C4B5FD',
+    borderColor: '#FFE8E0',
     padding: 18,
-    shadowColor: '#7C3AED',
+    shadowColor: '#FF6B47',
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 2,
   },
@@ -1334,7 +1296,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(196, 181, 253, 0.35)',
+    borderBottomColor: '#FFE8E0',
     paddingBottom: 14,
     marginBottom: 14,
   },
@@ -1351,12 +1313,12 @@ const styles = StyleSheet.create({
   dailyTalkTag: {
     fontSize: 10,
     fontWeight: '900',
-    color: '#7C3AED',
+    color: '#FF6B47',
     letterSpacing: 1,
     textTransform: 'uppercase',
   },
   participationBadge: {
-    backgroundColor: '#EDE9FE',
+    backgroundColor: '#FFE8E0',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 12,
@@ -1364,7 +1326,7 @@ const styles = StyleSheet.create({
   participationBadgeText: {
     fontSize: 11,
     fontWeight: '900',
-    color: '#6D28D9',
+    color: '#FF6B47',
   },
   dailyTalkTopicRow: {
     marginBottom: 4,
@@ -1377,7 +1339,7 @@ const styles = StyleSheet.create({
   },
   dailyTalkSubText: {
     fontSize: 12,
-    color: '#8B5CF6',
+    color: '#78716C',
     fontWeight: '600',
   },
   gaugeCircle: {
@@ -1385,7 +1347,7 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 24,
     borderWidth: 3,
-    borderColor: '#C4B5FD',
+    borderColor: '#FF6B47',
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1393,7 +1355,7 @@ const styles = StyleSheet.create({
   gaugeCircleText: {
     fontSize: 12,
     fontWeight: '900',
-    color: '#7C3AED',
+    color: '#FF6B47',
   },
 
   // 인라인 바로 답변 입력창
@@ -1403,7 +1365,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     borderWidth: 1.2,
-    borderColor: '#E8E0D0',
+    borderColor: '#FFE8E0',
     paddingHorizontal: 12,
     paddingVertical: 6,
     marginBottom: 14,
@@ -1416,7 +1378,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   quickAnswerSubmitBtn: {
-    backgroundColor: '#8B5CF6',
+    backgroundColor: '#FF6B47',
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 12,
@@ -1580,9 +1542,9 @@ const styles = StyleSheet.create({
   },
   dailyTalkBonusBanner: {
     marginTop: 14,
-    backgroundColor: '#EDE9FE',
+    backgroundColor: '#FFF0EB',
     borderWidth: 1.2,
-    borderColor: '#C4B5FD',
+    borderColor: '#FFD5C8',
     borderStyle: 'dashed',
     borderRadius: 16,
     paddingVertical: 12,
@@ -1591,7 +1553,7 @@ const styles = StyleSheet.create({
   dailyTalkBonusText: {
     fontSize: 13,
     fontWeight: '900',
-    color: '#6D28D9',
+    color: '#FF6B47',
   },
 
   // 3. 서브탭 스위처: [✅ 집안일] vs [🎮 게임]
@@ -2049,7 +2011,7 @@ const styles = StyleSheet.create({
   modalTopicTitle: {
     fontSize: 15,
     fontWeight: '800',
-    color: '#7C3AED',
+    color: '#FF6B47',
     marginBottom: 12,
     lineHeight: 20,
   },

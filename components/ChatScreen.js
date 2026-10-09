@@ -27,7 +27,6 @@ import {
   Lightbulb,
   Trophy,
   Flame,
-  Ticket,
   Send,
   Image as ImageIcon,
   ChevronLeft,
@@ -52,9 +51,64 @@ import {
   Paperclip,
   Share2,
   CheckSquare,
+  BookOpen,
+  Truck,
 } from 'lucide-react-native';
 import UserAvatar from './UserAvatar';
 import { stripEmojis } from '../utils/topics';
+
+/**
+ * 포토북 주문 메시지 파서:
+ * - JSON 카드: [포토북카드] {...}
+ * - 원시 JSON 문자열: {"bookTitle": ...}
+ * - 텍스트 포맷: 📦 [실물 포토북 양장본 주문 접수]...
+ */
+export const parsePhotobookOrderData = (text) => {
+  if (!text) return null;
+  const trimmed = typeof text === 'string' ? text.trim() : (typeof text === 'object' && text !== null ? JSON.stringify(text) : '');
+  if (!trimmed) return null;
+
+  // 1. Raw JSON, [포토북카드] JSON, or [포토북주문] JSON
+  if (trimmed.startsWith('{') || trimmed.startsWith('[포토북카드] ') || trimmed.startsWith('[포토북주문] ')) {
+    try {
+      const cleanJson = trimmed.replace(/^\[포토북카드\]\s*|^\[포토북주문\]\s*/, '');
+      const parsed = JSON.parse(cleanJson);
+      if (parsed && (parsed.bookTitle || parsed.volume || parsed.totalPrice !== undefined)) {
+        return {
+          bookTitle: parsed.bookTitle || '우리 가족 이야기',
+          volume: parsed.volume || 'Vol. 1',
+          copies: parsed.copies ? (typeof parsed.copies === 'number' ? `${parsed.copies}권` : String(parsed.copies)) : '1권',
+          totalPrice: Number(parsed.totalPrice) || 0,
+          pointsUsed: Number(parsed.pointsUsed) || 0,
+          recipient: parsed.recipient || '가족',
+          address: parsed.address || '',
+        };
+      }
+    } catch (e) {}
+  }
+
+  // 2. Formatted text starting with 📦 [실물 포토북
+  if (trimmed.includes('[실물 포토북 양장본 주문 접수]') || trimmed.includes('[실물 포토북 양장본 발주 완료]')) {
+    const titleMatch = trimmed.match(/• 제목:\s*"([^"]+)"(?:\s*\(([^)]+)\))?/);
+    const copiesMatch = trimmed.match(/• 부수:\s*(.+)/);
+    const pointsMatch = trimmed.match(/• 포인트 할인:\s*-?([0-9,]+)\s*P/);
+    const priceMatch = trimmed.match(/• (?:최종 결제액|결제 금액):\s*([0-9,]+)원/);
+    const recipientMatch = trimmed.match(/• 수령인:\s*([^님\n]+)/);
+    const addressMatch = trimmed.match(/• 배송지:\s*(.+)/);
+
+    return {
+      bookTitle: titleMatch ? titleMatch[1] : '가족 포토북',
+      volume: titleMatch && titleMatch[2] ? titleMatch[2] : 'Vol. 1',
+      copies: copiesMatch ? copiesMatch[1].trim() : '1권',
+      pointsUsed: pointsMatch ? parseInt(pointsMatch[1].replace(/,/g, ''), 10) : 0,
+      totalPrice: priceMatch ? parseInt(priceMatch[1].replace(/,/g, ''), 10) : 0,
+      recipient: recipientMatch ? recipientMatch[1].trim() : '가족',
+      address: addressMatch ? addressMatch[1].trim() : '',
+    };
+  }
+
+  return null;
+};
 
 /**
  * 대화방 목록 시간 포맷팅 (카카오톡/라인/메신저 표준 UX):
@@ -696,7 +750,22 @@ export default function ChatScreen({
     if (!msg) return { text: '', cardType: null };
     if (msg.image) return { text: '사진을 공유했습니다.', cardType: 'image' };
 
-    const rawText = msg.text || '';
+    let rawText = '';
+    if (typeof msg.text === 'string') {
+      rawText = msg.text;
+    } else if (typeof msg.text === 'object' && msg.text !== null) {
+      if (msg.text.bookTitle) {
+        rawText = `[포토북] "${msg.text.bookTitle}" 주문 접수`;
+      } else {
+        try {
+          rawText = JSON.stringify(msg.text);
+        } catch {
+          rawText = String(msg.text);
+        }
+      }
+    } else if (msg.text != null) {
+      rawText = String(msg.text);
+    }
     if (!rawText) return { text: '', cardType: null };
 
     // 1. [집안일카드] or [장보기카드]
@@ -768,6 +837,12 @@ export default function ChatScreen({
       } catch (e) {
         return { text: '파일 공유', cardType: 'file' };
       }
+    }
+
+    // 8. [포토북카드] / 포토북 실물 주문
+    const photobookData = parsePhotobookOrderData(rawText);
+    if (photobookData) {
+      return { text: `포토북 주문: ${photobookData.bookTitle}`, cardType: 'photobook' };
     }
 
     return { text: rawText, cardType: null };
@@ -1091,25 +1166,44 @@ export default function ChatScreen({
       isReadByAll = unreadCountForMsg === 0;
     }
 
-    // Special Announcement Card for Coupon Usage
-    if (item.text && item.text.includes('[쿠폰 사용 알림]')) {
-      return (
-        <View key={item.id || item.timestamp} style={styles.couponAnnouncementRow}>
-          <View style={styles.couponAnnouncementCard}>
-            <View style={styles.couponAnnouncementHeader}>
-              <View style={styles.couponIconCircle}>
-                <Ticket size={16} color="#FF6B47" />
-              </View>
-              <Text style={styles.couponAnnouncementBadge}>가족 쿠폰 사용 알림</Text>
-              <Text style={styles.couponAnnouncementTime}>{item.timestamp}</Text>
-            </View>
-            <Text style={styles.couponAnnouncementText}>
-              {item.text.replace(/^📢\s*\[쿠폰 사용 알림\]\s*/, '')}
-            </Text>
-          </View>
-        </View>
-      );
+    let bubbleText = '';
+    if (typeof item.text === 'string') {
+      bubbleText = item.text;
+    } else if (typeof item.text === 'object' && item.text !== null) {
+      if (item.text.bookTitle) {
+        bubbleText =
+          `📦 [실물 포토북 양장본 주문 접수]\n` +
+          `• 제목: "${item.text.bookTitle}" (${item.text.volume || '1권'})\n` +
+          `• 부수: ${item.text.copies ? `${item.text.copies}권` : '1권'}\n` +
+          (item.text.pointsUsed ? `• 포인트 할인: -${Number(item.text.pointsUsed).toLocaleString()} P\n` : '') +
+          (item.text.totalPrice !== undefined ? `• 최종 결제액: ${Number(item.text.totalPrice).toLocaleString()}원\n` : '') +
+          (item.text.recipient ? `• 수령인: ${item.text.recipient}님\n` : '') +
+          `정밀 POD 인쇄 제작이 접수되었습니다! 🎉`;
+      } else {
+        try {
+          bubbleText = JSON.stringify(item.text);
+        } catch {
+          bubbleText = String(item.text);
+        }
+      }
+    } else if (item.text != null) {
+      bubbleText = String(item.text);
     }
+
+    const photobookOrderData = parsePhotobookOrderData(item.text) || parsePhotobookOrderData(bubbleText);
+    const isCard = Boolean(
+      photobookOrderData ||
+      (bubbleText && (
+        bubbleText.startsWith('[파일] ') ||
+        bubbleText.startsWith('[동영상] ') ||
+        bubbleText.startsWith('[음성메모] ') ||
+        bubbleText.startsWith('[가족투표] ') ||
+        bubbleText.startsWith('[일정공유] ') ||
+        bubbleText.startsWith('[집안일카드] ') ||
+        bubbleText.startsWith('[장보기카드] ') ||
+        bubbleText.startsWith('[위치공유] ')
+      ))
+    );
 
     return (
       <View style={[styles.messageRow, isMe ? styles.myRow : styles.otherRow]}>
@@ -1135,15 +1229,76 @@ export default function ChatScreen({
             isMe ? styles.myBubble : styles.otherBubble,
             item.image ? styles.imageBubble : null,
             item.isSending ? styles.sendingBubble : null,
+            isCard ? (isMe ? styles.myCardBubble : styles.otherCardBubble) : null,
           ]}>
             {item.image && (
               <Image source={{ uri: item.image }} style={styles.bubbleImage} resizeMode="cover" />
             )}
-            {item.text && item.text.startsWith('[파일] ') ? (
+            {photobookOrderData ? (
+              <View style={styles.photobookCardContainer}>
+                <View style={styles.photobookCardTop}>
+                  <View style={styles.photobookIconCircle}>
+                    <BookOpen size={18} color="#FF6B47" strokeWidth={2.4} />
+                  </View>
+                  <View style={styles.photobookDetailsCol}>
+                    <View style={styles.photobookBadgeRow}>
+                      <Text style={styles.photobookCardBadge}>실물 양장본 발주 접수</Text>
+                      <Sparkles size={11} color="#FF6B47" />
+                    </View>
+                    <Text style={styles.photobookCardTitle} numberOfLines={2}>
+                      {photobookOrderData.bookTitle}
+                    </Text>
+                    <Text style={styles.photobookCardSubtitle}>
+                      150×210mm A5 · {photobookOrderData.volume || 'Vol. 1'} · {photobookOrderData.copies}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.photobookSpecsBox}>
+                  {photobookOrderData.orderNumber && (
+                    <View style={styles.photobookSpecRow}>
+                      <Text style={styles.photobookSpecLabel}>주문번호</Text>
+                      <Text style={styles.photobookSpecValue}>{photobookOrderData.orderNumber}</Text>
+                    </View>
+                  )}
+                  <View style={styles.photobookSpecRow}>
+                    <Text style={styles.photobookSpecLabel}>수령인</Text>
+                    <Text style={styles.photobookSpecValue}>{photobookOrderData.recipient}님</Text>
+                  </View>
+                  {photobookOrderData.pointsUsed > 0 && (
+                    <View style={styles.photobookSpecRow}>
+                      <Text style={styles.photobookSpecLabel}>포인트 할인</Text>
+                      <Text style={[styles.photobookSpecValue, { color: '#FF6B47' }]}>
+                        -{photobookOrderData.pointsUsed.toLocaleString()} P
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.photobookSpecRow}>
+                    <Text style={styles.photobookSpecLabel}>결제 금액</Text>
+                    <Text style={[styles.photobookSpecValue, { fontWeight: '800', color: '#1C1917' }]}>
+                      {photobookOrderData.totalPrice.toLocaleString()}원
+                    </Text>
+                  </View>
+                  {photobookOrderData.address ? (
+                    <View style={styles.photobookSpecRow}>
+                      <Text style={styles.photobookSpecLabel}>배송지</Text>
+                      <Text style={styles.photobookSpecValue} numberOfLines={1}>{photobookOrderData.address}</Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                <View style={styles.photobookCardFooter}>
+                  <Truck size={13} color="#16A34A" style={{ marginRight: 5 }} />
+                  <Text style={styles.photobookCardFooterText}>
+                    정밀 POD 인쇄 제작 중 (3~4일 이내 도착)
+                  </Text>
+                </View>
+              </View>
+            ) : bubbleText && bubbleText.startsWith('[파일] ') ? (
               (() => {
                 let fileData = {};
                 try {
-                  fileData = JSON.parse(item.text.replace('[파일] ', ''));
+                  fileData = JSON.parse(bubbleText.replace('[파일] ', ''));
                 } catch (e) {
                   fileData = { name: '첨부파일', size: '문서', uri: '' };
                 }
@@ -1174,11 +1329,11 @@ export default function ChatScreen({
                   </TouchableOpacity>
                 );
               })()
-            ) : item.text && item.text.startsWith('[동영상] ') ? (
+            ) : bubbleText.startsWith('[동영상] ') ? (
               (() => {
                 let videoData = {};
                 try {
-                  videoData = JSON.parse(item.text.replace('[동영상] ', ''));
+                  videoData = JSON.parse(bubbleText.replace('[동영상] ', ''));
                 } catch (e) {
                   videoData = { duration: 0, name: '가족 비디오', uri: '' };
                 }
@@ -1213,11 +1368,11 @@ export default function ChatScreen({
                   </TouchableOpacity>
                 );
               })()
-            ) : item.text && item.text.startsWith('[음성메모] ') ? (
+            ) : bubbleText.startsWith('[음성메모] ') ? (
               (() => {
                 let voiceData = {};
                 try {
-                  voiceData = JSON.parse(item.text.replace('[음성메모] ', ''));
+                  voiceData = JSON.parse(bubbleText.replace('[음성메모] ', ''));
                 } catch (e) {
                   voiceData = { duration: 3 };
                 }
@@ -1260,11 +1415,11 @@ export default function ChatScreen({
                   </TouchableOpacity>
                 );
               })()
-            ) : item.text && item.text.startsWith('[가족투표] ') ? (
+            ) : bubbleText.startsWith('[가족투표] ') ? (
               (() => {
                 let pollData = {};
                 try {
-                  pollData = JSON.parse(item.text.replace('[가족투표] ', ''));
+                  pollData = JSON.parse(bubbleText.replace('[가족투표] ', ''));
                 } catch (e) {
                   pollData = { title: '가족 투표', options: [] };
                 }
@@ -1336,11 +1491,11 @@ export default function ChatScreen({
                   </View>
                 );
               })()
-            ) : item.text && item.text.startsWith('[일정공유] ') ? (
+            ) : bubbleText.startsWith('[일정공유] ') ? (
               (() => {
                 let eventData = {};
                 try {
-                  eventData = JSON.parse(item.text.replace('[일정공유] ', ''));
+                  eventData = JSON.parse(bubbleText.replace('[일정공유] ', ''));
                 } catch (e) {
                   eventData = { title: '가족 일정', date: '오늘', time: '18:00' };
                 }
@@ -1384,12 +1539,12 @@ export default function ChatScreen({
                   </View>
                 );
               })()
-            ) : item.text && (item.text.startsWith('[집안일카드] ') || item.text.startsWith('[장보기카드] ')) ? (
+            ) : (bubbleText.startsWith('[집안일카드] ') || bubbleText.startsWith('[장보기카드] ')) ? (
               (() => {
-                const isLegacyShopping = item.text.startsWith('[장보기카드] ');
+                const isLegacyShopping = bubbleText.startsWith('[장보기카드] ');
                 let choreData = {};
                 try {
-                  choreData = JSON.parse(item.text.replace(isLegacyShopping ? '[장보기카드] ' : '[집안일카드] ', ''));
+                  choreData = JSON.parse(bubbleText.replace(isLegacyShopping ? '[장보기카드] ' : '[집안일카드] ', ''));
                 } catch (e) {
                   choreData = { title: '집안일 항목' };
                 }
@@ -1438,11 +1593,11 @@ export default function ChatScreen({
                   </View>
                 );
               })()
-            ) : item.text && item.text.startsWith('[위치공유] ') ? (
+            ) : bubbleText.startsWith('[위치공유] ') ? (
               (() => {
                 let locData = {};
                 try {
-                  locData = JSON.parse(item.text.replace('[위치공유] ', ''));
+                  locData = JSON.parse(bubbleText.replace('[위치공유] ', ''));
                 } catch (e) {
                   locData = { title: '약속 장소', lat: 37.5665, lng: 126.9780 };
                 }
@@ -1484,9 +1639,9 @@ export default function ChatScreen({
                   </View>
                 );
               })()
-            ) : item.text && item.text.trim() !== '' ? (
+            ) : bubbleText.trim() !== '' ? (
               <Text style={isMe ? styles.myMessageText : styles.otherMessageText}>
-                {item.text}
+                {bubbleText}
               </Text>
             ) : null}
           </View>
@@ -1612,6 +1767,9 @@ export default function ChatScreen({
                         iconColor = '#3B82F6';
                       } else if (cardType === 'image') {
                         IconComp = ImageIcon;
+                        iconColor = '#FF6B47';
+                      } else if (cardType === 'photobook') {
+                        IconComp = BookOpen;
                         iconColor = '#FF6B47';
                       }
 
@@ -2645,6 +2803,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingHorizontal: 15,
     paddingVertical: 10,
+    maxWidth: '100%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
@@ -2663,6 +2822,24 @@ const styles = StyleSheet.create({
     borderColor: '#E8E0D0',
     alignSelf: 'flex-start',
   },
+  myCardBubble: {
+    backgroundColor: '#FFF5F2',
+    borderColor: '#FFE8E0',
+    borderWidth: 1,
+    padding: 0,
+    borderRadius: 18,
+    alignSelf: 'flex-end',
+    overflow: 'hidden',
+  },
+  otherCardBubble: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#F5F0E8',
+    borderWidth: 1,
+    padding: 0,
+    borderRadius: 18,
+    alignSelf: 'flex-start',
+    overflow: 'hidden',
+  },
   imageBubble: {
     padding: 6,
     borderRadius: 16,
@@ -2678,12 +2855,14 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#FFFFFF',
     lineHeight: 21,
+    ...(Platform.OS === 'web' ? { wordBreak: 'break-word' } : {}),
   },
   otherMessageText: {
     fontSize: 15,
     fontWeight: '500',
     color: '#1C1917',
     lineHeight: 21,
+    ...(Platform.OS === 'web' ? { wordBreak: 'break-word' } : {}),
   },
   metaInfo: {
     flexDirection: 'row',
@@ -2818,59 +2997,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 3,
-  },
-
-  // COUPON ANNOUNCEMENT CARD
-  couponAnnouncementRow: {
-    alignItems: 'center',
-    marginVertical: 12,
-    paddingHorizontal: 10,
-    width: '100%',
-  },
-  couponAnnouncementCard: {
-    backgroundColor: '#FFF5F2',
-    borderWidth: 1.5,
-    borderColor: '#FFD8C4',
-    borderRadius: 18,
-    padding: 16,
-    width: '100%',
-    maxWidth: 400,
-    shadowColor: '#FF6B47',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  couponAnnouncementHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  couponIconCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#FFE3D6',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 8,
-  },
-  couponAnnouncementBadge: {
-    fontSize: 13,
-    fontWeight: '900',
-    color: '#FF6B47',
-    flex: 1,
-  },
-  couponAnnouncementTime: {
-    fontSize: 11,
-    color: '#A8A29E',
-    fontWeight: '600',
-  },
-  couponAnnouncementText: {
-    fontSize: 13.5,
-    fontWeight: '700',
-    color: '#1C1917',
-    lineHeight: 19,
   },
 
   // CREATE ROOM MODAL
@@ -3504,6 +3630,95 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     color: '#FFFFFF',
+  },
+
+  // 8. Photobook Order Card (포토북 실물 주문 카드)
+  photobookCardContainer: {
+    width: 255,
+    maxWidth: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#FFE8E0',
+  },
+  photobookCardTop: {
+    flexDirection: 'row',
+    marginBottom: 10,
+  },
+  photobookIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFF5F2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: '#FFE8E0',
+  },
+  photobookDetailsCol: {
+    flex: 1,
+  },
+  photobookBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 3,
+  },
+  photobookCardBadge: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: '#FF6B47',
+  },
+  photobookCardTitle: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: '#1C1917',
+    lineHeight: 18,
+    marginBottom: 2,
+  },
+  photobookCardSubtitle: {
+    fontSize: 11,
+    color: '#78716C',
+    fontWeight: '600',
+  },
+  photobookSpecsBox: {
+    backgroundColor: '#FAF8F3',
+    borderRadius: 12,
+    padding: 10,
+    marginVertical: 6,
+    borderWidth: 1,
+    borderColor: '#F5F0E8',
+    gap: 4,
+  },
+  photobookSpecRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  photobookSpecLabel: {
+    fontSize: 11,
+    color: '#78716C',
+    fontWeight: '600',
+  },
+  photobookSpecValue: {
+    fontSize: 11.5,
+    color: '#1C1917',
+    fontWeight: '700',
+  },
+  photobookCardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: '#F5F0E8',
+    marginTop: 4,
+  },
+  photobookCardFooterText: {
+    fontSize: 10.5,
+    color: '#16A34A',
+    fontWeight: '700',
   },
 
   // ==========================================

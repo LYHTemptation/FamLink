@@ -169,11 +169,20 @@ export default function PhotobookStudioScreen({
   // 2. 도서 기본 정보 & 겉표지 커스텀 상태
   const [bookTitle, setBookTitle] = useState('우리 가족의 첫 번째 이야기 (Vol. 1)');
   const [bookSubtitle, setBookSubtitle] = useState('사소한 일상이 모여 만든 가장 눈부신 기적');
+  const [coverSignature, setCoverSignature] = useState('우리 가족의 따뜻한 이야기');
   const [coverPhoto, setCoverPhoto] = useState(null); // 커스텀 겉표지 대표 사진
   const [coverStyle, setCoverStyle] = useState('classic'); // 'classic' (액자형) | 'full' (화보형) | 'minimal' (감성 타이포)
   const [editTitleModalVisible, setEditTitleModalVisible] = useState(false);
   const [tempTitle, setTempTitle] = useState(bookTitle);
   const [tempSubtitle, setTempSubtitle] = useState(bookSubtitle);
+  const [tempSignature, setTempSignature] = useState('우리 가족의 따뜻한 이야기');
+
+  const handleOpenEditTitleModal = useCallback(() => {
+    setTempTitle(bookTitle);
+    setTempSubtitle(bookSubtitle);
+    setTempSignature(coverSignature);
+    setEditTitleModalVisible(true);
+  }, [bookTitle, bookSubtitle, coverSignature]);
 
   // 3. 15×21cm A5 세로형 단행본 1:1 낱장 포커스 페이징 체계 (0: 겉표지, 1..16: P.1~P.16)
   const [currentPageNum, setCurrentPageNum] = useState(0); // 0 = 겉표지, 1~16 = P.1 ~ P.16
@@ -362,7 +371,9 @@ export default function PhotobookStudioScreen({
   // 주문 관련 폼 상태
   const [orderName, setOrderName] = useState(currentUserProfile?.name || '');
   const [orderPhone, setOrderPhone] = useState(currentUserProfile?.phone || '');
+  const [orderPostalCode, setOrderPostalCode] = useState('06234');
   const [orderAddress, setOrderAddress] = useState(currentUserProfile?.address || '');
+  const [orderShippingMemo, setOrderShippingMemo] = useState('문 앞에 놓아주세요');
   const [orderAddCopy, setOrderAddCopy] = useState(false); // 조부모님 선물용 추가 1권 (+14,000원 특가)
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
 
@@ -397,6 +408,7 @@ export default function PhotobookStudioScreen({
       if (payload.bookFontSize !== undefined) setBookFontSize(payload.bookFontSize);
       if (payload.bookTitle !== undefined) setBookTitle(payload.bookTitle);
       if (payload.bookSubtitle !== undefined) setBookSubtitle(payload.bookSubtitle);
+      if (payload.coverSignature !== undefined) setCoverSignature(payload.coverSignature);
       if (payload.coverPhoto !== undefined) setCoverPhoto(payload.coverPhoto);
       if (payload.coverStyle !== undefined) setCoverStyle(payload.coverStyle);
       if (payload.pageFormats !== undefined) setPageFormats(payload.pageFormats);
@@ -434,6 +446,7 @@ export default function PhotobookStudioScreen({
       bookFontSize,
       bookTitle,
       bookSubtitle,
+      coverSignature,
       coverPhoto,
       coverStyle,
       pageFormats,
@@ -479,6 +492,7 @@ export default function PhotobookStudioScreen({
     bookFontSize,
     bookTitle,
     bookSubtitle,
+    coverSignature,
     coverPhoto,
     coverStyle,
     pageFormats,
@@ -927,6 +941,43 @@ ${topicSnippets.join('\n')}
     }
 
     setIsSubmittingOrder(true);
+
+    const orderDateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    const orderNumber = `ORD-${orderDateStr}-${randomSuffix}`;
+
+    const orderRecord = {
+      family_id: currentUserProfile?.family_id || null,
+      profile_id: currentUserProfile?.id || null,
+      order_number: orderNumber,
+      book_title: bookTitle || '우리 가족 이야기',
+      cover_type: coverStyle === 'hardcover' ? '하드커버 (양장본)' : (coverStyle === 'softcover' ? '소프트커버' : '양장본'),
+      page_count: TOTAL_PHOTOBOOK_PAGES || 16,
+      recipient_name: orderName.trim(),
+      recipient_phone: orderPhone.trim(),
+      postal_code: orderPostalCode.trim() || '06234',
+      shipping_address: orderAddress.trim(),
+      shipping_memo: orderShippingMemo.trim() || '문 앞 배송 부탁드립니다',
+      status: 'pending',
+    };
+
+    // Supabase photobook_orders 테이블에 주문 데이터 INSERT
+    try {
+      const { data: insertedOrder, error: orderError } = await supabase
+        .from('photobook_orders')
+        .insert(orderRecord)
+        .select()
+        .single();
+
+      if (orderError) {
+        console.warn('photobook_orders insert error:', orderError);
+      } else {
+        console.log('Successfully inserted photobook order:', insertedOrder?.order_number);
+      }
+    } catch (err) {
+      console.warn('Exception during photobook order insert:', err);
+    }
+
     setTimeout(() => {
       setIsSubmittingOrder(false);
       setOrderModalVisible(false);
@@ -936,56 +987,88 @@ ${topicSnippets.join('\n')}
       }
 
       if (onSendOrderNotice) {
-        onSendOrderNotice({
+        const orderPayload = {
+          orderNumber,
           bookTitle,
           volume: selectedVolume,
           copies: orderAddCopy ? 2 : 1,
           totalPrice: finalCashPrice,
           pointsUsed: appliedPoints,
-          recipient: orderName,
-        });
+          recipient: orderName.trim(),
+          address: orderAddress.trim(),
+          postalCode: orderPostalCode.trim() || '06234',
+        };
+        onSendOrderNotice(`[포토북카드] ${JSON.stringify(orderPayload)}`);
       }
 
       Alert.alert(
         '양장본 인쇄 주문 접수 완료! 📦',
-        `[${bookTitle}] 총 ${orderAddCopy ? '2권 (선물용 1권 포함)' : '1권'}이 인쇄 제작에 들어갑니다.\n\n• 가족 포인트: -${appliedPoints.toLocaleString()} P 할인 적용\n• 최종 결제액: ${finalCashPrice.toLocaleString()}원\n• 정밀 POD 인쇄 (150×210mm A5 클래식 16P 랑데뷰 160g 양장본)\n• 예상 배송일: 영업일 기준 3~4일 이내`,
+        `[${bookTitle}] 총 ${orderAddCopy ? '2권 (선물용 1권 포함)' : '1권'}이 인쇄 제작에 들어갑니다.\n\n• 주문번호: ${orderNumber}\n• 가족 포인트: -${appliedPoints.toLocaleString()} P 할인 적용\n• 최종 결제액: ${finalCashPrice.toLocaleString()}원\n• 정밀 POD 인쇄 (150×210mm A5 클래식 16P 랑데뷰 160g 양장본)\n• 예상 배송일: 영업일 기준 3~4일 이내`,
         [{ text: '확인' }]
       );
-    }, 1200);
+    }, 1000);
   };
 
   // =========================================================
   // 📘 겉표지 렌더러 (3대 표지 스타일: classic, full, minimal)
   // =========================================================
   const renderCoverPage = (isFull = false, isViewer = false) => {
+    const isCompactCanvas = !isViewer && a5CanvasHeight < 410;
+    const isCompactViewer = isViewer && isCompactViewerHeight;
+
+    // 모바일 캔버스 높이에 맞춘 대표 사진 액자 반응형 크기 산출
+    const photoBoxWidth = isViewer
+      ? (isCompactViewer ? 135 : 165)
+      : isFull
+        ? (isCompactCanvas ? 105 : 130)
+        : 90;
+    const photoBoxHeight = isViewer
+      ? (isCompactViewer ? 145 : 180)
+      : isFull
+        ? (isCompactCanvas ? 115 : 145)
+        : 100;
+
     return (
       <View style={[styles.coverPageContent, { backgroundColor: currentTheme.bg }]}>
         {/* 책등 스파인 효과 라인 */}
         <View style={[styles.coverSpineBand, { backgroundColor: currentTheme.accent }]} />
 
-        <View style={styles.coverInnerSurface}>
+        <View style={[styles.coverInnerSurface, (isCompactCanvas || isCompactViewer) && { paddingVertical: 2 }]}>
           {coverStyle === 'classic' && (
-            <View style={styles.coverClassicContainer}>
-              <View style={styles.coverEmbossFrame}>
-                <Text style={[styles.coverKickerBadge, { color: currentTheme.accent, ...fontStyle }]}>
+            <View style={[styles.coverClassicContainer, (isCompactCanvas || isCompactViewer) && { padding: 4 }]}>
+              <View style={[styles.coverEmbossFrame, (isCompactCanvas || isCompactViewer) && { paddingVertical: 6, paddingHorizontal: 6 }]}>
+                <Text style={[styles.coverKickerBadge, { color: currentTheme.accent, ...fontStyle }, (isCompactCanvas || isCompactViewer) && { fontSize: 6.8 }]}>
                   FAMLINK FAMILY STORYBOOK · 150×210MM A5
                 </Text>
                 <TouchableOpacity
-                  onPress={() => {
-                    setTempTitle(bookTitle);
-                    setTempSubtitle(bookSubtitle);
-                    setEditTitleModalVisible(true);
-                  }}
+                  onPress={handleOpenEditTitleModal}
                   activeOpacity={0.75}
+                  style={{ alignItems: 'center' }}
                 >
                   <Text
-                    style={[styles.coverMainTitle, { color: currentTheme.text, ...fontStyle, fontSize: Math.round((isViewer ? 20 : isFull ? 17 : 14) * fontScale) }]}
+                    style={[
+                      styles.coverMainTitle,
+                      {
+                        color: currentTheme.text,
+                        ...fontStyle,
+                        fontSize: Math.round((isViewer ? (isCompactViewer ? 17 : 20) : isFull ? (isCompactCanvas ? 15 : 17) : 13) * fontScale),
+                        lineHeight: Math.round((isViewer ? (isCompactViewer ? 22 : 26) : isFull ? (isCompactCanvas ? 19 : 22) : 17) * fontScale),
+                      }
+                    ]}
                     numberOfLines={2}
                   >
                     {bookTitle}
                   </Text>
                   <Text
-                    style={[styles.coverSubTitle, { color: currentTheme.accent, ...fontStyle, fontSize: Math.round((isViewer ? 12 : isFull ? 11 : 9.5) * fontScale) }]}
+                    style={[
+                      styles.coverSubTitle,
+                      {
+                        color: currentTheme.accent,
+                        ...fontStyle,
+                        fontSize: Math.round((isViewer ? (isCompactViewer ? 10.5 : 12) : isFull ? (isCompactCanvas ? 9.5 : 11) : 8.5) * fontScale),
+                        marginBottom: (isCompactCanvas || isCompactViewer) ? 2 : 5,
+                      }
+                    ]}
                     numberOfLines={1}
                   >
                     {bookSubtitle}
@@ -994,7 +1077,7 @@ ${topicSnippets.join('\n')}
 
                 {/* 중앙 정방형 대표 사진 액자 */}
                 <TouchableOpacity
-                  style={[styles.coverPhotoFrameBox, (isViewer || isFull) && { width: isViewer ? 170 : 140, height: isViewer ? 190 : 160 }]}
+                  style={[styles.coverPhotoFrameBox, { width: photoBoxWidth, height: photoBoxHeight }]}
                   onPress={() => handleOpenPhotoPicker('cover')}
                   activeOpacity={0.85}
                 >
@@ -1002,19 +1085,38 @@ ${topicSnippets.join('\n')}
                     <Image source={{ uri: effectiveCoverPhoto }} style={styles.coverPhotoImg} resizeMode="cover" />
                   ) : (
                     <View style={styles.coverPhotoEmptyPlaceholder}>
-                      <Camera size={26} color={currentTheme.accent} />
-                      <Text style={[styles.coverPhotoEmptyText, { color: currentTheme.accent }]}>표지 사진</Text>
+                      <Camera size={isCompactCanvas ? 22 : 26} color={currentTheme.accent} />
+                      <Text style={[styles.coverPhotoEmptyText, { color: currentTheme.accent }, isCompactCanvas && { fontSize: 8.5 }]}>표지 사진</Text>
                     </View>
                   )}
                   <View style={styles.coverPhotoBadge}>
-                    <Text style={styles.coverPhotoBadgeText}>대표 사진 📸</Text>
+                    <Text style={[styles.coverPhotoBadgeText, isCompactCanvas && { fontSize: 7.5 }]}>대표 사진 📸</Text>
                   </View>
                 </TouchableOpacity>
 
-                <Text style={[styles.coverFamilySignature, { color: currentTheme.text, ...fontStyle }]}>
-                  {currentUserProfile?.name || '가족'}네 따뜻한 보금자리
-                </Text>
-                <Text style={styles.coverHardcoverFootnote}>16P Hardcover 양장제본 · 랑데뷰 160g</Text>
+                {/* 하단 서명 및 양장제본 각주 영역 (터치 시 서명 편집 연동) */}
+                <TouchableOpacity
+                  style={styles.coverFooterArea}
+                  onPress={handleOpenEditTitleModal}
+                  activeOpacity={0.75}
+                >
+                  <Text
+                    style={[
+                      styles.coverFamilySignature,
+                      {
+                        color: currentTheme.text,
+                        ...fontStyle,
+                        fontSize: Math.round((isCompactCanvas ? 8.5 : 9.5) * fontScale),
+                      }
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {coverSignature || '우리 가족의 따뜻한 이야기'}
+                  </Text>
+                  <Text style={[styles.coverHardcoverFootnote, (isCompactCanvas || isCompactViewer) && { fontSize: 7, marginTop: 1 }]}>
+                    16P Hardcover 양장제본 · 랑데뷰 160g
+                  </Text>
+                </TouchableOpacity>
               </View>
             </View>
           )}
@@ -1036,11 +1138,7 @@ ${topicSnippets.join('\n')}
               {/* 풀사진 위 반투명 감성 타이틀 바 */}
               <TouchableOpacity
                 style={styles.coverFullPhotoOverlay}
-                onPress={() => {
-                  setTempTitle(bookTitle);
-                  setTempSubtitle(bookSubtitle);
-                  setEditTitleModalVisible(true);
-                }}
+                onPress={handleOpenEditTitleModal}
                 activeOpacity={0.8}
               >
                 <Text style={[styles.coverFullTitle, { ...fontStyle, fontSize: Math.round((isViewer ? 20 : isFull ? 17 : 14) * fontScale) }]} numberOfLines={2}>
@@ -1061,13 +1159,9 @@ ${topicSnippets.join('\n')}
           {coverStyle === 'minimal' && (
             <View style={styles.coverMinimalContainer}>
               <View style={styles.coverMinimalCenter}>
-                <Heart size={28} color={currentTheme.accent} style={{ marginBottom: 12 }} />
+                <Heart size={isCompactCanvas ? 22 : 28} color={currentTheme.accent} style={{ marginBottom: isCompactCanvas ? 8 : 12 }} />
                 <TouchableOpacity
-                  onPress={() => {
-                    setTempTitle(bookTitle);
-                    setTempSubtitle(bookSubtitle);
-                    setEditTitleModalVisible(true);
-                  }}
+                  onPress={handleOpenEditTitleModal}
                   activeOpacity={0.75}
                   style={{ alignItems: 'center' }}
                 >
@@ -1086,14 +1180,18 @@ ${topicSnippets.join('\n')}
                   </Text>
                 </TouchableOpacity>
               </View>
-              <Text style={[styles.coverFamilySignature, { color: currentTheme.text, ...fontStyle }]}>
-                {currentUserProfile?.name || '가족'}의 이야기 · FamLink Press
-              </Text>
+              <TouchableOpacity
+                onPress={handleOpenEditTitleModal}
+                activeOpacity={0.75}
+                style={{ alignItems: 'center' }}
+              >
+                <Text style={[styles.coverFamilySignature, { color: currentTheme.text, ...fontStyle }, isCompactCanvas && { fontSize: 8.5 }]}>
+                  {coverSignature || '우리 가족의 따뜻한 이야기'}
+                </Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
-
-        <Text style={styles.pageNumberFootnote}>- 겉표지 (Cover) -</Text>
       </View>
     );
   };
@@ -1142,11 +1240,7 @@ ${topicSnippets.join('\n')}
             <View style={{ flexDirection: 'row', gap: 6, marginTop: 8 }}>
               <TouchableOpacity
                 style={styles.editTitleMiniBtn}
-                onPress={() => {
-                  setTempTitle(bookTitle);
-                  setTempSubtitle(bookSubtitle);
-                  setEditTitleModalVisible(true);
-                }}
+                onPress={handleOpenEditTitleModal}
                 activeOpacity={0.7}
               >
                 <Edit3 size={11} color="#78716C" style={{ marginRight: 4 }} />
@@ -1827,12 +1921,29 @@ ${topicSnippets.join('\n')}
             keyboardType="phone-pad"
           />
 
+          <Text style={styles.formInputLabel}>우편번호</Text>
+          <TextInput
+            style={styles.formInput}
+            value={orderPostalCode}
+            onChangeText={setOrderPostalCode}
+            placeholder="우편번호 (예: 06234)"
+            keyboardType="numeric"
+          />
+
           <Text style={styles.formInputLabel}>배송지 주소</Text>
           <TextInput
             style={styles.formInput}
             value={orderAddress}
             onChangeText={setOrderAddress}
             placeholder="상세 주소를 입력하세요"
+          />
+
+          <Text style={styles.formInputLabel}>배송 요청사항</Text>
+          <TextInput
+            style={styles.formInput}
+            value={orderShippingMemo}
+            onChangeText={setOrderShippingMemo}
+            placeholder="배송 요청사항 (예: 문 앞에 놓아주세요)"
           />
 
           <TouchableOpacity
@@ -1856,18 +1967,30 @@ ${topicSnippets.join('\n')}
   const renderEditTitleModalContent = () => (
     <View style={[styles.modalBackdrop, { justifyContent: 'center' }]}>
       <View style={styles.editTitleModalCard}>
-        <Text style={styles.editTitleHeading}>도서 제목 & 부제 편집</Text>
+        <Text style={styles.editTitleHeading}>도서 제목 & 표지 서명 편집</Text>
         <Text style={styles.formInputLabel}>메인 제목</Text>
         <TextInput
           style={styles.formInput}
           value={tempTitle}
           onChangeText={setTempTitle}
+          placeholder="예: 우리 가족의 첫 번째 이야기"
+          placeholderTextColor="#A8A29E"
         />
         <Text style={styles.formInputLabel}>부제 (한 줄 설명)</Text>
         <TextInput
           style={styles.formInput}
           value={tempSubtitle}
           onChangeText={setTempSubtitle}
+          placeholder="예: 사소한 일상이 모여 만든 가장 눈부신 기적"
+          placeholderTextColor="#A8A29E"
+        />
+        <Text style={styles.formInputLabel}>표지 하단 서명 (가족 문구)</Text>
+        <TextInput
+          style={styles.formInput}
+          value={tempSignature}
+          onChangeText={setTempSignature}
+          placeholder="예: 우리 가족의 따뜻한 이야기, 행복한 우리 집"
+          placeholderTextColor="#A8A29E"
         />
         <View style={styles.modalBtnRow}>
           <TouchableOpacity
@@ -1885,9 +2008,11 @@ ${topicSnippets.join('\n')}
               }
               const newT = tempTitle.trim();
               const newSub = tempSubtitle.trim();
+              const newSig = tempSignature.trim() || '우리 가족의 따뜻한 이야기';
               setBookTitle(newT);
               setBookSubtitle(newSub);
-              broadcastPhotobookChange({ bookTitle: newT, bookSubtitle: newSub });
+              setCoverSignature(newSig);
+              broadcastPhotobookChange({ bookTitle: newT, bookSubtitle: newSub, coverSignature: newSig });
               setEditTitleModalVisible(false);
             }}
           >
@@ -2481,7 +2606,7 @@ ${topicSnippets.join('\n')}
                 <Text style={styles.singlePageInfoCenterText} numberOfLines={1}>
                   {currentPageNum === 0
                     ? '하드커버 표지 편집'
-                    : `P.${currentPageNum} / ${TOTAL_PHOTOBOOK_PAGES}P`}
+                    : `P.${currentPageNum} (${getPageFormat(currentSpreadIndex, activeSingleSide) === 'photo' ? '사진' : getPageFormat(currentSpreadIndex, activeSingleSide) === 'hybrid' ? '사진+톡' : currentPageNum === 1 ? '프롤로그' : currentPageNum === 15 ? '리포트' : currentPageNum === TOTAL_PHOTOBOOK_PAGES ? '에필로그' : '스몰톡'}) · ${TOTAL_PHOTOBOOK_PAGES}P`}
                 </Text>
               </View>
 
@@ -2539,15 +2664,7 @@ ${topicSnippets.join('\n')}
                   return (
                     <View key="page-cover" style={{ width: winW, alignItems: 'center', justifyContent: 'center' }}>
                       <View style={[styles.singlePageFullFrame, { backgroundColor: currentTheme.bg, borderColor: currentTheme.border, width: a5CanvasWidth, height: a5CanvasHeight, alignSelf: 'center' }]}>
-                        <TouchableOpacity
-                          style={styles.singlePageBadgeFloating}
-                          onPress={() => handleOpenFullViewer(0)}
-                          activeOpacity={0.8}
-                        >
-                          <BookOpen size={10} color="#FFFFFF" style={{ marginRight: 3 }} />
-                          <Text style={styles.singlePageBadgeFloatingText}>📘 겉표지</Text>
-                        </TouchableOpacity>
-                        <View style={[styles.singlePageFullContent, isSmallScreen && { padding: 10 }]}>
+                        <View style={[styles.singlePageFullContent, (isSmallScreen || a5CanvasHeight < 420) ? { padding: 8 } : { padding: 12 }]}>
                           {renderCoverPage(true)}
                         </View>
                       </View>
@@ -2628,15 +2745,11 @@ ${topicSnippets.join('\n')}
 
                     <TouchableOpacity
                       style={styles.dockSubBtn}
-                      onPress={() => {
-                        setTempTitle(bookTitle);
-                        setTempSubtitle(bookSubtitle);
-                        setEditTitleModalVisible(true);
-                      }}
+                      onPress={handleOpenEditTitleModal}
                       activeOpacity={0.8}
                     >
                       <Edit3 size={13} color="#1C1917" style={{ marginRight: 4 }} />
-                      <Text style={styles.dockSubBtnText}>제목/부제 편집</Text>
+                      <Text style={styles.dockSubBtnText}>제목/서명 편집</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
@@ -3055,8 +3168,36 @@ ${topicSnippets.join('\n')}
                 {Array.from({ length: TOTAL_PHOTOBOOK_PAGES }, (_, i) => i + 1).map((pageNum) => {
                   const isCurrent = currentPageNum === pageNum;
                   const sIdx = Math.floor((pageNum - 1) / 2);
+                  const side = pageNum % 2 === 1 ? 'left' : 'right';
                   const sDef = SPREAD_DEFINITIONS[sIdx] || SPREAD_DEFINITIONS[0];
-                  const icon = pageNum === 1 ? '📖' : pageNum === TOTAL_PHOTOBOOK_PAGES ? '✍️' : (sDef.category === 'interview' ? (pageNum % 2 === 1 ? '💬' : '📷') : (pageNum === 15 ? '📊' : '📷'));
+                  const format = getPageFormat(sIdx, side);
+
+                  let icon = '📷';
+                  let label = '사진';
+
+                  if (format === 'photo') {
+                    icon = '📷';
+                    label = '사진';
+                  } else if (format === 'hybrid') {
+                    icon = '✨';
+                    label = '사진+톡';
+                  } else {
+                    // format === 'smalltalk'
+                    if (pageNum === 1) {
+                      icon = '📖';
+                      label = '프롤로그';
+                    } else if (pageNum === 15) {
+                      icon = '📊';
+                      label = '리포트';
+                    } else if (pageNum === TOTAL_PHOTOBOOK_PAGES) {
+                      icon = '✍️';
+                      label = '에필로그';
+                    } else {
+                      icon = '💬';
+                      label = '스몰톡';
+                    }
+                  }
+
                   return (
                     <TouchableOpacity
                       key={`page-pick-${pageNum}`}
@@ -3074,7 +3215,7 @@ ${topicSnippets.join('\n')}
                         </Text>
                       </View>
                       <Text style={[styles.pageGridCellPages, isCurrent && styles.pageGridCellPagesActive]} numberOfLines={1}>
-                        {pageNum === 1 ? '프롤로그' : pageNum === TOTAL_PHOTOBOOK_PAGES ? '에필로그' : (pageNum === 15 ? '리포트' : (pageNum % 2 === 1 ? '인터뷰' : '사진'))}
+                        {label}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -6196,17 +6337,24 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#FFFFFF',
   },
+  coverFooterArea: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    paddingTop: 3,
+  },
   coverFamilySignature: {
     fontSize: 9.5,
     fontWeight: '700',
     textAlign: 'center',
-    marginTop: 4,
+    marginTop: 1,
   },
   coverHardcoverFootnote: {
     fontSize: 7.5,
     fontWeight: '600',
     color: '#A8A29E',
     letterSpacing: 0.5,
+    marginTop: 1.5,
   },
 
   // 화보형 (Full)

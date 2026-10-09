@@ -218,6 +218,7 @@ CREATE TABLE IF NOT EXISTS petmong_characters (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 ALTER TABLE petmong_characters ADD COLUMN IF NOT EXISTS vitals JSONB DEFAULT '{"hunger":80,"happiness":85,"cleanliness":90,"energy":95}'::jsonb;
+ALTER TABLE petmong_characters ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now());
 ALTER TABLE petmong_characters DISABLE ROW LEVEL SECURITY;
 
 -- 17. 반려몽 활동 및 상호작용 기록 (petmong_activities)
@@ -242,3 +243,25 @@ CREATE TABLE IF NOT EXISTS petmong_whispers (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 ALTER TABLE petmong_whispers DISABLE ROW LEVEL SECURITY;
+
+-- 19. 포토북 실물 주문 테이블 (photobook_orders)
+CREATE TABLE IF NOT EXISTS photobook_orders (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id UUID REFERENCES families(id) ON DELETE CASCADE,
+  profile_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+  order_number TEXT UNIQUE NOT NULL,
+  book_title TEXT NOT NULL,
+  cover_type TEXT DEFAULT '양장본',
+  page_count INTEGER DEFAULT 16,
+  recipient_name TEXT NOT NULL,
+  recipient_phone TEXT NOT NULL,
+  postal_code TEXT,
+  shipping_address TEXT NOT NULL,
+  shipping_memo TEXT,
+  status TEXT DEFAULT 'pending' NOT NULL,
+  tracking_number TEXT,
+  courier TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE photobook_orders DISABLE ROW LEVEL SECURITY;

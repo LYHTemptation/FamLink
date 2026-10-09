@@ -65,7 +65,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 // Import Screens & Libs
 import HomeScreen from './components/HomeScreen';
-import ChatScreen from './components/ChatScreen';
+import ChatScreen, { parsePhotobookOrderData } from './components/ChatScreen';
 import CalendarScreen from './components/CalendarScreen';
 import SmallTalkScreen from './components/SmallTalkScreen';
 import FamilyScreen from './components/FamilyScreen';
@@ -493,20 +493,64 @@ export default function App() {
       fetchRealSmallTalk(familyId),
       fetchRealProfiles(familyId),
       fetchRealShoppingItems(familyId),
-      fetchRealPetmongCharacters(familyId),
+      fetchRealPetmongCharacters(familyId, profile?.id),
       fetchRealPetVitals(familyId),
     ]);
     setAppLoading(false);
   };
 
-  const fetchRealPetmongCharacters = async (familyId) => {
-    const { data } = await supabase
-      .from('petmong_characters')
-      .select('*')
-      .eq('family_id', familyId)
-      .order('created_at', { ascending: true });
-    if (data) {
-      setPetmongCharacters(data);
+  const fetchRealPetmongCharacters = async (familyId, userId = profile?.id) => {
+    try {
+      const { data, error } = await supabase
+        .from('petmong_characters')
+        .select('*')
+        .eq('family_id', familyId)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.warn('Error fetching petmong characters:', error);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        setPetmongCharacters(data);
+      } else if (familyId && (userId || session?.user?.id)) {
+        const creatorId = userId || session?.user?.id;
+        // DB에 가족 대표 반려몽이 없을 경우, 초기 기본 수호 반려몽('몽이') 자동 입주 & DB 저장
+        const defaultPet = {
+          user_id: creatorId,
+          family_id: familyId,
+          name: '몽이',
+          emoji: '🐶',
+          image_url: null,
+          personality: '다정한',
+          level: 1,
+          exp: 0,
+          vitals: { hunger: 80, happiness: 85, cleanliness: 90, energy: 95 },
+        };
+
+        const { data: inserted, error: insertErr } = await supabase
+          .from('petmong_characters')
+          .insert(defaultPet)
+          .select();
+
+        if (!insertErr && inserted && inserted.length > 0) {
+          setPetmongCharacters(inserted);
+          try {
+            await supabase.from('petmong_activities').insert({
+              family_id: familyId,
+              actor_id: inserted[0].id,
+              action_type: 'BIRTH',
+            });
+          } catch (_) {}
+        } else {
+          setPetmongCharacters([]);
+        }
+      } else {
+        setPetmongCharacters([]);
+      }
+    } catch (err) {
+      console.warn('Exception in fetchRealPetmongCharacters:', err);
     }
   };
 
@@ -653,7 +697,13 @@ export default function App() {
           profile_id: m.profile_id,
           senderObj: m.profiles || null,
           senderName: m.profiles?.name || null,
-          text: m.text || '',
+          text: typeof m.text === 'string'
+            ? m.text
+            : (typeof m.text === 'object' && m.text !== null
+                ? (m.text.bookTitle
+                    ? `📦 [실물 포토북 주문] "${m.text.bookTitle}" (수령인: ${m.text.recipient || '가족'}님)`
+                    : JSON.stringify(m.text))
+                : String(m.text || '')),
           image: m.image_url || null,
           image_url: m.image_url || null,
           room_id: m.room_id || 'family-group',
@@ -855,7 +905,18 @@ export default function App() {
       if (savedData) {
         const parsed = JSON.parse(savedData);
         setPoints(parsed.points ?? INITIAL_MOCK_DATA.points);
-        setMessages(parsed.messages ?? INITIAL_MOCK_DATA.messages);
+        const rawLoadedMessages = parsed.messages ?? INITIAL_MOCK_DATA.messages;
+        const sanitizedLoadedMessages = rawLoadedMessages.map(m => ({
+          ...m,
+          text: typeof m.text === 'string'
+            ? m.text
+            : (typeof m.text === 'object' && m.text !== null
+                ? (m.text.bookTitle
+                    ? `📦 [실물 포토북 주문] "${m.text.bookTitle}" (수령인: ${m.text.recipient || '가족'}님)`
+                    : JSON.stringify(m.text))
+                : String(m.text || '')),
+        }));
+        setMessages(sanitizedLoadedMessages);
         const filteredEvents = (parsed.events ?? []).filter(e => e && e.id !== 'e1' && e.id !== 'e2' && !e.title?.includes('가족 저녁 외식') && !e.title?.includes('엄마 생신'));
         setEvents(filteredEvents);
         setShoppingItems(normalizeRecurringItems(parsed.shoppingItems ?? INITIAL_MOCK_SHOPPING));
@@ -1428,9 +1489,21 @@ export default function App() {
     }
   };
 
-  const handleSendOrderNotice = async (noticeText) => {
+  const handleSendOrderNotice = async (noticePayload) => {
+    let orderData = {};
+    if (typeof noticePayload === 'object' && noticePayload !== null) {
+      orderData = noticePayload;
+    } else if (typeof noticePayload === 'string') {
+      const parsed = parsePhotobookOrderData ? parsePhotobookOrderData(noticePayload) : null;
+      if (parsed) {
+        orderData = parsed;
+      } else {
+        orderData = { bookTitle: noticePayload };
+      }
+    }
+    const cardText = `[포토북카드] ${JSON.stringify(orderData)}`;
     await handleSendMessage({
-      text: noticeText,
+      text: cardText,
       roomId: 'family-group',
     });
   };
@@ -1483,7 +1556,11 @@ export default function App() {
       profile_id: session?.user?.id || profile?.id || null,
       senderObj: profile || null,
       senderName: profile?.name || null,
-      text: messageData.text || '',
+      text: typeof messageData.text === 'string'
+        ? messageData.text
+        : (typeof messageData.text === 'object' && messageData.text !== null
+            ? JSON.stringify(messageData.text)
+            : String(messageData.text || '')),
       image: messageData.image || null,
       image_url: messageData.image || null,
       room_id: messageData.roomId || 'family-group',
@@ -2047,7 +2124,6 @@ export default function App() {
               points={points}
               pointHistory={pointHistory}
               onAddResponse={handleAddResponse}
-              onDeductPoints={handleDeductPoints}
               familyMembers={familyMembersList}
               messages={messages}
               onSendOrderNotice={handleSendOrderNotice}

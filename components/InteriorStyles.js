@@ -12,19 +12,6 @@ const styles = StyleSheet.create({
   },
   subHeaderTitle: commonStyles.subHeaderTitle,
   subHeaderSub: commonStyles.subHeaderSub,
-  openShopBtn: {
-    backgroundColor: '#FF7E82',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  openShopBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
   pointsBarCard: {
     flexDirection: 'row',
     justifyContent: 'space-between',

@@ -365,7 +365,7 @@ ${answersText || '아직 답변이 많지 않지만, 언제나 서로를 아끼�
                         발행일: 2026. 09 • FamLink Press
                       </Text>
                       <Text style={[styles.coverFamilyName, { color: selectedTheme.accent }]}>
-                        {currentUserProfile?.name || '가족'}네 따뜻한 보금자리
+                        우리 가족의 따뜻한 보금자리
                       </Text>
                     </View>
                   </View>

@@ -107,7 +107,7 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v56.0.0/ before 
   - Sub / Secondary: `#78716C` (Stone 500 - 보조 설명, 날짜/시간, 힌트)
   - Placeholder / Disabled: `#A8A29E` (Stone 400 - 인풋 플레이스홀더, 비활성 텍스트)
 - **Accent**:
-  - Petmong Purple: `#7C3AED` (반려몽 육성/스킬/상점 포인트)
+  - Petmong Purple: `#7C3AED` (반려몽 육성/외형 변경 포인트)
   - Success Green: `#2ECC71` (완료 체크, 온라인 상태 표시)
 - ⚠️ **절대 사용 금지 레거시 컬러**: 구형 연분홍 핑크 `#FF7E82`, `#FFF2F3`, `#FFE5E7` 및 차가운 블루그레이 `#F8F9FA`, `#F2F2F7`의 무분별한 신규 코드 삽입을 금지합니다.
 
