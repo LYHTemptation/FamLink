@@ -43,7 +43,7 @@ export default function FamilyScreen({
 }) {
   const [modalVisible, setModalVisible] = useState(false);
   const [policyModalVisible, setPolicyModalVisible] = useState(false);
-  const [activePolicyTab, setActivePolicyTab] = useState('privacy'); // 'privacy' | 'terms'
+  const [activePolicyTab, setActivePolicyTab] = useState('terms'); // 'terms' | 'privacy'
   const [editName, setEditName] = useState(currentUserProfile?.name || '');
   const [editRole, setEditRole] = useState(currentUserProfile?.role || '');
   const [selectedAvatar, setSelectedAvatar] = useState(currentUserProfile?.avatar || '👦');
@@ -413,17 +413,8 @@ export default function FamilyScreen({
               </TouchableOpacity>
             </View>
 
-            {/* 2-Tab Bar */}
+            {/* 2-Tab Bar (1. 서비스 이용약관, 2. 개인정보 처리방침) */}
             <View style={styles.policyTabBar}>
-              <TouchableOpacity
-                style={[styles.policyTabBtn, activePolicyTab === 'privacy' && styles.policyTabBtnActive]}
-                onPress={() => setActivePolicyTab('privacy')}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.policyTabBtnText, activePolicyTab === 'privacy' && styles.policyTabBtnTextActive]}>
-                  개인정보 처리방침
-                </Text>
-              </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.policyTabBtn, activePolicyTab === 'terms' && styles.policyTabBtnActive]}
                 onPress={() => setActivePolicyTab('terms')}
@@ -431,6 +422,15 @@ export default function FamilyScreen({
               >
                 <Text style={[styles.policyTabBtnText, activePolicyTab === 'terms' && styles.policyTabBtnTextActive]}>
                   서비스 이용약관
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.policyTabBtn, activePolicyTab === 'privacy' && styles.policyTabBtnActive]}
+                onPress={() => setActivePolicyTab('privacy')}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.policyTabBtnText, activePolicyTab === 'privacy' && styles.policyTabBtnTextActive]}>
+                  개인정보 처리방침
                 </Text>
               </TouchableOpacity>
             </View>

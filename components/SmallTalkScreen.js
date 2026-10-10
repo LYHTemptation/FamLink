@@ -1278,16 +1278,16 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
 
-  // 2. 오늘의 대화 주제 카드 (Warm Cozy Living 피치 & 코랄 테마)
+  // 2. 오늘의 대화 주제 카드 (Clean Surface & Warm Stone 테마)
   dailyTalkCard: {
-    backgroundColor: '#FFF5F2', // 소프트 피치 (Warm Cozy)
+    backgroundColor: '#FFFFFF', // 깔끔한 화이트 카드 표면
     borderRadius: 24,
     borderWidth: 1.2,
-    borderColor: '#FFE8E0',
+    borderColor: '#E8E0D0',
     padding: 18,
-    shadowColor: '#FF6B47',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
+    shadowColor: '#1C1917',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
   },
@@ -1296,7 +1296,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     borderBottomWidth: 1,
-    borderBottomColor: '#FFE8E0',
+    borderBottomColor: '#F5F0E8',
     paddingBottom: 14,
     marginBottom: 14,
   },
@@ -1318,10 +1318,12 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   participationBadge: {
-    backgroundColor: '#FFE8E0',
+    backgroundColor: '#FFF5F2',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FFE8E0',
   },
   participationBadgeText: {
     fontSize: 11,
@@ -1362,10 +1364,10 @@ const styles = StyleSheet.create({
   quickAnswerInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FAF8F3',
     borderRadius: 16,
     borderWidth: 1.2,
-    borderColor: '#FFE8E0',
+    borderColor: '#F5F0E8',
     paddingHorizontal: 12,
     paddingVertical: 6,
     marginBottom: 14,
@@ -1438,16 +1440,16 @@ const styles = StyleSheet.create({
   memberAnswerCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FAF8F3',
     borderRadius: 16,
     borderWidth: 1.2,
-    borderColor: '#E8E0D0',
+    borderColor: '#F5F0E8',
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
   myMemberAnswerCard: {
-    backgroundColor: '#FFFDF9',
-    borderColor: '#FDBA74',
+    backgroundColor: '#FFF5F2',
+    borderColor: '#FFE8E0',
   },
   memberAvatarRing: {
     width: 38,
