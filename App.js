@@ -354,21 +354,27 @@ export default function App() {
 
     const petmongChannel = supabase
       .channel(`realtime-petmong-${familyId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'petmong_characters', filter: `family_id=eq.${familyId}` }, () => {
-        fetchRealPetmongCharacters(familyId);
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'petmong_characters' }, (payload) => {
+        const row = payload.new || payload.old;
+        if (!row || !row.family_id || row.family_id === familyId) {
+          fetchRealPetmongCharacters(familyId);
+        }
       })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'petmong_activities', filter: `family_id=eq.${familyId}` }, (payload) => {
-        const actionType = payload.new?.action_type || '';
-        if (actionType.startsWith('VITALS_UPDATE:')) {
-          try {
-            const rawJson = actionType.substring('VITALS_UPDATE:'.length).split('__by__')[0];
-            const incomingVitals = JSON.parse(rawJson);
-            if (incomingVitals && typeof incomingVitals === 'object') {
-              setPetVitals(prev => ({ ...prev, ...incomingVitals }));
-              AsyncStorage.setItem(`@famlink_game_vitals_${familyId}`, JSON.stringify(incomingVitals)).catch(() => {});
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'petmong_activities' }, (payload) => {
+        const row = payload.new;
+        if (!row || !row.family_id || row.family_id === familyId) {
+          const actionType = row?.action_type || '';
+          if (actionType.startsWith('VITALS_UPDATE:')) {
+            try {
+              const rawJson = actionType.substring('VITALS_UPDATE:'.length).split('__by__')[0];
+              const incomingVitals = JSON.parse(rawJson);
+              if (incomingVitals && typeof incomingVitals === 'object') {
+                setPetVitals(prev => ({ ...prev, ...incomingVitals }));
+                AsyncStorage.setItem(`@famlink_game_vitals_${familyId}`, JSON.stringify(incomingVitals)).catch(() => {});
+              }
+            } catch (e) {
+              console.log('Error parsing realtime vitals:', e);
             }
-          } catch (e) {
-            console.log('Error parsing realtime vitals:', e);
           }
         }
       })
@@ -505,7 +511,7 @@ export default function App() {
         .from('petmong_characters')
         .select('*')
         .eq('family_id', familyId)
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: false });
 
       if (error) {
         console.warn('Error fetching petmong characters:', error);
@@ -658,6 +664,13 @@ export default function App() {
       return next;
     });
   };
+
+  // 거실(인테리어) 탭 진입 시 다른 가족이 변경한 반려몽 최신 데이터 즉시 동기화
+  useEffect(() => {
+    if (currentScreen === 'interior' && profile?.family_id) {
+      fetchRealPetmongCharacters(profile.family_id);
+    }
+  }, [currentScreen, profile?.family_id]);
 
   const fetchRealProfiles = async (familyId) => {
     const { data } = await supabase

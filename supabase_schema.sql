@@ -172,6 +172,10 @@ BEGIN
   BEGIN alter publication supabase_realtime add table shopping_items; EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN alter publication supabase_realtime add table placed_furniture; EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN alter publication supabase_realtime add table house_layouts; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN alter publication supabase_realtime add table petmong_characters; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN alter publication supabase_realtime add table petmong_activities; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN alter table petmong_characters replica identity full; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN alter table petmong_activities replica identity full; EXCEPTION WHEN OTHERS THEN NULL; END;
 END $$;
 
 -- 13. Supabase Storage 사진 업로드용 버킷 (family-photos) 생성

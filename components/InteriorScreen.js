@@ -359,7 +359,7 @@ export default function InteriorScreen({
 
   useEffect(() => {
     if (displayedCharacter?.id) {
-      getPetmongStageImages(displayedCharacter.id).then(stages => {
+      getPetmongStageImages(displayedCharacter.id, displayedCharacter.image_url).then(stages => {
         if (stages && stages[currentCharStageNum]) {
           setActiveStageImageUrl(stages[currentCharStageNum]);
         } else if (stages && stages[1]) {
@@ -488,8 +488,22 @@ export default function InteriorScreen({
       } else {
         setMyCharacter(null);
       }
+
+      // Supabase 직접 조회를 병행하여 다른 가족이 바꾼 최신 외형을 항상 100% 보장
+      supabase
+        .from('petmong_characters')
+        .select('*')
+        .eq('family_id', familyId)
+        .order('created_at', { ascending: false })
+        .then(({ data, error }) => {
+          if (!error && data && data.length > 0) {
+            if (setPetmongCharacters) setPetmongCharacters(data);
+            setMyCharacter(data[0]);
+          }
+        })
+        .catch(() => {});
     }
-  }, [familyId, petmongCharacters]);
+  }, [familyId, petmongCharacters, setPetmongCharacters]);
 
   // -------------------------------------------------------------
   // 반려친구 비밀 귓속말 & 감성 편지 배달부 (petmong_whispers)
@@ -721,7 +735,7 @@ export default function InteriorScreen({
           if (displayedCharacter?.id && !effectiveImageUrl.startsWith('data:image/png')) {
             supabase
               .from('petmong_characters')
-              .update({ image_url: url })
+              .update({ image_url: url, family_id: familyId })
               .eq('id', displayedCharacter.id)
               .then(() => {
                 console.log('Successfully persisted transparent petmong character image in DB');
@@ -764,7 +778,7 @@ export default function InteriorScreen({
       if (evolvedImageUrl) {
         await supabase
           .from('petmong_characters')
-          .update({ image_url: evolvedImageUrl })
+          .update({ image_url: evolvedImageUrl, family_id: familyId })
           .eq('id', char.id);
 
         setMyCharacter(prev => ({ ...prev, image_url: evolvedImageUrl }));
@@ -826,7 +840,7 @@ export default function InteriorScreen({
           if (newEmoji !== myCharacter.emoji) {
             supabase
               .from('petmong_characters')
-              .update({ emoji: newEmoji })
+              .update({ emoji: newEmoji, family_id: familyId })
               .eq('id', myCharacter.id)
               .then(() => {
                 setMyCharacter(prev => ({ ...prev, emoji: newEmoji }));
@@ -1132,6 +1146,7 @@ Core Design Instructions:
               personality: newPersonality,
               level: 1,
               exp: 0,
+              family_id: familyId,
             };
 
             const { data: updatedChar, error: updateError } = await supabase
@@ -1247,6 +1262,7 @@ Core Design Instructions:
                     personality: newPersonality,
                     level: 1,
                     exp: 0,
+                    family_id: familyId,
                   };
                   const { data: updatedChar, error: updateError } = await supabase
                     .from('petmong_characters')
@@ -1346,6 +1362,7 @@ Core Design Instructions:
             personality: newPersonality,
             level: 1,
             exp: 0,
+            family_id: familyId,
           };
 
           const { data: updatedChar, error: updateError } = await supabase
