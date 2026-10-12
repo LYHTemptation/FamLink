@@ -375,15 +375,16 @@ export default function InteriorScreen({
     }
   }, [displayedCharacter?.id, displayedCharacter?.level, displayedCharacter?.image_url, currentCharStageNum]);
 
-  // Background Pre-Generation of Missing Stages for Active User's Character
+  // Background Pre-Generation of Missing Stages for Family Shared Petmong Character
   useEffect(() => {
-    if (myCharacter?.id && myCharacter?.image_url) {
-      getPetmongStageImages(myCharacter.id).then(stages => {
+    const targetChar = displayedCharacter || myCharacter;
+    if (targetChar?.id && targetChar?.image_url) {
+      getPetmongStageImages(targetChar.id).then(stages => {
         if (!stages[1]) {
-          savePetmongStageImage(myCharacter.id, 1, myCharacter.image_url);
+          savePetmongStageImage(targetChar.id, 1, targetChar.image_url);
         }
         if (!stages[2] || !stages[3] || !stages[4]) {
-          startBackgroundStagePreGeneration(myCharacter, (stg, url) => {
+          startBackgroundStagePreGeneration(targetChar, (stg, url) => {
             if (stg === currentCharStageNum) {
               setActiveStageImageUrl(url);
             }
@@ -391,7 +392,7 @@ export default function InteriorScreen({
         }
       }).catch(() => {});
     }
-  }, [myCharacter?.id, myCharacter?.image_url, currentCharStageNum]);
+  }, [displayedCharacter?.id, displayedCharacter?.image_url, myCharacter?.id, myCharacter?.image_url, currentCharStageNum]);
 
   // 🎮 Real-time Petmong Game Vitals (Centralized via App.js & Supabase)
   const [localPetVitals, setLocalPetVitals] = useState({
@@ -488,22 +489,8 @@ export default function InteriorScreen({
       } else {
         setMyCharacter(null);
       }
-
-      // Supabase 직접 조회를 병행하여 다른 가족이 바꾼 최신 외형을 항상 100% 보장
-      supabase
-        .from('petmong_characters')
-        .select('*')
-        .eq('family_id', familyId)
-        .order('created_at', { ascending: false })
-        .then(({ data, error }) => {
-          if (!error && data && data.length > 0) {
-            if (setPetmongCharacters) setPetmongCharacters(data);
-            setMyCharacter(data[0]);
-          }
-        })
-        .catch(() => {});
     }
-  }, [familyId, petmongCharacters, setPetmongCharacters]);
+  }, [familyId, petmongCharacters]);
 
   // -------------------------------------------------------------
   // 반려친구 비밀 귓속말 & 감성 편지 배달부 (petmong_whispers)
@@ -732,7 +719,7 @@ export default function InteriorScreen({
         makeBackgroundTransparent(effectiveImageUrl).then(url => {
           setDisplayedTransparentUrl(url);
           // Persist the clean transparent PNG to Supabase so it permanently never has a white background
-          if (displayedCharacter?.id && !effectiveImageUrl.startsWith('data:image/png')) {
+          if (displayedCharacter?.id && url && url !== effectiveImageUrl) {
             supabase
               .from('petmong_characters')
               .update({ image_url: url, family_id: familyId })
@@ -1119,6 +1106,14 @@ Core Design Instructions:
       // 3. If generation succeeded, save/update in database
       if (generatedImageUrl) {
         try {
+          if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+            try {
+              generatedImageUrl = await makeBackgroundTransparent(generatedImageUrl);
+            } catch (transErr) {
+              console.warn('Pre-save background transparency conversion failed:', transErr);
+            }
+          }
+
           const SPECIES_EMOJI_MAP = {
             canine: '🐶',
             feline: '🐱',

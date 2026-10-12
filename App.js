@@ -532,7 +532,6 @@ export default function App() {
           personality: '다정한',
           level: 1,
           exp: 0,
-          vitals: { hunger: 80, happiness: 85, cleanliness: 90, energy: 95 },
         };
 
         const { data: inserted, error: insertErr } = await supabase

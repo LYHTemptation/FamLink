@@ -11,6 +11,7 @@ import {
   Platform,
   ActivityIndicator,
   Alert,
+  useWindowDimensions,
 } from 'react-native';
 import Svg, { Circle, Path, G, Defs, RadialGradient, Stop } from 'react-native-svg';
 import {
@@ -57,21 +58,21 @@ function StageAuraVisual({ stageNum, size = 200 }) {
   switch (stageNum) {
     case 1:
       return (
-        <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={StyleSheet.absoluteFillObject}>
+        <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
           <Circle cx={half} cy={half} r={half * 0.88} fill="rgba(255, 107, 71, 0.12)" stroke="#FF6B47" strokeWidth="1.5" strokeDasharray="4 4" />
           <Circle cx={half} cy={half} r={half * 0.7} fill="rgba(255, 240, 242, 0.65)" />
         </Svg>
       );
     case 2:
       return (
-        <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={StyleSheet.absoluteFillObject}>
+        <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
           <Circle cx={half} cy={half} r={half * 0.9} fill="rgba(16, 185, 129, 0.12)" stroke="#10B981" strokeWidth="2" strokeDasharray="6 3" />
           <Circle cx={half} cy={half} r={half * 0.74} fill="rgba(236, 253, 245, 0.7)" />
         </Svg>
       );
     case 3:
       return (
-        <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={StyleSheet.absoluteFillObject}>
+        <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
           <Circle cx={half} cy={half} r={half * 0.92} fill="rgba(59, 130, 246, 0.12)" stroke="#3B82F6" strokeWidth="2" />
           <Circle cx={half} cy={half} r={half * 0.8} stroke="#93C5FD" strokeWidth="1.5" strokeDasharray="3 3" />
           <Circle cx={half} cy={half} r={half * 0.72} fill="rgba(239, 246, 255, 0.75)" />
@@ -80,7 +81,7 @@ function StageAuraVisual({ stageNum, size = 200 }) {
     case 4:
     default:
       return (
-        <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={StyleSheet.absoluteFillObject}>
+        <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
           <Circle cx={half} cy={half} r={half * 0.95} fill="rgba(245, 158, 11, 0.16)" stroke="#F59E0B" strokeWidth="2.5" />
           <Circle cx={half} cy={half} r={half * 0.84} stroke="#FDE68A" strokeWidth="1.5" strokeDasharray="5 3" />
           <Circle cx={half} cy={half} r={half * 0.72} fill="rgba(255, 251, 235, 0.85)" />
@@ -94,6 +95,10 @@ export default function PetmongGrowthBookModal({
   onClose,
   character,
 }) {
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const isMobile = windowWidth < 600;
+  const isSmallMobile = windowWidth < 380;
+
   const [selectedStageNum, setSelectedStageNum] = useState(1);
   const [stageImages, setStageImages] = useState({});
   const [generatingStages, setGeneratingStages] = useState({});
@@ -207,15 +212,15 @@ export default function PetmongGrowthBookModal({
       onRequestClose={onClose}
     >
       <View style={styles.modalOverlay}>
-        <View style={styles.modalContainer}>
+        <View style={[styles.modalContainer, isMobile && styles.modalContainerMobile]}>
           {/* Header Bar */}
           <View style={styles.headerRow}>
             <View style={styles.headerTitleWrap}>
               <View style={styles.headerIconBox}>
                 <BookOpen size={18} color="#FF4D6D" />
               </View>
-              <View>
-                <Text style={styles.headerTitle}>
+              <View style={styles.headerTitleTextCol}>
+                <Text style={styles.headerTitle} numberOfLines={1}>
                   {activeChar ? `${activeChar.name}의 성장 앨범` : '가족 반려친구 성장 앨범'}
                 </Text>
                 {activeChar && (
@@ -224,7 +229,7 @@ export default function PetmongGrowthBookModal({
                     <View style={styles.headerLvBadge}>
                       <Text style={styles.headerLvBadgeText}>Lv.{activeChar.level || 1}</Text>
                     </View>
-                    <Text style={styles.headerStageText}>
+                    <Text style={styles.headerStageText} numberOfLines={1}>
                       • {getStageNameWithPet(currentCharStage.stage, activeChar.name)}
                     </Text>
                   </View>
@@ -243,12 +248,12 @@ export default function PetmongGrowthBookModal({
             contentContainerStyle={{ paddingBottom: 34 }}
           >
             {/* 4-Stage Horizontal Stepper */}
-            <View style={styles.stageStepperCard}>
+            <View style={[styles.stageStepperCard, isSmallMobile && { padding: 8 }]}>
               <Text style={styles.stageStepperGuide}>
                 단계 카드를 탭하여 성장 전·후 모습을 확인하세요 ✨
               </Text>
 
-              <View style={styles.stageStepperRow}>
+              <View style={[styles.stageStepperRow, isSmallMobile && { gap: 4 }]}>
                 {[1, 2, 3, 4].map((sNum) => {
                   const stg = EVOLUTION_STAGES[sNum];
                   const isSelected = selectedStageNum === sNum;
@@ -341,8 +346,11 @@ export default function PetmongGrowthBookModal({
               </View>
 
               {/* Pedestal & Visual Sprite */}
-              <View style={styles.pedestalContainer}>
-                <StageAuraVisual stageNum={selectedStageNum} size={210} />
+              <View style={[styles.pedestalContainer, isSmallMobile && { width: 190, height: 190 }]}>
+                {/* 1. Background Aura Circle (Perfect Center) */}
+                <View style={styles.pedestalAuraWrapper} pointerEvents="none">
+                  <StageAuraVisual stageNum={selectedStageNum} size={isSmallMobile ? 180 : 200} />
+                </View>
 
                 {/* Overlaid Special Stage Accents */}
                 {selectedStageNum === 4 && (
@@ -361,7 +369,7 @@ export default function PetmongGrowthBookModal({
                   </View>
                 )}
 
-                {/* Scaled Sprite Box */}
+                {/* 2. Scaled Sprite Box Centered inside Aura */}
                 <View
                   style={[
                     styles.petSpriteBox,
@@ -488,7 +496,7 @@ export default function PetmongGrowthBookModal({
                   가족 온기는 온기를 수확해서 올라가는 것이 아니라, 오늘 가족들이 나눈 소통량에 따라 실시간으로 차오릅니다.
                 </Text>
 
-                <View style={styles.warmthMetricRow}>
+                <View style={[styles.warmthMetricRow, isSmallMobile && { flexDirection: 'column' }]}>
                   <View style={styles.warmthMetricCard}>
                     <View style={styles.warmthMetricTop}>
                       <Text style={styles.warmthMetricEmoji}>💬</Text>
@@ -541,6 +549,16 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 14,
     elevation: 10,
+    width: '100%',
+    alignSelf: 'center',
+    maxWidth: 620,
+  },
+  modalContainerMobile: {
+    paddingHorizontal: 12,
+    maxHeight: '94%',
+    minHeight: '80%',
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
   },
   headerRow: {
     flexDirection: 'row',
@@ -554,6 +572,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    flex: 1,
+    marginRight: 8,
+  },
+  headerTitleTextCol: {
+    flex: 1,
   },
   headerIconBox: {
     width: 34,
@@ -564,7 +587,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: 16.5,
+    fontSize: 16,
     fontWeight: '800',
     color: '#0F172A',
   },
@@ -573,6 +596,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 2,
     gap: 5,
+    flexWrap: 'wrap',
   },
   headerSubName: {
     fontSize: 12,
@@ -591,9 +615,10 @@ const styles = StyleSheet.create({
     color: '#E11D48',
   },
   headerStageText: {
-    fontSize: 11.5,
+    fontSize: 11,
     color: '#64748B',
     fontWeight: '600',
+    flexShrink: 1,
   },
   closeBtn: {
     padding: 6,
@@ -609,7 +634,7 @@ const styles = StyleSheet.create({
   stageStepperCard: {
     backgroundColor: '#F8FAFC',
     borderRadius: 18,
-    padding: 12,
+    padding: 10,
     marginBottom: 14,
     borderWidth: 1,
     borderColor: '#E2E8F0',
@@ -629,8 +654,8 @@ const styles = StyleSheet.create({
   stageStepBtn: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 2,
     borderRadius: 14,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
@@ -643,35 +668,37 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   stageStepCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 5,
+    marginBottom: 4,
   },
   stageStepName: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '700',
     color: '#475569',
+    textAlign: 'center',
   },
   stageStepLevel: {
-    fontSize: 9,
+    fontSize: 8.5,
     color: '#94A3B8',
     marginTop: 2,
     fontWeight: '600',
+    textAlign: 'center',
   },
   currentStepBadge: {
     position: 'absolute',
     top: -6,
     right: -4,
-    paddingHorizontal: 5,
-    paddingVertical: 1.5,
-    borderRadius: 7,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 6,
   },
   currentStepBadgeText: {
     color: '#FFFFFF',
-    fontSize: 8.5,
+    fontSize: 8,
     fontWeight: '900',
   },
 
@@ -679,7 +706,7 @@ const styles = StyleSheet.create({
   showcaseCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 22,
-    padding: 18,
+    padding: 16,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#FFE4E8',
@@ -689,6 +716,7 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 3,
     marginBottom: 14,
+    width: '100%',
   },
   stageStatusRow: {
     flexDirection: 'row',
@@ -726,12 +754,20 @@ const styles = StyleSheet.create({
 
   // Pedestal & Sprite Box
   pedestalContainer: {
-    width: 220,
-    height: 190,
+    width: 210,
+    height: 210,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
     marginVertical: 4,
+  },
+  pedestalAuraWrapper: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
   },
   guardianHaloBadge: {
     position: 'absolute',
@@ -740,29 +776,31 @@ const styles = StyleSheet.create({
   },
   starBadgeDecor: {
     position: 'absolute',
-    top: 12,
+    top: 14,
     right: 28,
     zIndex: 5,
   },
   sproutBadgeDecor: {
     position: 'absolute',
-    top: 16,
-    right: 36,
+    top: 18,
+    right: 34,
     zIndex: 5,
   },
   petSpriteBox: {
-    width: 120,
-    height: 120,
+    width: 124,
+    height: 124,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
   },
   petShowcaseImage: {
-    width: 115,
-    height: 115,
+    width: 116,
+    height: 116,
   },
   petShowcaseEmoji: {
     fontSize: 72,
+    textAlign: 'center',
+    lineHeight: 80,
   },
   stageLoadingWrap: {
     width: 120,
@@ -779,11 +817,11 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   pedestalShadow: {
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.08)',
     position: 'absolute',
-    bottom: 22,
+    bottom: 24,
     zIndex: 1,
   },
   // AI Actions
