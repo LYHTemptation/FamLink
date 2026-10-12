@@ -11,6 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
+import { useTransparentImage } from '../../lib/imageTransparencyService';
 import Svg, { Circle, Path, Defs, RadialGradient, Stop, Line } from 'react-native-svg';
 import {
   Trophy,
@@ -120,6 +121,8 @@ export default function BubblePopGame({
   const [dimensions, setDimensions] = useState(Dimensions.get('window'));
   const screenWidth = dimensions.width;
   const screenHeight = dimensions.height;
+
+  const cleanPetUrl = useTransparentImage(transparentUrl || character?.image_url);
 
   useEffect(() => {
     const sub = Dimensions.addEventListener('change', ({ window }) => {
@@ -708,7 +711,7 @@ export default function BubblePopGame({
           <Animated.View style={[styles.petBox, { transform: [{ scale: petBounce }] }]}>
             {character?.image_url ? (
               <ExpoImage
-                source={{ uri: transparentUrl || character.image_url }}
+                source={{ uri: cleanPetUrl || character.image_url }}
                 style={styles.petImageSprite}
                 contentFit="contain"
               />

@@ -11,6 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
+import { useTransparentImage } from '../../lib/imageTransparencyService';
 import Svg, { Circle, Path, Defs, RadialGradient, Stop, Polyline, G, Rect } from 'react-native-svg';
 import {
   Trophy,
@@ -277,6 +278,8 @@ export default function SnackCatchGame({
   const [dimensions, setDimensions] = useState(Dimensions.get('window'));
   const screenWidth = dimensions.width;
   const screenHeight = dimensions.height;
+
+  const cleanPetUrl = useTransparentImage(transparentUrl || character?.image_url);
 
   useEffect(() => {
     const sub = Dimensions.addEventListener('change', ({ window }) => {
@@ -971,7 +974,7 @@ export default function SnackCatchGame({
           >
             {character?.image_url ? (
               <ExpoImage
-                source={{ uri: transparentUrl || character.image_url }}
+                source={{ uri: cleanPetUrl || character.image_url }}
                 style={styles.petImageSprite}
                 contentFit="contain"
               />

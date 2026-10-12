@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import Svg, { Line, Circle, G, Defs, RadialGradient, Stop, Path } from 'react-native-svg';
 import { Image as ExpoImage } from 'expo-image';
+import { useTransparentImage } from '../../lib/imageTransparencyService';
 import {
   Trophy,
   Sparkles,
@@ -164,6 +165,8 @@ export default function DreamConstellationGame({
   const [dimensions, setDimensions] = useState(Dimensions.get('window'));
   const screenWidth = dimensions.width;
   const screenHeight = dimensions.height;
+
+  const cleanPetUrl = useTransparentImage(transparentUrl || character?.image_url);
 
   useEffect(() => {
     const sub = Dimensions.addEventListener('change', ({ window }) => {
@@ -752,7 +755,7 @@ export default function DreamConstellationGame({
           <Animated.View style={[styles.petSleepBox, { transform: [{ scale: petBreath }] }]}>
             {character?.image_url ? (
               <ExpoImage
-                source={{ uri: transparentUrl || character.image_url }}
+                source={{ uri: cleanPetUrl || character.image_url }}
                 style={styles.petImageSprite}
                 contentFit="contain"
               />

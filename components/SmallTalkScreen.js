@@ -34,6 +34,8 @@ import UserAvatar from './UserAvatar';
 import SnackCatchGame from './minigames/SnackCatchGame';
 import KeepyUppyGame from './minigames/KeepyUppyGame';
 import BubblePopGame from './minigames/BubblePopGame';
+import DreamConstellationGame from './minigames/DreamConstellationGame';
+import { useTransparentImage } from '../lib/imageTransparencyService';
 import { stripEmojis } from '../utils/topics';
 
 // 한국형 생활 행동 기반 아이콘 & 카테고리 스마트 매퍼
@@ -131,10 +133,14 @@ export default function SmallTalkScreen({
   // 로컬 집안일 상태
   const [fallbackChores, setFallbackChores] = useState([]);
 
-  // 1. 체류형 3대 반려몽 미니게임 모달 상태
+  // 1. 체류형 4대 반려몽 미니게임 모달 상태
   const [isSnackGameVisible, setIsSnackGameVisible] = useState(false);
   const [isKeepyUppyGameVisible, setIsKeepyUppyGameVisible] = useState(false);
   const [isBubbleGameVisible, setIsBubbleGameVisible] = useState(false);
+  const [isDreamGameVisible, setIsDreamGameVisible] = useState(false);
+
+  // 온디바이스 배경 투명화 처리된 펫 이미지 URI
+  const cleanPetmongUri = useTransparentImage(petCharacter?.image_url);
 
   // 사용자별(개인별) 일일 미니게임 성장 보상 한도 (1인당 하루 최대 3회)
   const DAILY_GAME_REWARD_LIMIT = 3;
@@ -946,6 +952,30 @@ export default function SmallTalkScreen({
                   </View>
                   <Text style={styles.gameChevron}>›</Text>
                 </TouchableOpacity>
+
+                {/* 펫게임 4: 꿈나라 별자리 잇기 */}
+                <TouchableOpacity
+                  style={styles.gameActionCard}
+                  onPress={() => setIsDreamGameVisible(true)}
+                  activeOpacity={0.85}
+                >
+                  <View style={[styles.gameLargeIconBox, { backgroundColor: '#EDE9FE' }]}>
+                    <Text style={styles.gameLargeIcon}>🌙</Text>
+                  </View>
+                  <View style={styles.gameInfoCol}>
+                    <View style={styles.gameTitleRow}>
+                      <Text style={styles.gameTitleText}>꿈나라 별자리 잇기</Text>
+                      <View style={[styles.gameBadgePill, { backgroundColor: '#EDE9FE' }]}>
+                        <Text style={[styles.gameBadgePillText, { color: '#6D28D9' }]}>별자리 잇기</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.gameDescText}>밤하늘의 빛나는 별들을 이어 반려몽에게 달콤한 단꿈 선물!</Text>
+                    <Text style={[styles.gamePointsText, { color: canEarnReward ? '#16A34A' : '#78716C' }]}>
+                      {canEarnReward ? '+15 ~ +50 EXP 획득 🌱' : '자유 연습 모드 🎯 (EXP 완료)'}
+                    </Text>
+                  </View>
+                  <Text style={styles.gameChevron}>›</Text>
+                </TouchableOpacity>
               </View>
             </View>
 
@@ -1185,7 +1215,7 @@ export default function SmallTalkScreen({
       <SnackCatchGame
         visible={isSnackGameVisible}
         character={petCharacter}
-        transparentUrl={petCharacter?.image_url}
+        transparentUrl={cleanPetmongUri || petCharacter?.image_url}
         canEarnReward={canEarnReward}
         remainingRewards={remainingRewards}
         onClose={() => setIsSnackGameVisible(false)}
@@ -1196,7 +1226,7 @@ export default function SmallTalkScreen({
       <KeepyUppyGame
         visible={isKeepyUppyGameVisible}
         character={petCharacter}
-        transparentUrl={petCharacter?.image_url}
+        transparentUrl={cleanPetmongUri || petCharacter?.image_url}
         canEarnReward={canEarnReward}
         remainingRewards={remainingRewards}
         onClose={() => setIsKeepyUppyGameVisible(false)}
@@ -1207,11 +1237,22 @@ export default function SmallTalkScreen({
       <BubblePopGame
         visible={isBubbleGameVisible}
         character={petCharacter}
-        transparentUrl={petCharacter?.image_url}
+        transparentUrl={cleanPetmongUri || petCharacter?.image_url}
         canEarnReward={canEarnReward}
         remainingRewards={remainingRewards}
         onClose={() => setIsBubbleGameVisible(false)}
         onGameComplete={(result) => handleCompletePetmongGame('비누방울 머지', result)}
+      />
+
+      {/* 4. 꿈나라 별자리 잇기 */}
+      <DreamConstellationGame
+        visible={isDreamGameVisible}
+        character={petCharacter}
+        transparentUrl={cleanPetmongUri || petCharacter?.image_url}
+        canEarnReward={canEarnReward}
+        remainingRewards={remainingRewards}
+        onClose={() => setIsDreamGameVisible(false)}
+        onGameComplete={(result) => handleCompletePetmongGame('꿈나라 별자리 잇기', result)}
       />
     </View>
   );
