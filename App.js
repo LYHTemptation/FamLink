@@ -302,8 +302,16 @@ export default function App() {
       .channel(`realtime-messages-${familyId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `family_id=eq.${familyId}` }, (payload) => {
         if (payload.eventType === 'UPDATE' && payload.new) {
-          // Instantly sync read receipts without full table refetch
-          setMessages(prev => prev.map(m => m.id === payload.new.id ? { ...m, readBy: payload.new.read_by || [] } : m));
+          // Instantly sync text (for delete/unsend/vote) and read receipts without full table refetch
+          setMessages(prev => prev.map(m => m.id === payload.new.id ? {
+            ...m,
+            text: payload.new.text,
+            image: payload.new.image_url || (payload.new.text === '[삭제된 메시지입니다]' ? null : m.image),
+            image_url: payload.new.image_url,
+            readBy: payload.new.read_by || []
+          } : m));
+        } else if (payload.eventType === 'DELETE' && payload.old) {
+          setMessages(prev => prev.filter(m => m.id !== payload.old.id));
         } else {
           fetchRealMessages(familyId);
         }
@@ -2090,6 +2098,30 @@ export default function App() {
                   } catch (err) {
                     console.warn('Failed to update poll message:', err);
                   }
+                }
+              }}
+              onDeleteMessage={async (messageId, mode) => {
+                if (mode === 'all') {
+                  // 모두에게서 삭제 (전송 취소)
+                  setMessages(prev => prev.map(m => m.id === messageId ? {
+                    ...m,
+                    text: '[삭제된 메시지입니다]',
+                    image: null,
+                    image_url: null
+                  } : m));
+                  if (isSupabaseReady) {
+                    try {
+                      await supabase
+                        .from('messages')
+                        .update({ text: '[삭제된 메시지입니다]', image_url: null })
+                        .eq('id', messageId);
+                    } catch (err) {
+                      console.warn('Failed to delete message for all:', err);
+                    }
+                  }
+                } else {
+                  // 나에게서만 삭제
+                  setMessages(prev => prev.filter(m => m.id !== messageId));
                 }
               }}
             />

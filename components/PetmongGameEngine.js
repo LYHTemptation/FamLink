@@ -28,6 +28,7 @@ import {
   RotateCcw,
 } from 'lucide-react-native';
 import { getEvolutionStage, getEvolvedEmoji } from '../lib/petmongEvolution';
+import { useTransparentImage } from '../lib/imageTransparencyService';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
@@ -116,7 +117,6 @@ export default function PetmongGameEngine({
   dailyCareCount = 0,
   maxDailyCare = 2,
   onCareAction,
-  transparentUrl = null,
   onOpenGrowthBook = null,
   unreadWhispers = [],
   onOpenWhisper = null,
@@ -124,6 +124,8 @@ export default function PetmongGameEngine({
   messages = [],
   smallTalkState = {},
 }) {
+  const transparentCharImageUrl = useTransparentImage(character?.image_url);
+
   // -------------------------------------------------------------
   // 1. 가족 대화 흡수 & 온기 지수 (Sumone Family Warmth Analysis)
   // -------------------------------------------------------------
@@ -987,11 +989,11 @@ export default function PetmongGameEngine({
                 }}
               >
                 {/* Character Image / Emoji (scaleX only applied here so text badges below are never mirrored) */}
-                <Animated.View style={{ transform: [{ scaleX: petScaleX }, { scale: stage.scale }] }}>
+                <Animated.View style={{ transform: [{ scaleX: petScaleX }, { scale: stage.scale }], mixBlendMode: 'multiply' }}>
                   {character.image_url ? (
                     Platform.OS === 'web' ? (
                       <img
-                        src={transparentUrl || character.image_url}
+                        src={transparentCharImageUrl || character.image_url}
                         alt={character.name}
                         style={{
                           width: 104,
@@ -1005,7 +1007,7 @@ export default function PetmongGameEngine({
                       />
                     ) : (
                       <Image
-                        source={{ uri: transparentUrl || character.image_url }}
+                        source={{ uri: transparentCharImageUrl || character.image_url }}
                         style={styles.petImageSprite}
                         resizeMode="contain"
                       />
@@ -1476,6 +1478,7 @@ const styles = StyleSheet.create({
   petImageSprite: {
     width: 104,
     height: 104,
+    mixBlendMode: 'multiply',
   },
   petGroundShadow: {
     width: 68,

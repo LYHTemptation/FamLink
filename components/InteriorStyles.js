@@ -388,12 +388,13 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     backgroundColor: 'transparent',
+    mixBlendMode: 'multiply',
   },
   mainCharImage: {
     width: '100%',
     height: '100%',
     resizeMode: 'contain',
-    ...(Platform.OS === 'web' ? { mixBlendMode: 'multiply' } : {}),
+    mixBlendMode: 'multiply',
   },
   charGroundShadow: {
     width: 70,
@@ -475,12 +476,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
+    mixBlendMode: 'multiply',
   },
   subCharImage: {
     width: '100%',
     height: '100%',
     resizeMode: 'contain',
-    ...(Platform.OS === 'web' ? { mixBlendMode: 'multiply' } : {}),
+    mixBlendMode: 'multiply',
   },
   subCharEmoji: {
     fontSize: 28,

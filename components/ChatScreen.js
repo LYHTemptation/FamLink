@@ -19,6 +19,8 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Location from 'expo-location';
+import * as Clipboard from 'expo-clipboard';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   MessageSquare,
@@ -53,9 +55,62 @@ import {
   CheckSquare,
   BookOpen,
   Truck,
+  Copy,
+  CornerUpLeft,
+  Pin,
+  Trash2,
+  Reply,
+  AlertCircle,
 } from 'lucide-react-native';
 import UserAvatar from './UserAvatar';
 import { stripEmojis } from '../utils/topics';
+
+/**
+ * 특정 메시지 인용 답장(Quote Reply) 헤더 파서:
+ * - 포맷: [답장:{"id":"...","name":"...","snippet":"..."}]\n실제내용
+ */
+export const parseReplyHeader = (text) => {
+  if (!text || typeof text !== 'string') return null;
+  const prefix = '[답장:';
+  if (!text.startsWith(prefix)) return null;
+
+  const closeBracketIdx = text.indexOf(']');
+  if (closeBracketIdx === -1) return null;
+
+  const jsonStr = text.substring(prefix.length, closeBracketIdx);
+  let cleanText = text.substring(closeBracketIdx + 1);
+  if (cleanText.startsWith('\r\n')) {
+    cleanText = cleanText.substring(2);
+  } else if (cleanText.startsWith('\n')) {
+    cleanText = cleanText.substring(1);
+  }
+
+  try {
+    const meta = JSON.parse(jsonStr);
+    if (meta && typeof meta === 'object') {
+      return {
+        replyId: meta.id || '',
+        senderName: meta.name || '가족',
+        snippet: meta.snippet || '',
+        cleanText: cleanText,
+      };
+    }
+  } catch (_) {
+    try {
+      const sanitized = jsonStr.replace(/'/g, '"');
+      const meta = JSON.parse(sanitized);
+      if (meta && typeof meta === 'object') {
+        return {
+          replyId: meta.id || '',
+          senderName: meta.name || '가족',
+          snippet: meta.snippet || '',
+          cleanText: cleanText,
+        };
+      }
+    } catch (_) {}
+  }
+  return null;
+};
 
 /**
  * 포토북 주문 메시지 파서:
@@ -201,13 +256,73 @@ export default function ChatScreen({
   onAddShoppingItem,
   onAddChore,
   onUpdateMessageVote,
+  onDeleteMessage,
 }) {
   const insets = useSafeAreaInsets();
   const [selectedRoomId, setSelectedRoomId] = useState(null); // null = Chat Room List View, 'family-group' = Group Chat
   const [inputText, setInputText] = useState('');
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const flatListRef = useRef();
+  const inputRef = useRef();
   const isSendingRef = useRef(false);
+
+  // 💬 특정 메시지 인용 답장(Quote Reply) State
+  const [replyingTo, setReplyingTo] = useState(null); // { id, senderName, text, image }
+
+  // 📋 말풍선 롱프레스 퀵 액션 컨텍스트 메뉴 State
+  const [contextMenuVisible, setContextMenuVisible] = useState(false);
+  const [selectedMsgForMenu, setSelectedMsgForMenu] = useState(null); // { item, senderInfo, isMe, bubbleText }
+
+  // 📌 상단 고정 공지사항 State
+  const [pinnedNotice, setPinnedNotice] = useState(null); // { id, text, author, pinnedAt }
+
+  // Load pinned notice for active room (Cloud Truth from messages + AsyncStorage fallback)
+  useEffect(() => {
+    if (!selectedRoomId) {
+      setPinnedNotice(null);
+      return;
+    }
+
+    // 1. Scan message stream for the latest pinned notice event in this room
+    const currentRoomMsgs = (messages || []).filter(m => isMessageInRoom(m, selectedRoomId));
+    let latestNoticeEvent = null;
+    for (let i = currentRoomMsgs.length - 1; i >= 0; i--) {
+      const txt = typeof currentRoomMsgs[i].text === 'string' ? currentRoomMsgs[i].text : '';
+      if (txt.startsWith('[공지설정]') || txt.startsWith('[공지해제]')) {
+        latestNoticeEvent = txt;
+        break;
+      }
+    }
+
+    if (latestNoticeEvent) {
+      if (latestNoticeEvent.startsWith('[공지설정]')) {
+        try {
+          const parsed = JSON.parse(latestNoticeEvent.replace(/^\[공지설정\]\s*/, ''));
+          setPinnedNotice(parsed);
+          AsyncStorage.setItem(`@famlink_pinned_notice_${selectedRoomId}`, JSON.stringify(parsed)).catch(() => {});
+          return;
+        } catch (_) {}
+      } else {
+        // [공지해제]
+        setPinnedNotice(null);
+        AsyncStorage.removeItem(`@famlink_pinned_notice_${selectedRoomId}`).catch(() => {});
+        return;
+      }
+    }
+
+    // 2. Fallback to AsyncStorage if no notice message found in current local stream
+    AsyncStorage.getItem(`@famlink_pinned_notice_${selectedRoomId}`).then(res => {
+      if (res) {
+        try {
+          setPinnedNotice(JSON.parse(res));
+        } catch (_) {
+          setPinnedNotice(null);
+        }
+      } else {
+        setPinnedNotice(null);
+      }
+    }).catch(() => {});
+  }, [selectedRoomId, messages]);
 
   // Attach Menu & Modal States for 7 Features
   const [attachMenuVisible, setAttachMenuVisible] = useState(false);
@@ -337,8 +452,23 @@ export default function ChatScreen({
       isSendingRef.current = false;
     }, 250);
 
+    let finalPayloadText = textToSend;
+    if (replyingTo) {
+      const snippet = (replyingTo.text || (replyingTo.image ? '[사진]' : '메시지'))
+        .replace(/[\r\n]+/g, ' ')
+        .trim()
+        .slice(0, 60);
+      const replyData = {
+        id: String(replyingTo.id || ''),
+        name: String(replyingTo.senderName || '가족'),
+        snippet: snippet,
+      };
+      finalPayloadText = `[답장:${JSON.stringify(replyData)}]\n${textToSend}`;
+      setReplyingTo(null);
+    }
+
     onSendMessage({
-      text: textToSend,
+      text: finalPayloadText,
       image: selectedPhoto,
       roomId: selectedRoomId || 'family-group',
     });
@@ -349,6 +479,160 @@ export default function ChatScreen({
     setTimeout(() => {
       flatListRef.current?.scrollToEnd({ animated: true });
     }, 50);
+  };
+
+  // Open Context Menu on Message Long Press
+  const handleOpenContextMenu = (item, senderInfo, isMe, bubbleText) => {
+    if (!item) return;
+    const isDeleted = bubbleText === '[삭제된 메시지입니다]' || item.is_deleted;
+    if (isDeleted) return;
+
+    setSelectedMsgForMenu({
+      item,
+      senderInfo,
+      isMe,
+      bubbleText,
+    });
+    setContextMenuVisible(true);
+  };
+
+  // Action 1: Copy Text
+  const handleCopyMessageText = async () => {
+    if (!selectedMsgForMenu) return;
+    const textToCopy = selectedMsgForMenu.bubbleText || '';
+    if (textToCopy) {
+      await Clipboard.setStringAsync(textToCopy);
+      Alert.alert('복사 완료 📋', '메시지가 클립보드에 복사되었습니다.');
+    }
+    setContextMenuVisible(false);
+  };
+
+  // Action 2: Trigger Reply
+  const handleTriggerReply = () => {
+    if (!selectedMsgForMenu) return;
+    const replyMeta = parseReplyHeader(selectedMsgForMenu.bubbleText);
+    const cleanSnippet = replyMeta ? replyMeta.cleanText : selectedMsgForMenu.bubbleText;
+
+    setReplyingTo({
+      id: selectedMsgForMenu.item.id,
+      senderName: selectedMsgForMenu.senderInfo.name,
+      text: cleanSnippet,
+      image: selectedMsgForMenu.item.image,
+    });
+    setContextMenuVisible(false);
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 150);
+  };
+
+  // Action 3: Pin Notice (Sync to Supabase & All Family Devices)
+  const handlePinNotice = async () => {
+    if (!selectedMsgForMenu || !selectedRoomId) return;
+    const replyMeta = parseReplyHeader(selectedMsgForMenu.bubbleText);
+    const noticeText = replyMeta ? replyMeta.cleanText : (selectedMsgForMenu.bubbleText || '공지사항');
+    const myName = currentUserProfile?.name || getMemberName(currentUser) || '가족';
+    const messageAuthor = selectedMsgForMenu.senderInfo?.name || '가족';
+    const noticeObj = {
+      id: selectedMsgForMenu.item.id,
+      text: noticeText,
+      author: messageAuthor, // 원본 메시지 작성자 (예: 윤성)
+      pinner: myName,        // 공지를 등록한 사람 (예: 윤호)
+      pinnedAt: new Date().toISOString(),
+    };
+    setPinnedNotice(noticeObj);
+    try {
+      await AsyncStorage.setItem(`@famlink_pinned_notice_${selectedRoomId}`, JSON.stringify(noticeObj));
+    } catch (_) {}
+
+    // 🚀 Cloud Realtime Sync: Broadcast & Persist to Supabase messages for all family devices
+    if (onSendMessage) {
+      onSendMessage({
+        text: `[공지설정] ${JSON.stringify(noticeObj)}`,
+        roomId: selectedRoomId,
+      });
+    }
+
+    setContextMenuVisible(false);
+    Alert.alert('공지 등록 📌', '가족 대화방 상단에 공지로 고정되었습니다.');
+  };
+
+  // Action 4: Unpin Notice (Sync to Supabase & All Family Devices)
+  const handleUnpinNotice = async () => {
+    setPinnedNotice(null);
+    if (selectedRoomId) {
+      try {
+        await AsyncStorage.removeItem(`@famlink_pinned_notice_${selectedRoomId}`);
+      } catch (_) {}
+
+      // 🚀 Cloud Realtime Sync: Broadcast unpin event to all family devices
+      if (onSendMessage) {
+        onSendMessage({
+          text: `[공지해제] ${JSON.stringify({ roomId: selectedRoomId, unpinnedAt: new Date().toISOString() })}`,
+          roomId: selectedRoomId,
+        });
+      }
+    }
+  };
+
+  // Action 5: Delete Message
+  const handleTriggerDelete = () => {
+    if (!selectedMsgForMenu) return;
+    const targetMsg = selectedMsgForMenu.item;
+    const isMe = selectedMsgForMenu.isMe;
+    setContextMenuVisible(false);
+
+    if (isMe) {
+      Alert.alert(
+        '메시지 삭제',
+        '삭제 방식을 선택해주세요.',
+        [
+          { text: '취소', style: 'cancel' },
+          {
+            text: '모두에게서 삭제 (전송 취소)',
+            style: 'destructive',
+            onPress: () => {
+              if (onDeleteMessage) {
+                onDeleteMessage(targetMsg.id, 'all');
+              }
+            },
+          },
+          {
+            text: '나에게서만 삭제',
+            onPress: () => {
+              if (onDeleteMessage) {
+                onDeleteMessage(targetMsg.id, 'me');
+              }
+            },
+          },
+        ]
+      );
+    } else {
+      Alert.alert(
+        '메시지 삭제',
+        '이 메시지를 내 채팅방에서 삭제하시겠습니까?',
+        [
+          { text: '취소', style: 'cancel' },
+          {
+            text: '삭제',
+            style: 'destructive',
+            onPress: () => {
+              if (onDeleteMessage) {
+                onDeleteMessage(targetMsg.id, 'me');
+              }
+            },
+          },
+        ]
+      );
+    }
+  };
+
+  // Scroll to Message ID
+  const scrollToMessage = (targetId) => {
+    if (!targetId || !roomMessages) return;
+    const idx = roomMessages.findIndex(m => m.id === targetId);
+    if (idx >= 0 && flatListRef.current) {
+      flatListRef.current.scrollToIndex({ index: idx, animated: true, viewPosition: 0.5 });
+    }
   };
 
   // High-efficiency client-side image compression for chat (downscale to max 1280px, 0.75 quality)
@@ -748,6 +1032,9 @@ export default function ChatScreen({
   // Format message text for chat room preview (convert JSON cards to friendly summary and vector icon)
   const getMessagePreviewData = (msg) => {
     if (!msg) return { text: '', cardType: null };
+    if (msg.is_deleted || msg.text === '[삭제된 메시지입니다]') {
+      return { text: '삭제된 메시지입니다.', cardType: 'deleted' };
+    }
     if (msg.image) return { text: '사진을 공유했습니다.', cardType: 'image' };
 
     let rawText = '';
@@ -756,6 +1043,12 @@ export default function ChatScreen({
     } else if (typeof msg.text === 'object' && msg.text !== null) {
       if (msg.text.bookTitle) {
         rawText = `[포토북] "${msg.text.bookTitle}" 주문 접수`;
+      } else if (msg.text.title) {
+        rawText = msg.text.title;
+      } else if (msg.text.name) {
+        rawText = msg.text.name;
+      } else if (msg.text.text) {
+        rawText = msg.text.text;
       } else {
         try {
           rawText = JSON.stringify(msg.text);
@@ -768,11 +1061,41 @@ export default function ChatScreen({
     }
     if (!rawText) return { text: '', cardType: null };
 
-    // 1. [집안일카드] or [장보기카드]
-    if (rawText.startsWith('[집안일카드] ') || rawText.startsWith('[장보기카드] ')) {
-      const isLegacy = rawText.startsWith('[장보기카드] ');
+    // 0. 삭제된 메시지 체크
+    if (rawText === '[삭제된 메시지입니다]') {
+      return { text: '삭제된 메시지입니다.', cardType: 'deleted' };
+    }
+
+    // 0-1. 특정 메시지 인용 답장 (Quote Reply) 파싱
+    const replyMeta = parseReplyHeader(rawText);
+    if (replyMeta) {
+      const cleanBody = replyMeta.cleanText ? replyMeta.cleanText.replace(/[\r\n]+/g, ' ').trim() : '';
+      return {
+        text: cleanBody ? `(답장) ${cleanBody}` : `${replyMeta.senderName || '가족'}님에게 답장`,
+        cardType: 'reply',
+      };
+    }
+
+    // 0-2. 상단 공지 설정 / 해제 이벤트
+    if (rawText.startsWith('[공지설정]') || rawText.startsWith('[공지설정] ')) {
       try {
-        const data = JSON.parse(rawText.replace(isLegacy ? '[장보기카드] ' : '[집안일카드] ', ''));
+        const clean = rawText.replace(/^\[공지설정\]\s*/, '');
+        const data = JSON.parse(clean);
+        const pinnerName = data.pinner || data.author || '가족';
+        return { text: `📌 ${pinnerName}님이 공지를 등록했습니다.`, cardType: 'notice' };
+      } catch (_) {
+        return { text: '📌 공지가 등록되었습니다.', cardType: 'notice' };
+      }
+    }
+    if (rawText.startsWith('[공지해제]') || rawText.startsWith('[공지해제] ')) {
+      return { text: '📌 공지가 해제되었습니다.', cardType: 'notice' };
+    }
+
+    // 1. [집안일카드] or [장보기카드]
+    if (rawText.startsWith('[집안일카드] ') || rawText.startsWith('[장보기카드] ') || rawText.startsWith('[집안일카드]') || rawText.startsWith('[장보기카드]')) {
+      const isLegacy = rawText.includes('[장보기카드]');
+      try {
+        const data = JSON.parse(rawText.replace(isLegacy ? /^\[장보기카드\]\s*/ : /^\[집안일카드\]\s*/, ''));
         return { text: `집안일: ${data.title || '새 할 일'}`, cardType: 'chore' };
       } catch (e) {
         return { text: '집안일 추가 요청', cardType: 'chore' };
@@ -780,9 +1103,9 @@ export default function ChatScreen({
     }
 
     // 2. [일정공유]
-    if (rawText.startsWith('[일정공유] ')) {
+    if (rawText.startsWith('[일정공유] ') || rawText.startsWith('[일정공유]')) {
       try {
-        const data = JSON.parse(rawText.replace('[일정공유] ', ''));
+        const data = JSON.parse(rawText.replace(/^\[일정공유\]\s*/, ''));
         return { text: `일정: ${data.title || '새 일정'}`, cardType: 'event' };
       } catch (e) {
         return { text: '캘린더 일정 공유', cardType: 'event' };
@@ -790,9 +1113,9 @@ export default function ChatScreen({
     }
 
     // 3. [가족투표]
-    if (rawText.startsWith('[가족투표] ')) {
+    if (rawText.startsWith('[가족투표] ') || rawText.startsWith('[가족투표]')) {
       try {
-        const data = JSON.parse(rawText.replace('[가족투표] ', ''));
+        const data = JSON.parse(rawText.replace(/^\[가족투표\]\s*/, ''));
         return { text: `투표: ${data.title || '새 투표'}`, cardType: 'poll' };
       } catch (e) {
         return { text: '가족 투표 진행 중', cardType: 'poll' };
@@ -800,9 +1123,9 @@ export default function ChatScreen({
     }
 
     // 4. [위치공유]
-    if (rawText.startsWith('[위치공유] ')) {
+    if (rawText.startsWith('[위치공유] ') || rawText.startsWith('[위치공유]')) {
       try {
-        const data = JSON.parse(rawText.replace('[위치공유] ', ''));
+        const data = JSON.parse(rawText.replace(/^\[위치공유\]\s*/, ''));
         return { text: `위치: ${data.title || '모임 장소'}`, cardType: 'location' };
       } catch (e) {
         return { text: '위치 / 모임 장소 공유', cardType: 'location' };
@@ -810,9 +1133,9 @@ export default function ChatScreen({
     }
 
     // 5. [음성메모]
-    if (rawText.startsWith('[음성메모] ')) {
+    if (rawText.startsWith('[음성메모] ') || rawText.startsWith('[음성메모]')) {
       try {
-        const data = JSON.parse(rawText.replace('[음성메모] ', ''));
+        const data = JSON.parse(rawText.replace(/^\[음성메모\]\s*/, ''));
         return { text: `음성 메시지 (${data.duration || 3}초)`, cardType: 'voice' };
       } catch (e) {
         return { text: '음성 메시지', cardType: 'voice' };
@@ -820,9 +1143,9 @@ export default function ChatScreen({
     }
 
     // 6. [동영상]
-    if (rawText.startsWith('[동영상] ')) {
+    if (rawText.startsWith('[동영상] ') || rawText.startsWith('[동영상]')) {
       try {
-        const data = JSON.parse(rawText.replace('[동영상] ', ''));
+        const data = JSON.parse(rawText.replace(/^\[동영상\]\s*/, ''));
         return { text: `동영상: ${data.name || '가족 영상'}`, cardType: 'video' };
       } catch (e) {
         return { text: '동영상 공유', cardType: 'video' };
@@ -830,9 +1153,9 @@ export default function ChatScreen({
     }
 
     // 7. [파일]
-    if (rawText.startsWith('[파일] ')) {
+    if (rawText.startsWith('[파일] ') || rawText.startsWith('[파일]')) {
       try {
-        const data = JSON.parse(rawText.replace('[파일] ', ''));
+        const data = JSON.parse(rawText.replace(/^\[파일\]\s*/, ''));
         return { text: `파일: ${data.name || '문서'}`, cardType: 'file' };
       } catch (e) {
         return { text: '파일 공유', cardType: 'file' };
@@ -845,7 +1168,19 @@ export default function ChatScreen({
       return { text: `포토북 주문: ${photobookData.bookTitle}`, cardType: 'photobook' };
     }
 
-    return { text: rawText, cardType: null };
+    // 9. 순수 JSON 문자열 안전 파싱 (JSON 객체 형태의 데이터가 문자열로 전달된 경우의 방어 로직)
+    const trimmed = rawText.trim();
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed.bookTitle) return { text: `포토북 주문: ${parsed.bookTitle}`, cardType: 'photobook' };
+        if (parsed.title) return { text: parsed.title, cardType: null };
+        if (parsed.text) return { text: parsed.text, cardType: null };
+        if (parsed.name) return { text: parsed.name, cardType: null };
+      } catch (_) {}
+    }
+
+    return { text: rawText.replace(/[\r\n]+/g, ' ').trim(), cardType: null };
   };
 
   // Get last message info for each specific room
@@ -866,10 +1201,13 @@ export default function ChatScreen({
       timestampMs = parseKoreanTimeToMs(last.timestamp);
     }
 
+    const isSystemOrAction = cardType === 'notice' || cardType === 'deleted';
+    const fullText = isSystemOrAction ? displayText : `${sender?.name || '가족'}: ${displayText}`;
+
     return {
       senderName: sender?.name || '가족',
       text: displayText,
-      fullText: `${sender?.name || '가족'}: ${displayText}`,
+      fullText,
       cardType,
       time: formatChatRoomTime(dateSource, last.timestamp),
       timestampMs: timestampMs || 0,
@@ -1190,19 +1528,47 @@ export default function ChatScreen({
       bubbleText = String(item.text);
     }
 
-    const photobookOrderData = parsePhotobookOrderData(item.text) || parsePhotobookOrderData(bubbleText);
+    const replyMeta = parseReplyHeader(bubbleText);
+    const displayBubbleText = replyMeta ? replyMeta.cleanText : bubbleText;
+    const isDeleted = bubbleText === '[삭제된 메시지입니다]' || item.is_deleted;
+
+    // 📌 System Pinned Notice Event Message (KakaoTalk centered style)
+    if (displayBubbleText.startsWith('[공지설정]') || displayBubbleText.startsWith('[공지해제]')) {
+      const isSet = displayBubbleText.startsWith('[공지설정]');
+      let noticeData = {};
+      try {
+        noticeData = JSON.parse(displayBubbleText.replace(isSet ? /^\[공지설정\]\s*/ : /^\[공지해제\]\s*/, ''));
+      } catch (_) {}
+
+      return (
+        <View style={styles.systemNoticeMsgContainer} key={item.id}>
+          <View style={styles.systemNoticeMsgBadge}>
+            <Pin size={12} color="#78716C" style={{ marginRight: 5 }} />
+            <Text style={styles.systemNoticeMsgText}>
+              {isSet
+                ? `${noticeData.pinner || noticeData.author || '가족'}님이 공지를 등록했습니다.`
+                : '공지가 등록 해제되었습니다.'}
+            </Text>
+          </View>
+        </View>
+      );
+    }
+
+    const photobookOrderData = !isDeleted && (parsePhotobookOrderData(item.text) || parsePhotobookOrderData(displayBubbleText));
     const isCard = Boolean(
-      photobookOrderData ||
-      (bubbleText && (
-        bubbleText.startsWith('[파일] ') ||
-        bubbleText.startsWith('[동영상] ') ||
-        bubbleText.startsWith('[음성메모] ') ||
-        bubbleText.startsWith('[가족투표] ') ||
-        bubbleText.startsWith('[일정공유] ') ||
-        bubbleText.startsWith('[집안일카드] ') ||
-        bubbleText.startsWith('[장보기카드] ') ||
-        bubbleText.startsWith('[위치공유] ')
-      ))
+      !isDeleted && (
+        photobookOrderData ||
+        (displayBubbleText && (
+          displayBubbleText.startsWith('[파일] ') ||
+          displayBubbleText.startsWith('[동영상] ') ||
+          displayBubbleText.startsWith('[음성메모] ') ||
+          displayBubbleText.startsWith('[가족투표] ') ||
+          displayBubbleText.startsWith('[일정공유] ') ||
+          displayBubbleText.startsWith('[집안일카드] ') ||
+          displayBubbleText.startsWith('[장보기카드] ') ||
+          displayBubbleText.startsWith('[위치공유] ')
+        ))
+      )
     );
 
     return (
@@ -1223,17 +1589,75 @@ export default function ChatScreen({
               </Text>
             </View>
           )}
-          
-          <View style={[
-            styles.bubble, 
-            isMe ? styles.myBubble : styles.otherBubble,
-            item.image ? styles.imageBubble : null,
-            item.isSending ? styles.sendingBubble : null,
-            isCard ? (isMe ? styles.myCardBubble : styles.otherCardBubble) : null,
-          ]}>
-            {item.image && (
-              <Image source={{ uri: item.image }} style={styles.bubbleImage} resizeMode="cover" />
+
+          <View style={[styles.bubbleWithSideMetaRow, isMe ? styles.myBubbleWithSideMetaRow : styles.otherBubbleWithSideMetaRow]}>
+            {/* If isMe: side meta (Unread Count + Timestamp) sits on the LEFT of the bubble */}
+            {isMe && (
+              <View style={styles.mySideMetaCol}>
+                {item.isSending ? (
+                  <Text style={styles.sendingIndicatorText}>전송 중...</Text>
+                ) : unreadCountForMsg > 0 ? (
+                  <Text style={styles.unreadCountBadge}>{unreadCountForMsg}</Text>
+                ) : null}
+                <Text style={styles.sideTimeText}>{item.timestamp}</Text>
+              </View>
             )}
+
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onLongPress={() => {
+                if (!isDeleted) {
+                  handleOpenContextMenu(item, senderInfo, isMe, displayBubbleText);
+                }
+              }}
+              delayLongPress={300}
+              style={[
+                styles.bubble, 
+                isMe ? styles.myBubble : styles.otherBubble,
+                replyMeta && !isDeleted ? styles.bubbleWithReply : null,
+                item.image && !isDeleted ? styles.imageBubble : null,
+                item.isSending ? styles.sendingBubble : null,
+                isCard ? (isMe ? styles.myCardBubble : styles.otherCardBubble) : null,
+                isDeleted ? (isMe ? styles.myDeletedBubble : styles.otherDeletedBubble) : null,
+              ]}
+            >
+              {/* Reply Quote Chip inside Bubble */}
+              {replyMeta && !isDeleted && (
+                <TouchableOpacity
+                  style={[styles.replyQuoteChip, isMe ? styles.myReplyQuoteChip : styles.otherReplyQuoteChip]}
+                  activeOpacity={0.8}
+                  onPress={() => scrollToMessage(replyMeta.replyId)}
+                >
+                  <View style={[styles.replyQuoteBar, isMe ? styles.myReplyQuoteBar : styles.otherReplyQuoteBar]} />
+                  <View style={styles.replyQuoteContentCol}>
+                    <Text 
+                      style={[styles.replyQuoteAuthor, isMe ? styles.myReplyQuoteAuthor : styles.otherReplyQuoteAuthor]}
+                      numberOfLines={1}
+                    >
+                      💬 {replyMeta.senderName}님에게 답장
+                    </Text>
+                    <Text 
+                      style={[styles.replyQuoteSnippet, isMe ? styles.myReplyQuoteSnippet : styles.otherReplyQuoteSnippet]} 
+                      numberOfLines={2}
+                    >
+                      {replyMeta.snippet || '메시지'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+
+              {isDeleted ? (
+                <View style={styles.deletedBubbleContent}>
+                  <Trash2 size={13} color={isMe ? 'rgba(255,255,255,0.7)' : '#A8A29E'} style={{ marginRight: 5 }} />
+                  <Text style={[styles.deletedBubbleText, isMe ? styles.myDeletedBubbleText : styles.otherDeletedBubbleText]}>
+                    삭제된 메시지입니다
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  {item.image && (
+                    <Image source={{ uri: item.image }} style={styles.bubbleImage} resizeMode="cover" />
+                  )}
             {photobookOrderData ? (
               <View style={styles.photobookCardContainer}>
                 <View style={styles.photobookCardTop}>
@@ -1639,30 +2063,24 @@ export default function ChatScreen({
                   </View>
                 );
               })()
-            ) : bubbleText.trim() !== '' ? (
+            ) : displayBubbleText.trim() !== '' ? (
               <Text style={isMe ? styles.myMessageText : styles.otherMessageText}>
-                {bubbleText}
+                {displayBubbleText}
               </Text>
             ) : null}
-          </View>
+                </>
+              )}
+            </TouchableOpacity>
 
-          <View style={[styles.metaInfo, isMe ? styles.myMeta : styles.otherMeta]}>
-            {/* KakaoTalk Style Unread Counter or Sending Status */}
-            {isMe && (
-              item.isSending ? (
-                <Text style={styles.sendingIndicatorText}>전송 중...</Text>
-              ) : unreadCountForMsg > 0 ? (
-                <Text style={styles.unreadCountNumber}>{unreadCountForMsg}</Text>
-              ) : (
-                <Text style={styles.readAllText}>읽음</Text>
-              )
+            {/* If !isMe: side meta (Unread Count + Timestamp) sits on the RIGHT of the bubble */}
+            {!isMe && (
+              <View style={styles.otherSideMetaCol}>
+                {unreadCountForMsg > 0 && (
+                  <Text style={styles.unreadCountBadge}>{unreadCountForMsg}</Text>
+                )}
+                <Text style={styles.sideTimeText}>{item.timestamp}</Text>
+              </View>
             )}
-            {!isMe && !isDirectRoom && uniqueWhoRead.length > 0 && (
-              <Text style={styles.readText}>
-                {isReadByAll ? '모두 읽음' : `${uniqueWhoRead.join(', ')} 읽음`}
-              </Text>
-            )}
-            <Text style={styles.timeText}>{item.timestamp}</Text>
           </View>
         </View>
       </View>
@@ -1771,6 +2189,15 @@ export default function ChatScreen({
                       } else if (cardType === 'photobook') {
                         IconComp = BookOpen;
                         iconColor = '#FF6B47';
+                      } else if (cardType === 'reply') {
+                        IconComp = CornerUpLeft;
+                        iconColor = '#FF6B47';
+                      } else if (cardType === 'notice') {
+                        IconComp = Pin;
+                        iconColor = '#D97706';
+                      } else if (cardType === 'deleted') {
+                        IconComp = Trash2;
+                        iconColor = '#A8A29E';
                       }
 
                       return (
@@ -1958,6 +2385,37 @@ export default function ChatScreen({
         </View>
       </View>
 
+      {/* Pinned Notice Banner */}
+      {pinnedNotice && (
+        <View style={styles.pinnedNoticeBanner}>
+          <TouchableOpacity
+            style={styles.pinnedNoticeLeft}
+            activeOpacity={0.8}
+            onPress={() => scrollToMessage(pinnedNotice.id)}
+          >
+            <View style={styles.pinnedNoticeIconBadge}>
+              <Pin size={13} color="#FF6B47" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.pinnedNoticeTitle}>
+                공지 · {pinnedNotice.author ? `${pinnedNotice.author}님의 글` : '가족 공지'}
+                {pinnedNotice.pinner && pinnedNotice.pinner !== pinnedNotice.author ? ` (등록: ${pinnedNotice.pinner})` : ''}
+              </Text>
+              <Text style={styles.pinnedNoticeText} numberOfLines={1}>
+                {pinnedNotice.text}
+              </Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.pinnedNoticeCloseBtn}
+            onPress={handleUnpinNotice}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <X size={15} color="#78716C" />
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Messages List or Empty State */}
       {roomMessages.length === 0 ? (
         <View style={styles.emptyMessagesContainer}>
@@ -1980,6 +2438,12 @@ export default function ChatScreen({
           initialNumToRender={20}
           maxToRenderPerBatch={15}
           windowSize={10}
+          onScrollToIndexFailed={(info) => {
+            flatListRef.current?.scrollToOffset({
+              offset: info.averageItemLength * info.index,
+              animated: true,
+            });
+          }}
           onContentSizeChange={() => {
             if (!isScrolledToBottom) {
               flatListRef.current?.scrollToEnd({ animated: false });
@@ -2011,6 +2475,32 @@ export default function ChatScreen({
         </View>
       )}
 
+      {/* Replying-To Quote Preview Bar */}
+      {replyingTo && (
+        <View style={styles.replyBarContainer}>
+          <View style={styles.replyBarLeft}>
+            <View style={styles.replyBarIconBox}>
+              <CornerUpLeft size={14} color="#FF6B47" strokeWidth={2.4} />
+            </View>
+            <View style={{ flex: 1, minWidth: 0, justifyContent: 'center' }}>
+              <Text style={styles.replyBarSenderName} numberOfLines={1}>
+                {replyingTo.senderName}님에게 답장
+              </Text>
+              <Text style={styles.replyBarPreviewText} numberOfLines={1}>
+                {replyingTo.text || (replyingTo.image ? '사진' : '메시지')}
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={styles.replyBarCloseBtn}
+            onPress={() => setReplyingTo(null)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <X size={16} color="#78716C" />
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Message Input Box */}
       <View style={[styles.inputArea, { paddingBottom: Math.max(10, insets.bottom) }]}>
         <TouchableOpacity 
@@ -2022,6 +2512,7 @@ export default function ChatScreen({
         </TouchableOpacity>
 
         <TextInput
+          ref={inputRef}
           style={styles.input}
           placeholder="가족에게 따뜻한 메시지 보내기..."
           placeholderTextColor="#A8A29E"
@@ -2444,6 +2935,94 @@ export default function ChatScreen({
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* 8. 메시지 롱프레스 퀵 액션 컨텍스트 메뉴 모달 */}
+      <Modal
+        visible={contextMenuVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setContextMenuVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.contextModalOverlay}
+          activeOpacity={1}
+          onPress={() => setContextMenuVisible(false)}
+        >
+          <View style={[styles.contextMenuCard, { paddingBottom: Math.max(20, insets.bottom + 8) }]}>
+            {selectedMsgForMenu && (
+              <View style={styles.contextPreviewHeader}>
+                <Text style={styles.contextPreviewAuthor}>
+                  {selectedMsgForMenu.senderInfo?.name || '가족'}님의 메시지
+                </Text>
+                <Text style={styles.contextPreviewText} numberOfLines={2}>
+                  {selectedMsgForMenu.bubbleText || (selectedMsgForMenu.item?.image ? '사진' : '메시지')}
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.contextActionsList}>
+              {/* 1. 텍스트 복사 */}
+              {Boolean(selectedMsgForMenu?.bubbleText) && (
+                <TouchableOpacity
+                  style={styles.contextActionBtn}
+                  activeOpacity={0.7}
+                  onPress={handleCopyMessageText}
+                >
+                  <View style={[styles.contextActionIconBox, { backgroundColor: '#EFF6FF' }]}>
+                    <Copy size={18} color="#3B82F6" strokeWidth={2.2} />
+                  </View>
+                  <Text style={styles.contextActionLabel}>텍스트 복사</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* 2. 답장하기 */}
+              <TouchableOpacity
+                style={styles.contextActionBtn}
+                activeOpacity={0.7}
+                onPress={handleTriggerReply}
+              >
+                <View style={[styles.contextActionIconBox, { backgroundColor: '#FFF5F2' }]}>
+                  <CornerUpLeft size={18} color="#FF6B47" strokeWidth={2.2} />
+                </View>
+                <Text style={styles.contextActionLabel}>답장하기</Text>
+              </TouchableOpacity>
+
+              {/* 3. 공지 등록 */}
+              {Boolean(selectedMsgForMenu?.bubbleText) && (
+                <TouchableOpacity
+                  style={styles.contextActionBtn}
+                  activeOpacity={0.7}
+                  onPress={handlePinNotice}
+                >
+                  <View style={[styles.contextActionIconBox, { backgroundColor: '#FEF3C7' }]}>
+                    <Pin size={18} color="#D97706" strokeWidth={2.2} />
+                  </View>
+                  <Text style={styles.contextActionLabel}>공지로 등록</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* 4. 메시지 삭제 */}
+              <TouchableOpacity
+                style={[styles.contextActionBtn, styles.contextActionBtnDanger]}
+                activeOpacity={0.7}
+                onPress={handleTriggerDelete}
+              >
+                <View style={[styles.contextActionIconBox, { backgroundColor: '#FEE2E2' }]}>
+                  <Trash2 size={18} color="#EF4444" strokeWidth={2.2} />
+                </View>
+                <Text style={[styles.contextActionLabel, { color: '#EF4444' }]}>삭제하기</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={styles.sheetCloseBtn}
+              onPress={() => setContextMenuVisible(false)}
+            >
+              <Text style={styles.sheetCloseBtnText}>취소</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -2822,6 +3401,9 @@ const styles = StyleSheet.create({
     borderColor: '#E8E0D0',
     alignSelf: 'flex-start',
   },
+  bubbleWithReply: {
+    minWidth: 175,
+  },
   myCardBubble: {
     backgroundColor: '#FFF5F2',
     borderColor: '#FFE8E0',
@@ -2864,48 +3446,310 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     ...(Platform.OS === 'web' ? { wordBreak: 'break-word' } : {}),
   },
-  metaInfo: {
+  // SIDE-BY-SIDE META & BUBBLE (KakaoTalk layout)
+  bubbleWithSideMetaRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
+    alignItems: 'flex-end',
+    maxWidth: '100%',
   },
-  myMeta: {
+  myBubbleWithSideMetaRow: {
     justifyContent: 'flex-end',
   },
-  otherMeta: {
+  otherBubbleWithSideMetaRow: {
     justifyContent: 'flex-start',
   },
-  readText: {
-    fontSize: 10.5,
-    color: '#FF6B47',
-    fontWeight: '700',
+  mySideMetaCol: {
+    alignItems: 'flex-end',
     marginRight: 6,
+    marginBottom: 2,
   },
-  unreadCountNumber: {
-    fontSize: 11,
+  otherSideMetaCol: {
+    alignItems: 'flex-start',
+    marginLeft: 6,
+    marginBottom: 2,
+  },
+  unreadCountBadge: {
+    fontSize: 10.5,
+    fontWeight: '800',
     color: '#FF6B47',
-    fontWeight: '900',
-    marginRight: 4,
+    marginBottom: 2,
+  },
+  sideTimeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#A8A29E',
   },
   sendingIndicatorText: {
     fontSize: 10.5,
     color: '#F59E0B',
     fontWeight: '700',
-    marginRight: 4,
+    marginBottom: 2,
   },
   sendingBubble: {
     opacity: 0.75,
   },
-  readAllText: {
-    fontSize: 10,
-    color: '#A8A29E',
-    fontWeight: '600',
-    marginRight: 4,
+
+  // QUOTE REPLY CHIP INSIDE BUBBLE
+  replyQuoteChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 9,
+    marginBottom: 6,
+    width: '100%',
+    minWidth: 155,
+    alignSelf: 'stretch',
   },
-  timeText: {
-    fontSize: 10.5,
-    color: '#A8A29E',
+  myReplyQuoteChip: {
+    backgroundColor: 'rgba(0, 0, 0, 0.12)',
+  },
+  otherReplyQuoteChip: {
+    backgroundColor: '#FAF8F3',
+    borderWidth: 1,
+    borderColor: '#F5F0E8',
+  },
+  replyQuoteBar: {
+    width: 3.5,
+    borderRadius: 2,
+    marginRight: 8,
+    alignSelf: 'stretch',
+    minHeight: 28,
+  },
+  replyQuoteContentCol: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: 'center',
+  },
+  myReplyQuoteBar: {
+    backgroundColor: '#FFFFFF',
+  },
+  otherReplyQuoteBar: {
+    backgroundColor: '#FF6B47',
+  },
+  replyQuoteAuthor: {
+    fontSize: 11,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  myReplyQuoteAuthor: {
+    color: '#FFFFFF',
+  },
+  otherReplyQuoteAuthor: {
+    color: '#FF6B47',
+  },
+  replyQuoteSnippet: {
+    fontSize: 11,
     fontWeight: '500',
+    lineHeight: 15,
+  },
+  myReplyQuoteSnippet: {
+    color: 'rgba(255, 255, 255, 0.85)',
+  },
+  otherReplyQuoteSnippet: {
+    color: '#78716C',
+  },
+
+  // REPLY PREVIEW BAR ABOVE INPUT
+  replyBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFF5F2',
+    borderTopWidth: 1.2,
+    borderTopColor: '#FFE8E0',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  replyBarLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 10,
+  },
+  replyBarIconBox: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: '#FFE8E0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 9,
+  },
+  replyBarSenderName: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#FF6B47',
+    marginBottom: 1,
+  },
+  replyBarPreviewText: {
+    fontSize: 12,
+    color: '#78716C',
+    fontWeight: '500',
+  },
+  replyBarCloseBtn: {
+    padding: 6,
+  },
+
+  // DELETED BUBBLE
+  myDeletedBubble: {
+    backgroundColor: 'rgba(255, 107, 71, 0.65)',
+    borderBottomRightRadius: 4,
+    alignSelf: 'flex-end',
+  },
+  otherDeletedBubble: {
+    backgroundColor: '#F5F5F4',
+    borderColor: '#E7E5E4',
+    borderWidth: 1,
+    borderBottomLeftRadius: 4,
+    alignSelf: 'flex-start',
+  },
+  deletedBubbleContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  deletedBubbleText: {
+    fontSize: 13,
+    fontStyle: 'italic',
+    fontWeight: '500',
+  },
+  myDeletedBubbleText: {
+    color: 'rgba(255, 255, 255, 0.9)',
+  },
+  otherDeletedBubbleText: {
+    color: '#A8A29E',
+  },
+
+  // SYSTEM NOTICE MESSAGE (KakaoTalk centered badge in message stream)
+  systemNoticeMsgContainer: {
+    alignItems: 'center',
+    marginVertical: 12,
+    width: '100%',
+  },
+  systemNoticeMsgBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    paddingHorizontal: 13,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+  systemNoticeMsgText: {
+    fontSize: 11.5,
+    color: '#78716C',
+    fontWeight: '700',
+  },
+
+  // PINNED NOTICE BANNER
+  pinnedNoticeBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F5F0E8',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  pinnedNoticeLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 10,
+  },
+  pinnedNoticeIconBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: '#FFF5F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 9,
+  },
+  pinnedNoticeTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#FF6B47',
+    marginBottom: 1,
+  },
+  pinnedNoticeText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#1C1917',
+  },
+  pinnedNoticeCloseBtn: {
+    padding: 6,
+  },
+
+  // CONTEXT MENU MODAL
+  contextModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    justifyContent: 'flex-end',
+  },
+  contextMenuCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  contextPreviewHeader: {
+    backgroundColor: '#FAF8F3',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#F5F0E8',
+  },
+  contextPreviewAuthor: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#FF6B47',
+    marginBottom: 2,
+  },
+  contextPreviewText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#1C1917',
+    lineHeight: 18,
+  },
+  contextActionsList: {
+    marginBottom: 8,
+  },
+  contextActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#FAF8F3',
+  },
+  contextActionBtnDanger: {
+    borderBottomWidth: 0,
+  },
+  contextActionIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  contextActionLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1C1917',
   },
 
   // PREVIEW CONTAINER

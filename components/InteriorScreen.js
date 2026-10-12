@@ -53,6 +53,7 @@ import {
   startBackgroundStagePreGeneration,
   createPetmongSvg,
 } from '../lib/petmongEvolutionService';
+import { makeBackgroundTransparentOnDevice } from '../lib/imageTransparencyService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
@@ -158,96 +159,7 @@ const getRandomDialogue = (personality) => {
   return list[Math.floor(Math.random() * list.length)];
 };
 
-// Global In-Memory Cache for transparent images across tab switches
-const transparentImageCache = new Map();
 
-// Utility: Flood-fill transparency for AI-generated images with solid white backgrounds
-function makeBackgroundTransparent(imageUrl, threshold = 232) {
-  if (!imageUrl) return Promise.resolve(imageUrl);
-  if (transparentImageCache.has(imageUrl)) {
-    return Promise.resolve(transparentImageCache.get(imageUrl));
-  }
-  return new Promise((resolve) => {
-    if (typeof window === 'undefined' || typeof document === 'undefined') {
-      return resolve(imageUrl);
-    }
-
-    const img = new window.Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas');
-        const w = img.naturalWidth || img.width || 200;
-        const h = img.naturalHeight || img.height || 200;
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, w, h);
-
-        const imgData = ctx.getImageData(0, 0, w, h);
-        const data = imgData.data;
-
-        // BFS flood fill from all 4 borders to remove connected background white pixels
-        const visited = new Uint8Array(w * h);
-        const queue = [];
-
-        // Seed border pixels
-        for (let x = 0; x < w; x++) {
-          queue.push(x, 0);
-          queue.push(x, h - 1);
-        }
-        for (let y = 0; y < h; y++) {
-          queue.push(0, y);
-          queue.push(w - 1, y);
-        }
-
-        const isBackgroundPixel = (idx) => {
-          const r = data[idx];
-          const g = data[idx + 1];
-          const b = data[idx + 2];
-          // Pure / near-white background
-          if (r >= threshold && g >= threshold && b >= threshold) return true;
-          // Checkerboard transparency tile pattern (bright grayscale tiles where r, g, b are almost identical and brightness >= 175)
-          const maxVal = Math.max(r, g, b);
-          const minVal = Math.min(r, g, b);
-          if (minVal >= 175 && (maxVal - minVal) <= 18) return true;
-          return false;
-        };
-
-        let head = 0;
-        while (head < queue.length) {
-          const x = queue[head++];
-          const y = queue[head++];
-          const pixelIdx = y * w + x;
-
-          if (visited[pixelIdx]) continue;
-          visited[pixelIdx] = 1;
-
-          const dataIdx = pixelIdx * 4;
-          if (isBackgroundPixel(dataIdx)) {
-            data[dataIdx + 3] = 0; // Alpha = 0 (Transparent)
-
-            // Add 4-way neighbors
-            if (x > 0 && !visited[pixelIdx - 1]) queue.push(x - 1, y);
-            if (x < w - 1 && !visited[pixelIdx + 1]) queue.push(x + 1, y);
-            if (y > 0 && !visited[pixelIdx - w]) queue.push(x, y - 1);
-            if (y < h - 1 && !visited[pixelIdx + w]) queue.push(x, y + 1);
-          }
-        }
-
-        ctx.putImageData(imgData, 0, 0);
-        const resultUrl = canvas.toDataURL('image/png');
-        transparentImageCache.set(imageUrl, resultUrl);
-        resolve(resultUrl);
-      } catch (err) {
-        console.error('Error removing background:', err);
-        resolve(imageUrl);
-      }
-    };
-    img.onerror = () => resolve(imageUrl);
-    img.src = imageUrl;
-  });
-}
 
 
 
@@ -275,7 +187,6 @@ export default function InteriorScreen({
 
   // Petmong States (Linked with Supabase)
   const [myCharacter, setMyCharacter] = useState(null);
-  const [displayedTransparentUrl, setDisplayedTransparentUrl] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [familyCharacters, setFamilyCharacters] = useState([]);
   
@@ -375,7 +286,7 @@ export default function InteriorScreen({
     }
   }, [displayedCharacter?.id, displayedCharacter?.level, displayedCharacter?.image_url, currentCharStageNum]);
 
-  // Background Pre-Generation of Missing Stages for Family Shared Petmong Character
+  // Background Pre-Generation of Missing Stages for Family Shared Petmong Character (Cloud-synced via Supabase Storage)
   useEffect(() => {
     const targetChar = displayedCharacter || myCharacter;
     if (targetChar?.id && targetChar?.image_url) {
@@ -393,7 +304,6 @@ export default function InteriorScreen({
       }).catch(() => {});
     }
   }, [displayedCharacter?.id, displayedCharacter?.image_url, myCharacter?.id, myCharacter?.image_url, currentCharStageNum]);
-
   // 🎮 Real-time Petmong Game Vitals (Centralized via App.js & Supabase)
   const [localPetVitals, setLocalPetVitals] = useState({
     hunger: 80,
@@ -710,32 +620,6 @@ export default function InteriorScreen({
   };
 
   const effectiveImageUrl = activeStageImageUrl || displayedCharacter?.image_url;
-
-  useEffect(() => {
-    if (effectiveImageUrl) {
-      if (transparentImageCache.has(effectiveImageUrl)) {
-        setDisplayedTransparentUrl(transparentImageCache.get(effectiveImageUrl));
-      } else {
-        makeBackgroundTransparent(effectiveImageUrl).then(url => {
-          setDisplayedTransparentUrl(url);
-          // Persist the clean transparent PNG to Supabase so it permanently never has a white background
-          if (displayedCharacter?.id && url && url !== effectiveImageUrl) {
-            supabase
-              .from('petmong_characters')
-              .update({ image_url: url, family_id: familyId })
-              .eq('id', displayedCharacter.id)
-              .then(() => {
-                console.log('Successfully persisted transparent petmong character image in DB');
-              });
-          }
-        }).catch(() => {
-          setDisplayedTransparentUrl(effectiveImageUrl);
-        });
-      }
-    } else {
-      setDisplayedTransparentUrl(null);
-    }
-  }, [displayedCharacter?.id, effectiveImageUrl]);
 
   // Method B: Image-to-Image AI Stage Evolution (Pre-generation Check & Instant Apply)
   const triggerAiEvolution = async (char, stage) => {
@@ -1106,14 +990,11 @@ Core Design Instructions:
       // 3. If generation succeeded, save/update in database
       if (generatedImageUrl) {
         try {
-          if (typeof window !== 'undefined' && typeof document !== 'undefined') {
-            try {
-              generatedImageUrl = await makeBackgroundTransparent(generatedImageUrl);
-            } catch (transErr) {
-              console.warn('Pre-save background transparency conversion failed:', transErr);
-            }
-          }
-
+          generatedImageUrl = await makeBackgroundTransparentOnDevice(generatedImageUrl);
+        } catch (transErr) {
+          console.warn('[InteriorScreen] Transparency processing failed:', transErr);
+        }
+        try {
           const SPECIES_EMOJI_MAP = {
             canine: '🐶',
             feline: '🐱',
@@ -1563,7 +1444,6 @@ Core Design Instructions:
           dailyCareCount={dailyCareCount}
           maxDailyCare={MAX_DAILY_CARE}
           onCareAction={handleGameCareAction}
-          transparentUrl={displayedTransparentUrl || effectiveImageUrl || transparentImageCache.get(displayedCharacter.image_url)}
           onOpenGrowthBook={() => {
             setGrowthBookTargetChar(displayedCharacter || myCharacter);
             setGrowthBookInitialTab('growth');

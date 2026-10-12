@@ -16,6 +16,7 @@ import UserAvatar from './UserAvatar';
 import { getEvolutionStage, getStageNameWithPet, getRequiredExpForLevel } from '../lib/petmongEvolution';
 import { stripEmojis } from '../utils/topics';
 import { getKoreanHoliday } from '../utils/koreanHolidays';
+import { useTransparentImage } from '../lib/imageTransparencyService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -130,6 +131,8 @@ export default function HomeScreen({
     }
     return null;
   }, [petmongCharacters]);
+
+  const transparentAvatarUrl = useTransparentImage(activePetmong?.image_url);
 
   // 가족 대화 온기 & 자율 성장 지표 산출 (썸원 방식)
   const todayStart = useMemo(() => {
@@ -651,7 +654,7 @@ export default function HomeScreen({
                 {activePetmong?.image_url ? (
                   Platform.OS === 'web' ? (
                     <img
-                      src={activePetmong.image_url}
+                      src={transparentAvatarUrl || activePetmong.image_url}
                       alt={activePetmong.name || '반려몽'}
                       style={{
                         width: 56,
@@ -665,7 +668,7 @@ export default function HomeScreen({
                     />
                   ) : (
                     <Image
-                      source={{ uri: activePetmong.image_url }}
+                      source={{ uri: transparentAvatarUrl || activePetmong.image_url }}
                       style={styles.petAvatarImage}
                       resizeMode="contain"
                     />
@@ -1350,12 +1353,13 @@ const styles = StyleSheet.create({
     marginRight: 14,
     position: 'relative',
     backgroundColor: 'transparent',
+    mixBlendMode: 'multiply',
   },
   petAvatarImage: {
     width: 56,
     height: 56,
     resizeMode: 'contain',
-    ...(Platform.OS === 'web' ? { mixBlendMode: 'multiply' } : {}),
+    mixBlendMode: 'multiply',
   },
   petAvatarEmoji: {
     fontSize: 34,

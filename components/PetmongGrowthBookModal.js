@@ -47,6 +47,7 @@ import {
   startBackgroundStagePreGeneration,
   detectSpecies,
 } from '../lib/petmongEvolutionService';
+import { useTransparentImage } from '../lib/imageTransparencyService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -105,6 +106,9 @@ export default function PetmongGrowthBookModal({
 
   // Active family petmong
   const activeChar = character || null;
+
+  const selectedStageRawUrl = stageImages[selectedStageNum] || (selectedStageNum === 1 ? activeChar?.image_url : null);
+  const transparentStageUrl = useTransparentImage(selectedStageRawUrl);
 
   // Current real stage of the petmong
   const currentCharStage = useMemo(() => {
@@ -380,11 +384,27 @@ export default function PetmongGrowthBookModal({
                   ]}
                 >
                   {stageImages[selectedStageNum] ? (
-                    <Image
-                      source={{ uri: stageImages[selectedStageNum] }}
-                      style={styles.petShowcaseImage}
-                      resizeMode="contain"
-                    />
+                    Platform.OS === 'web' ? (
+                      <img
+                        src={transparentStageUrl || stageImages[selectedStageNum]}
+                        alt="petmong stage"
+                        style={{
+                          width: 116,
+                          height: 116,
+                          objectFit: 'contain',
+                          mixBlendMode: 'multiply',
+                          display: 'block',
+                          pointerEvents: 'none',
+                          userSelect: 'none',
+                        }}
+                      />
+                    ) : (
+                      <Image
+                        source={{ uri: transparentStageUrl || stageImages[selectedStageNum] }}
+                        style={styles.petShowcaseImage}
+                        resizeMode="contain"
+                      />
+                    )
                   ) : generatingStages[selectedStageNum] ? (
                     <View style={styles.stageLoadingWrap}>
                       <ActivityIndicator size="small" color="#FF6B47" />
@@ -393,11 +413,28 @@ export default function PetmongGrowthBookModal({
                       </Text>
                     </View>
                   ) : activeChar?.image_url ? (
-                    <Image
-                      source={{ uri: activeChar.image_url }}
-                      style={[styles.petShowcaseImage, { opacity: selectedStageNum === 1 ? 1 : 0.65 }]}
-                      resizeMode="contain"
-                    />
+                    Platform.OS === 'web' ? (
+                      <img
+                        src={transparentStageUrl || activeChar.image_url}
+                        alt="petmong stage"
+                        style={{
+                          width: 116,
+                          height: 116,
+                          objectFit: 'contain',
+                          mixBlendMode: 'multiply',
+                          display: 'block',
+                          opacity: selectedStageNum === 1 ? 1 : 0.65,
+                          pointerEvents: 'none',
+                          userSelect: 'none',
+                        }}
+                      />
+                    ) : (
+                      <Image
+                        source={{ uri: transparentStageUrl || activeChar.image_url }}
+                        style={[styles.petShowcaseImage, { opacity: selectedStageNum === 1 ? 1 : 0.65 }]}
+                        resizeMode="contain"
+                      />
+                    )
                   ) : (
                     <Text style={styles.petShowcaseEmoji}>
                       {getEvolvedEmoji(activeChar?.emoji || '🐶', selectedStageData.minLevel)}
@@ -792,10 +829,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
+    mixBlendMode: 'multiply',
   },
   petShowcaseImage: {
     width: 116,
     height: 116,
+    mixBlendMode: 'multiply',
   },
   petShowcaseEmoji: {
     fontSize: 72,
