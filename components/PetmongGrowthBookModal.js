@@ -13,12 +13,10 @@ import {
   Alert,
   useWindowDimensions,
 } from 'react-native';
-import Svg, { Circle, Path, G, Defs, RadialGradient, Stop } from 'react-native-svg';
 import {
   BookOpen,
   Sparkles,
   Star,
-  Crown,
   Lock,
   CheckCircle2,
   X,
@@ -47,49 +45,11 @@ import {
   startBackgroundStagePreGeneration,
   detectSpecies,
 } from '../lib/petmongEvolutionService';
-import { useTransparentImage } from '../lib/imageTransparencyService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 
 
-// Stage Celestial Aura Decorator
-function StageAuraVisual({ stageNum, size = 200 }) {
-  const half = size / 2;
-  switch (stageNum) {
-    case 1:
-      return (
-        <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-          <Circle cx={half} cy={half} r={half * 0.88} fill="rgba(255, 107, 71, 0.12)" stroke="#FF6B47" strokeWidth="1.5" strokeDasharray="4 4" />
-          <Circle cx={half} cy={half} r={half * 0.7} fill="rgba(255, 240, 242, 0.65)" />
-        </Svg>
-      );
-    case 2:
-      return (
-        <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-          <Circle cx={half} cy={half} r={half * 0.9} fill="rgba(16, 185, 129, 0.12)" stroke="#10B981" strokeWidth="2" strokeDasharray="6 3" />
-          <Circle cx={half} cy={half} r={half * 0.74} fill="rgba(236, 253, 245, 0.7)" />
-        </Svg>
-      );
-    case 3:
-      return (
-        <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-          <Circle cx={half} cy={half} r={half * 0.92} fill="rgba(59, 130, 246, 0.12)" stroke="#3B82F6" strokeWidth="2" />
-          <Circle cx={half} cy={half} r={half * 0.8} stroke="#93C5FD" strokeWidth="1.5" strokeDasharray="3 3" />
-          <Circle cx={half} cy={half} r={half * 0.72} fill="rgba(239, 246, 255, 0.75)" />
-        </Svg>
-      );
-    case 4:
-    default:
-      return (
-        <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-          <Circle cx={half} cy={half} r={half * 0.95} fill="rgba(245, 158, 11, 0.16)" stroke="#F59E0B" strokeWidth="2.5" />
-          <Circle cx={half} cy={half} r={half * 0.84} stroke="#FDE68A" strokeWidth="1.5" strokeDasharray="5 3" />
-          <Circle cx={half} cy={half} r={half * 0.72} fill="rgba(255, 251, 235, 0.85)" />
-        </Svg>
-      );
-  }
-}
 
 export default function PetmongGrowthBookModal({
   visible,
@@ -107,8 +67,7 @@ export default function PetmongGrowthBookModal({
   // Active family petmong
   const activeChar = character || null;
 
-  const selectedStageRawUrl = stageImages[selectedStageNum] || (selectedStageNum === 1 ? activeChar?.image_url : null);
-  const transparentStageUrl = useTransparentImage(selectedStageRawUrl);
+  const currentStageImageUrl = stageImages[selectedStageNum] || (selectedStageNum === 1 ? activeChar?.image_url : null);
 
   // Current real stage of the petmong
   const currentCharStage = useMemo(() => {
@@ -359,28 +318,6 @@ export default function PetmongGrowthBookModal({
 
               {/* Pedestal & Visual Sprite */}
               <View style={[styles.pedestalContainer, isSmallMobile && { width: 190, height: 190 }]}>
-                {/* 1. Background Aura Circle (Perfect Center) */}
-                <View style={styles.pedestalAuraWrapper} pointerEvents="none">
-                  <StageAuraVisual stageNum={selectedStageNum} size={isSmallMobile ? 180 : 200} />
-                </View>
-
-                {/* Overlaid Special Stage Accents */}
-                {selectedStageNum === 4 && (
-                  <View style={styles.guardianHaloBadge}>
-                    <Crown size={22} color="#F59E0B" fill="#FDE68A" />
-                  </View>
-                )}
-                {selectedStageNum === 3 && (
-                  <View style={styles.starBadgeDecor}>
-                    <Star size={18} color="#3B82F6" fill="#BFDBFE" />
-                  </View>
-                )}
-                {selectedStageNum === 2 && (
-                  <View style={styles.sproutBadgeDecor}>
-                    <Sparkles size={16} color="#10B981" fill="#A7F3D0" />
-                  </View>
-                )}
-
                 {/* 2. Scaled Sprite Box Centered inside Aura */}
                 <View
                   style={[
@@ -391,10 +328,10 @@ export default function PetmongGrowthBookModal({
                     },
                   ]}
                 >
-                  {stageImages[selectedStageNum] ? (
+                  {currentStageImageUrl ? (
                     Platform.OS === 'web' ? (
                       <img
-                        src={transparentStageUrl || stageImages[selectedStageNum]}
+                        src={currentStageImageUrl}
                         alt="petmong stage"
                         style={{
                           width: 116,
@@ -408,7 +345,7 @@ export default function PetmongGrowthBookModal({
                       />
                     ) : (
                       <Image
-                        source={{ uri: transparentStageUrl || stageImages[selectedStageNum] }}
+                        source={{ uri: currentStageImageUrl }}
                         style={styles.petShowcaseImage}
                         resizeMode="contain"
                       />
@@ -423,7 +360,7 @@ export default function PetmongGrowthBookModal({
                   ) : activeChar?.image_url ? (
                     Platform.OS === 'web' ? (
                       <img
-                        src={transparentStageUrl || activeChar.image_url}
+                        src={activeChar.image_url}
                         alt="petmong stage"
                         style={{
                           width: 116,
@@ -438,7 +375,7 @@ export default function PetmongGrowthBookModal({
                       />
                     ) : (
                       <Image
-                        source={{ uri: transparentStageUrl || activeChar.image_url }}
+                        source={{ uri: activeChar.image_url }}
                         style={[styles.petShowcaseImage, { opacity: selectedStageNum === 1 ? 1 : 0.65 }]}
                         resizeMode="contain"
                       />
@@ -805,31 +742,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     position: 'relative',
     marginVertical: 4,
-  },
-  pedestalAuraWrapper: {
-    position: 'absolute',
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1,
-  },
-  guardianHaloBadge: {
-    position: 'absolute',
-    top: 6,
-    zIndex: 5,
-  },
-  starBadgeDecor: {
-    position: 'absolute',
-    top: 14,
-    right: 28,
-    zIndex: 5,
-  },
-  sproutBadgeDecor: {
-    position: 'absolute',
-    top: 18,
-    right: 34,
-    zIndex: 5,
   },
   petSpriteBox: {
     width: 124,

@@ -12,6 +12,7 @@ import {
   Modal,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../lib/supabase';
 import Svg, { Circle, Path, Line, G, Text as SvgText } from 'react-native-svg';
 import {
   Heart,
@@ -171,8 +172,6 @@ export default function PetmongGameEngine({
   onUpdateVitals,
   onGainExp,
   onAwardPoints,
-  dailyCareCount = 0,
-  maxDailyCare = 2,
   onCareAction,
   onOpenGrowthBook = null,
   unreadWhispers = [],
@@ -217,13 +216,13 @@ export default function PetmongGameEngine({
   const canHarvestFruit = !hasHarvestedToday && (todayMessages.length > 0 || todayResponsesCount > 0);
 
   // -------------------------------------------------------------
-  // 2. State & Animation References (스마트폰 실제 시간대 및 방 테마 연동)
+  // 2. State & Animation References (스마트폰 실제 시간대 연동: 22:00 ~ 07:00 밤 시간대만 소등)
   // -------------------------------------------------------------
   const checkIsNightTime = useCallback(() => {
     const currentHour = new Date().getHours();
-    // 밤 10시(22:00)부터 아침 7시(07:00)이거나 밤/미드나잇 테마일 때
-    return currentHour >= 22 || currentHour < 7 || theme === 'night' || theme === 'midnight';
-  }, [theme]);
+    // 실제 밤 시간대(밤 10시 22:00 ~ 아침 7시 07:00)일 때만 밤 모드 적용
+    return currentHour >= 22 || currentHour < 7;
+  }, []);
 
   const [isNightMode, setIsNightMode] = useState(checkIsNightTime);
   const isLightsOff = isNightMode;
@@ -243,19 +242,56 @@ export default function PetmongGameEngine({
   const constGlowAnim = useRef(new Animated.Value(1.0)).current;
   const isMouseActiveRef = useRef(false);
 
-  // 오늘 이미 해당 별자리를 완성했는지 로컬 캐시 확인
+  // 오늘 이미 해당 별자리를 완성했는지 DB(petmong_activities) 및 로컬 캐시 확인
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const todayStartIso = useMemo(() => `${todayStr}T00:00:00.000Z`, [todayStr]);
+
   useEffect(() => {
-    const todayKey = `@famlink_const_${new Date().toISOString().split('T')[0]}_${currentConstellation.id}`;
-    AsyncStorage.getItem(todayKey).then((val) => {
-      if (val === 'true') {
-        setIsConstCompleted(true);
-        setConnectedStarIds(currentConstellation.stars.map((s) => s.id));
-      } else {
-        setIsConstCompleted(false);
-        setConnectedStarIds([1]);
+    let isMounted = true;
+    const todayKey = `@famlink_const_${todayStr}_${currentConstellation.id}`;
+
+    const checkConstellationCompleted = async () => {
+      // 1. Supabase petmong_activities 조회 (가족 전체 또는 캐릭터 기준)
+      if (character?.id) {
+        try {
+          const { data, error } = await supabase
+            .from('petmong_activities')
+            .select('id, activity_type')
+            .eq('character_id', character.id)
+            .gte('created_at', todayStartIso)
+            .eq('activity_type', `CONSTELLATION:${currentConstellation.id}`);
+
+          if (!error && Array.isArray(data) && data.length > 0) {
+            if (isMounted) {
+              setIsConstCompleted(true);
+              setConnectedStarIds(currentConstellation.stars.map((s) => s.id));
+              AsyncStorage.setItem(todayKey, 'true').catch(() => {});
+            }
+            return;
+          }
+        } catch (e) {
+          console.warn('Constellation db sync note:', e);
+        }
       }
-    }).catch(() => {});
-  }, [currentConstellation]);
+
+      // 2. 로컬 캐시 폴백
+      AsyncStorage.getItem(todayKey).then((val) => {
+        if (!isMounted) return;
+        if (val === 'true') {
+          setIsConstCompleted(true);
+          setConnectedStarIds(currentConstellation.stars.map((s) => s.id));
+        } else {
+          setIsConstCompleted(false);
+          setConnectedStarIds([1]);
+        }
+      }).catch(() => {});
+    };
+
+    checkConstellationCompleted();
+    return () => {
+      isMounted = false;
+    };
+  }, [character?.id, currentConstellation, todayStr, todayStartIso]);
 
   const [dialogue, setDialogue] = useState(
     unreadWhispers && unreadWhispers.length > 0
@@ -514,26 +550,49 @@ export default function PetmongGameEngine({
   useEffect(() => {
     if (checkIsNightTime()) {
       setLivingRoutine('napping');
-      const todayKey = `@famlink_const_${new Date().toISOString().split('T')[0]}`;
-      AsyncStorage.getItem(todayKey).then((val) => {
-        if (val === 'true') {
-          // 오늘 이미 별자리를 완성했다면 방 불이 켜진 상태(0) 유지
-          lightsDimAnim.setValue(0);
-        } else {
-          // 아직 별자리를 잇지 않았다면 소등(1)
-          Animated.timing(lightsDimAnim, {
-            toValue: 1,
-            duration: 400,
-            useNativeDriver: USE_NATIVE_DRIVER,
-          }).start();
+
+      const syncNightLights = async () => {
+        // 1. Supabase에서 오늘 별자리 완성 이력이 있는지 확인
+        if (character?.id) {
+          try {
+            const { data } = await supabase
+              .from('petmong_activities')
+              .select('id')
+              .eq('character_id', character.id)
+              .gte('created_at', todayStartIso)
+              .ilike('activity_type', 'CONSTELLATION:%');
+
+            if (data && data.length > 0) {
+              lightsDimAnim.setValue(0);
+              return;
+            }
+          } catch (e) {
+            console.warn('Night lights sync error:', e);
+          }
         }
-      }).catch(() => {
-        lightsDimAnim.setValue(1);
-      });
+
+        // 2. 로컬 캐시 폴백
+        const todayKey = `@famlink_const_${todayStr}_${currentConstellation.id}`;
+        AsyncStorage.getItem(todayKey).then((val) => {
+          if (val === 'true') {
+            lightsDimAnim.setValue(0);
+          } else {
+            Animated.timing(lightsDimAnim, {
+              toValue: 1,
+              duration: 400,
+              useNativeDriver: USE_NATIVE_DRIVER,
+            }).start();
+          }
+        }).catch(() => {
+          lightsDimAnim.setValue(1);
+        });
+      };
+
+      syncNightLights();
     } else {
       lightsDimAnim.setValue(0);
     }
-  }, [checkIsNightTime, lightsDimAnim]);
+  }, [checkIsNightTime, lightsDimAnim, character?.id, todayStartIso, todayStr, currentConstellation.id]);
 
   // 밤하늘 별자리 이스터에그 펄스 애니메이션
   useEffect(() => {
@@ -661,8 +720,19 @@ export default function PetmongGameEngine({
       `별자리가 완성되어 방 안의 불이 환하게 켜졌어요! "${currentConstellation.meaning}"의 은하수 축복으로 몽이의 꿀잠 에너지가 가득 찼어요 몽 🌟💡`
     );
 
-    const todayKey = `@famlink_const_${new Date().toISOString().split('T')[0]}_${currentConstellation.id}`;
+    const todayKey = `@famlink_const_${todayStr}_${currentConstellation.id}`;
     AsyncStorage.setItem(todayKey, 'true').catch(() => {});
+
+    // Supabase petmong_activities에 활동 기록하여 크로스 디바이스 동기화
+    if (character?.id) {
+      supabase.from('petmong_activities').insert({
+        character_id: character.id,
+        user_id: owner?.id || null,
+        activity_type: `CONSTELLATION:${currentConstellation.id}`,
+        notes: `수호 별자리 [${currentConstellation.name}] 완성으로 꿀잠 에너지를 채웠습니다! 🌙`,
+        exp_earned: awardedExp,
+      }).then(() => {}, (e) => console.warn('Constellation log error:', e));
+    }
   };
 
   const handleResetConstellation = () => {

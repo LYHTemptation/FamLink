@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -12,6 +12,7 @@ import {
   Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../lib/supabase';
 import {
   Plus,
   X,
@@ -145,28 +146,52 @@ export default function SmallTalkScreen({
   const [dailyGameRewardCount, setDailyGameRewardCount] = useState(0);
 
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const todayStartIso = useMemo(() => `${todayStr}T00:00:00.000Z`, [todayStr]);
   const currentUserId = currentUserProfile?.id || (typeof currentUser === 'string' ? currentUser : 'guest');
   const rewardStorageKey = useMemo(() => {
     return `@famlink_daily_game_rewards_${currentUserId}_${todayStr}`;
   }, [currentUserId, todayStr]);
 
-  useEffect(() => {
+  // DB(petmong_activities)에서 오늘 완료한 미니게임 보상 횟수 직접 조회 (크로스 디바이스 동기화)
+  const refreshGameRewardCount = useCallback(async () => {
+    if (!currentUserProfile?.id) return;
+    try {
+      const { data, error } = await supabase
+        .from('petmong_activities')
+        .select('activity_type, exp_earned')
+        .eq('user_id', currentUserProfile.id)
+        .gte('created_at', todayStartIso)
+        .eq('activity_type', 'MINIGAME');
+
+      if (!error && Array.isArray(data)) {
+        const rewardedCount = data.filter(d => (d.exp_earned || 0) > 0).length;
+        setDailyGameRewardCount(rewardedCount);
+        AsyncStorage.setItem(rewardStorageKey, String(rewardedCount)).catch(() => {});
+        return;
+      }
+    } catch (e) {
+      console.warn('petmong_activities minigame query note:', e);
+    }
+
+    // DB 조회 실패 또는 오프라인 시 로컬 캐시 폴백
     AsyncStorage.getItem(rewardStorageKey)
       .then((val) => {
         if (val !== null) {
           setDailyGameRewardCount(parseInt(val, 10) || 0);
-        } else {
-          setDailyGameRewardCount(0);
         }
       })
       .catch(() => {});
-  }, [rewardStorageKey]);
+  }, [currentUserProfile?.id, todayStartIso, rewardStorageKey]);
+
+  useEffect(() => {
+    refreshGameRewardCount();
+  }, [refreshGameRewardCount]);
 
   const remainingRewards = Math.max(0, DAILY_GAME_REWARD_LIMIT - dailyGameRewardCount);
   const canEarnReward = remainingRewards > 0;
 
   // 반려몽 체류형 미니게임 완료 콜백 (사용자별 일일 한도 체크 및 연습 모드 분기)
-  const handleCompletePetmongGame = (gameTitle, { score = 0, exp: awardedExp = 0, isPractice = false }) => {
+  const handleCompletePetmongGame = async (gameTitle, { score = 0, exp: awardedExp = 0, isPractice = false }) => {
     if (!isPractice && dailyGameRewardCount < DAILY_GAME_REWARD_LIMIT) {
       const nextCount = dailyGameRewardCount + 1;
       setDailyGameRewardCount(nextCount);
@@ -176,6 +201,20 @@ export default function SmallTalkScreen({
       if (onAwardPetExp) {
         onAwardPetExp(null, finalExp, `${currentUserProfile?.name || '가족'}님의 ${gameTitle} (+${finalExp} EXP)`);
       }
+
+      // Log to petmong_activities for cross-device truth
+      try {
+        await supabase.from('petmong_activities').insert({
+          character_id: petCharacter?.id,
+          user_id: currentUserProfile?.id,
+          activity_type: 'MINIGAME',
+          notes: `${currentUserProfile?.name || '가족'}님이 [${gameTitle}]을 완료했습니다! (${score}점)`,
+          exp_earned: finalExp,
+        });
+      } catch (logErr) {
+        console.warn('Failed to log minigame activity:', logErr);
+      }
+      refreshGameRewardCount();
 
       const left = DAILY_GAME_REWARD_LIMIT - nextCount;
       Alert.alert(

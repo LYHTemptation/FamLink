@@ -1,5 +1,5 @@
 import styles from './InteriorStyles';
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import UserAvatar from './UserAvatar';
 import PetmongGameEngine from './PetmongGameEngine';
 import {
@@ -55,7 +55,8 @@ import { makeBackgroundTransparentOnDevice } from '../lib/imageTransparencyServi
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
-const MAX_DAILY_CARE = 2; // Daily care limit when visiting other family members (2 times = +2P)
+const MAX_DAILY_WHISPER_SEND_EXP = 2; // 하루 귓속말 발송 EXP 보상 최대 2회 (+5 EXP씩)
+const MAX_DAILY_WHISPER_READ_EXP = 2; // 하루 귓속말 확인/하트 EXP 보상 최대 2회 (+10 EXP씩)
 
 // High-Res 3 Sumone-Style Empty Room Shell Backgrounds & Classic Day/Night
 const ROOM_BACKGROUNDS = {
@@ -182,7 +183,6 @@ export default function InteriorScreen({
   
   // Idle Game & Room Navigation States
   const [selectedRoomUserId, setSelectedRoomUserId] = useState(currentUserProfile?.id);
-  const [dailyCareCount, setDailyCareCount] = useState(0);
 
   // Petmong States (Linked with Supabase)
   const [myCharacter, setMyCharacter] = useState(null);
@@ -214,6 +214,37 @@ export default function InteriorScreen({
   const [whisperTargetUser, setWhisperTargetUser] = useState(null);
   const [whisperMessage, setWhisperMessage] = useState('');
   const [isSendingWhisper, setIsSendingWhisper] = useState(false);
+  const [dailyWhisperSendExpCount, setDailyWhisperSendExpCount] = useState(0);
+  const [dailyWhisperReadExpCount, setDailyWhisperReadExpCount] = useState(0);
+
+  // Load today's whisper EXP reward counts directly from DB (petmong_activities) for cross-device source of truth
+  const todayDateStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const todayStartIso = useMemo(() => `${todayDateStr}T00:00:00.000Z`, [todayDateStr]);
+
+  const refreshWhisperExpCounts = useCallback(async () => {
+    if (!currentUserProfile?.id) return;
+    try {
+      const { data, error } = await supabase
+        .from('petmong_activities')
+        .select('activity_type, exp_earned')
+        .eq('user_id', currentUserProfile.id)
+        .gte('created_at', todayStartIso)
+        .in('activity_type', ['WHISPER', 'WHISPER_READ']);
+
+      if (!error && Array.isArray(data)) {
+        const sendCount = data.filter(d => d.activity_type === 'WHISPER' && (d.exp_earned || 0) > 0).length;
+        const readCount = data.filter(d => d.activity_type === 'WHISPER_READ' && (d.exp_earned || 0) > 0).length;
+        setDailyWhisperSendExpCount(sendCount);
+        setDailyWhisperReadExpCount(readCount);
+      }
+    } catch (e) {
+      console.warn('Failed to query petmong_activities for whisper exp counts:', e);
+    }
+  }, [currentUserProfile?.id, todayStartIso]);
+
+  useEffect(() => {
+    refreshWhisperExpCounts();
+  }, [refreshWhisperExpCounts]);
 
   // Unread whispers addressed to the current user
   const unreadWhispers = (whispers || []).filter(
@@ -511,22 +542,33 @@ export default function InteriorScreen({
         console.warn('Supabase petmong_whispers sync note (using local cache):', dbErr?.message || dbErr);
       }
 
-      // 3. Log activity in petmong_activities (이미 활성화된 테이블)
+      // 3. Log activity in petmong_activities & Award EXP (Daily Limit: MAX_DAILY_WHISPER_SEND_EXP times)
+      const canEarnSendExp = dailyWhisperSendExpCount < MAX_DAILY_WHISPER_SEND_EXP;
+      const sendExpToAward = canEarnSendExp ? 5 : 0;
+
+      if (canEarnSendExp) {
+        const nextSendCount = dailyWhisperSendExpCount + 1;
+        setDailyWhisperSendExpCount(nextSendCount);
+        const sendKey = `@famlink_whisper_send_exp_${currentUserProfile?.id}_${todayDateStr}`;
+        AsyncStorage.setItem(sendKey, String(nextSendCount)).catch(() => {});
+      }
+
       try {
         await supabase.from('petmong_activities').insert({
           character_id: familyPetmong?.id,
           user_id: currentUserProfile?.id,
           activity_type: 'WHISPER',
           notes: `${currentUserProfile?.name || '가족'}님이 ${whisperTargetUser.name}님에게 비밀 귓속말 편지를 맡겼습니다 💌`,
-          exp_earned: 5,
+          exp_earned: sendExpToAward,
         });
       } catch (actErr) {
         console.warn('Activity log error:', actErr);
       }
 
-      if (onAwardExp && currentUserProfile?.id) {
+      if (canEarnSendExp && onAwardExp && currentUserProfile?.id) {
         onAwardExp(currentUserProfile.id, 5, '반려친구에게 귓속말 맡기기 (+5 EXP)');
       }
+      refreshWhisperExpCounts();
 
       setIsSendingWhisper(false);
       setWhisperWriteModalVisible(false);
@@ -535,9 +577,13 @@ export default function InteriorScreen({
       setWhisperMessage('');
       setWhisperTargetUser(null);
 
+      const sendExpMsg = canEarnSendExp
+        ? `\n\n🌱 ${petName}가 편지를 품고 +5 EXP 성장했어요! (오늘 남은 보상: ${MAX_DAILY_WHISPER_SEND_EXP - (dailyWhisperSendExpCount + 1)}회)`
+        : `\n\n(오늘의 귓속말 발송 성장 보상 ${MAX_DAILY_WHISPER_SEND_EXP}회를 모두 달성하여 편지만 안전하게 전해집니다 ✨)`;
+
       Alert.alert(
         `${petName}에게 전달 완료! 💌`,
-        `쉿! ${targetName}님이 거실에 들어오시면 ${petName}가 비밀 편지를 살짝 전해드릴게요! 🤫`
+        `쉿! ${targetName}님이 거실에 들어오시면 ${petName}가 비밀 편지를 살짝 전해드릴게요! 🤫${sendExpMsg}`
       );
     } catch (err) {
       setIsSendingWhisper(false);
@@ -566,7 +612,17 @@ export default function InteriorScreen({
         console.warn('petmong_whispers update sync note:', dbErr);
       }
 
-      if (onAwardExp && currentUserProfile?.id) {
+      const canEarnReadExp = dailyWhisperReadExpCount < MAX_DAILY_WHISPER_READ_EXP;
+      const readExpToAward = canEarnReadExp ? 10 : 0;
+
+      if (canEarnReadExp) {
+        const nextReadCount = dailyWhisperReadExpCount + 1;
+        setDailyWhisperReadExpCount(nextReadCount);
+        const readKey = `@famlink_whisper_read_exp_${currentUserProfile?.id}_${todayDateStr}`;
+        AsyncStorage.setItem(readKey, String(nextReadCount)).catch(() => {});
+      }
+
+      if (canEarnReadExp && onAwardExp && currentUserProfile?.id) {
         onAwardExp(currentUserProfile.id, 10, '비밀 귓속말 확인 & 하트 보내기 (+10 EXP)');
       }
 
@@ -578,19 +634,24 @@ export default function InteriorScreen({
           user_id: currentUserProfile?.id,
           activity_type: 'WHISPER_READ',
           notes: `${currentUserProfile?.name || '가족'}님이 ${sender?.name || '가족'}님의 비밀 귓속말을 읽고 하트를 보냈습니다! 💖`,
-          exp_earned: 10,
+          exp_earned: readExpToAward,
         });
       } catch (actErr) {
         console.warn('Activity log error:', actErr);
       }
+      refreshWhisperExpCounts();
 
       setWhisperReadModalVisible(false);
       setActiveWhisperToRead(null);
 
       const petName = familyPetmong?.name || '반려친구';
+      const readExpMsg = canEarnReadExp
+        ? `\n우리 ${petName}도 사랑을 먹고 +10 EXP 성장했어요! 🌱 (오늘 남은 보상: ${MAX_DAILY_WHISPER_READ_EXP - (dailyWhisperReadExpCount + 1)}회)`
+        : `\n(오늘의 귓속말 확인 성장 보상 ${MAX_DAILY_WHISPER_READ_EXP}회를 모두 달성하여 따뜻한 마음만 전해졌습니다 ✨)`;
+
       Alert.alert(
         '하트 전송 완료! 💖',
-        `${sender?.name || '가족'}님에게 감사의 마음이 전해졌습니다!\n우리 ${petName}도 사랑을 먹고 +10 EXP 성장했어요! 🌱`
+        `${sender?.name || '가족'}님에게 감사의 마음이 전해졌습니다!${readExpMsg}`
       );
     } catch (e) {
       console.warn('handleConfirmReadWhisper error:', e);
@@ -723,16 +784,11 @@ export default function InteriorScreen({
     ).start();
   }, [floatAnim]);
 
-  // Load daily touch count, daily harvest, daily care, room theme, and idle drops
+  // Load room theme and sync across family devices via Supabase
   useEffect(() => {
     if (!currentUserProfile?.id) return;
-    const today = new Date().toISOString().split('T')[0];
-    // 1. Load daily care count
-    AsyncStorage.getItem(`PETMONG_DAILY_CARE_${currentUserProfile.id}_${today}`).then(val => {
-      if (val !== null) setDailyCareCount(parseInt(val, 10) || 0);
-    }).catch(() => {});
 
-    // 2. Fetch ground-truth count from Supabase petmong_activities for cross-device sync
+    // Fetch ground-truth room theme from Supabase petmong_activities for cross-device sync
     if (familyId) {
       // Query recent room theme updates for all members
       supabase
@@ -1395,8 +1451,6 @@ Core Design Instructions:
           onUpdateVitals={handleUpdateVitals}
           onGainExp={handleGameGainExp}
           onAwardPoints={onAwardPoints}
-          dailyCareCount={dailyCareCount}
-          maxDailyCare={MAX_DAILY_CARE}
           onCareAction={handleGameCareAction}
           onOpenGrowthBook={() => {
             setGrowthBookTargetChar(displayedCharacter || myCharacter);
@@ -1899,7 +1953,11 @@ Core Design Instructions:
               ) : (
                 <>
                   <Send size={16} color="#FFFFFF" />
-                  <Text style={styles.whisperSendBtnText}>몽이 입에 편지 물려주기 (+5 EXP) 💌</Text>
+                  <Text style={styles.whisperSendBtnText}>
+                    {dailyWhisperSendExpCount < MAX_DAILY_WHISPER_SEND_EXP
+                      ? `몽이 입에 편지 물려주기 (+5 EXP, ${MAX_DAILY_WHISPER_SEND_EXP - dailyWhisperSendExpCount}회 남음) 💌`
+                      : '몽이 입에 편지 물려주기 💌'}
+                  </Text>
                 </>
               )}
             </TouchableOpacity>
@@ -1971,7 +2029,9 @@ Core Design Instructions:
             >
               <Heart size={16} color="#FFFFFF" fill="#FFFFFF" />
               <Text style={styles.whisperThankYouBtnText}>
-                고마워 하트 보내기 (+10 EXP) 💖
+                {dailyWhisperReadExpCount < MAX_DAILY_WHISPER_READ_EXP
+                  ? `고마워 하트 보내기 (+10 EXP, ${MAX_DAILY_WHISPER_READ_EXP - dailyWhisperReadExpCount}회 남음) 💖`
+                  : '고마워 하트 보내기 💖'}
               </Text>
             </TouchableOpacity>
 
