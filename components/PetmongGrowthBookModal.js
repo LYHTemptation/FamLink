@@ -161,20 +161,28 @@ export default function PetmongGrowthBookModal({
     }
   }, [visible, activeChar?.id, loadStageImages]);
 
-  const handleSelectStage = useCallback(async (sNum) => {
+  const handleSelectStage = useCallback((sNum) => {
+    // 1. Instant 0ms synchronous state switch: Tab button highlights immediately!
     setSelectedStageNum(sNum);
+
+    // 2. If stage image is not yet cached and not currently being generated, fetch/generate in background without blocking UI thread
     if (!stageImages[sNum] && activeChar?.id && activeChar?.image_url && !generatingStages[sNum]) {
       setGeneratingStages(prev => ({ ...prev, [sNum]: true }));
-      try {
-        const url = await generateStageAiImage(activeChar, sNum);
-        if (url) {
-          setStageImages(prev => ({ ...prev, [sNum]: url }));
-        }
-      } catch (e) {
-        console.warn(`On-demand stage ${sNum} generation error:`, e);
-      } finally {
-        setGeneratingStages(prev => ({ ...prev, [sNum]: false }));
-      }
+      // Run asynchronously on next tick so UI thread never freezes
+      setTimeout(() => {
+        generateStageAiImage(activeChar, sNum)
+          .then(url => {
+            if (url) {
+              setStageImages(prev => ({ ...prev, [sNum]: url }));
+            }
+          })
+          .catch(e => {
+            console.warn(`On-demand stage ${sNum} generation error:`, e);
+          })
+          .finally(() => {
+            setGeneratingStages(prev => ({ ...prev, [sNum]: false }));
+          });
+      }, 50);
     }
   }, [stageImages, activeChar, generatingStages]);
 

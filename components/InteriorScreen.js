@@ -27,8 +27,6 @@ import {
   X,
   Sparkles,
   Heart,
-  Gift,
-  Smile,
   ChevronRight,
   Camera,
   Check,
@@ -178,6 +176,7 @@ export default function InteriorScreen({
   onUpdateVitals: propOnUpdateVitals,
   messages = [],
   smallTalkState = {},
+  onNavigateScreen = null,
 }) {
   const insets = useSafeAreaInsets();
   
@@ -238,14 +237,6 @@ export default function InteriorScreen({
     setEvolutionModalVisible(false);
   };
 
-  // Sub Character Dialogue State
-  const [subBubbleCharId, setSubBubbleCharId] = useState(null);
-  const [subBubbleText, setSubBubbleText] = useState('');
-
-  // Interaction Modal State
-  const [interactionModalVisible, setInteractionModalVisible] = useState(false);
-  const [selectedTargetChar, setSelectedTargetChar] = useState(null);
-
   // Family Petmong Book / Roster Modal State & Growth Tab State
   const [familyBookModalVisible, setFamilyBookModalVisible] = useState(false);
   const [growthBookTargetChar, setGrowthBookTargetChar] = useState(null);
@@ -262,7 +253,6 @@ export default function InteriorScreen({
   const familyPetmong = (petmongCharacters && petmongCharacters.length > 0) ? petmongCharacters[0] : myCharacter;
   const displayedCharacter = familyPetmong;
   const displayedOwner = currentUserProfile;
-  const isVisitingOther = false;
 
   // Current evolution stage based on level (1, 2, 3, 4)
   const currentCharStageNum = getEvolutionStage(displayedCharacter?.level || 1).stage;
@@ -827,17 +817,6 @@ export default function InteriorScreen({
     }
   };
 
-  // Handle Tap on Other Family Member's Petmong
-  const handleSubCharPress = (char) => {
-    setSelectedTargetChar(char);
-    const quote = getRandomDialogue(char.personality || '다정한');
-    setSubBubbleCharId(char.id);
-    setSubBubbleText(quote);
-    setTimeout(() => {
-      setSubBubbleCharId(null);
-    }, 3500);
-    setInteractionModalVisible(true);
-  };
 
   // Handle AI Character Creation
   // Handle AI Character Creation & Reincarnation (Image-to-Image with 500P option)
@@ -1323,31 +1302,6 @@ Core Design Instructions:
   executeEmojiChange();
 };
 
-  // Handle Interaction
-  const handleInteract = (actionType) => {
-    if (!selectedTargetChar || !myCharacter) return;
-    const expGain = actionType === 'gift' ? 15 : 5;
-
-    if (onAwardExp && currentUserProfile?.id) {
-      onAwardExp(currentUserProfile.id, expGain, `가족 반려몽과 상호작용 (+${expGain} EXP)`);
-    } else {
-      setMyCharacter(prev => {
-        if (!prev) return prev;
-        let newExp = (prev.exp || 0) + expGain;
-        let newLevel = prev.level || 1;
-        let reqExp = getRequiredExpForLevel(newLevel);
-        while (newExp >= reqExp) {
-          newExp -= reqExp;
-          newLevel += 1;
-          reqExp = getRequiredExpForLevel(newLevel);
-          Alert.alert('레벨업! 🎉', `${prev.name}의 레벨이 ${newLevel}이 되었습니다!`);
-        }
-        return { ...prev, exp: newExp, level: newLevel };
-      });
-    }
-
-    setInteractionModalVisible(false);
-  };
 
   return (
     <View style={styles.fullscreenContainer}>
@@ -1433,7 +1387,7 @@ Core Design Instructions:
         <PetmongGameEngine
           character={displayedCharacter}
           owner={displayedOwner}
-          isVisiting={isVisitingOther}
+          isVisiting={false}
           visitorCharacter={myCharacter}
           theme={activeRoomTheme}
           insets={insets}
@@ -1459,6 +1413,7 @@ Core Design Instructions:
           }}
           messages={messages}
           smallTalkState={smallTalkState}
+          onNavigateScreen={onNavigateScreen}
         />
       ) : (
         /* Empty Room Banner */
@@ -1726,55 +1681,6 @@ Core Design Instructions:
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Character Interaction Modal (FamLink Unified Style) */}
-      <Modal
-        animationType="fade"
-        transparent={true}
-        visible={interactionModalVisible}
-        onRequestClose={() => setInteractionModalVisible(false)}
-      >
-        <View style={styles.modalOverlayCenter}>
-          <View style={styles.interactModalBox}>
-            <View style={styles.interactAvatarBox}>
-              {selectedTargetChar?.image_url ? (
-                <Image source={{ uri: selectedTargetChar.image_url }} style={{ width: 80, height: 80, borderRadius: 40 }} />
-              ) : (
-                <Text style={{ fontSize: 48 }}>{selectedTargetChar?.emoji || '🐱'}</Text>
-              )}
-            </View>
-
-            <Text style={styles.interactTitle}>{selectedTargetChar?.name}에게 마음 전하기</Text>
-            <Text style={styles.interactDesc}>상대방 반려몽에게 인사를 건네거나 선물을 해보세요!</Text>
-
-            <View style={styles.interactBtnRow}>
-              <TouchableOpacity style={styles.interactBtnItem} onPress={() => handleInteract('greet')}>
-                <View style={[styles.interactIconBox, { backgroundColor: '#EBF5FF' }]}>
-                  <Smile size={24} color="#4A90E2" />
-                </View>
-                <Text style={styles.interactBtnText}>인사하기 👋</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.interactBtnItem} onPress={() => handleInteract('gift')}>
-                <View style={[styles.interactIconBox, { backgroundColor: '#FFF5F2' }]}>
-                  <Gift size={24} color="#FF6B47" />
-                </View>
-                <Text style={styles.interactBtnText}>선물하기 🎁</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.interactBtnItem} onPress={() => handleInteract('pet')}>
-                <View style={[styles.interactIconBox, { backgroundColor: '#FFF9E6' }]}>
-                  <Heart size={24} color="#F1C40F" />
-                </View>
-                <Text style={styles.interactBtnText}>쓰다듬기 ✨</Text>
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity style={styles.closeInteractBtn} onPress={() => setInteractionModalVisible(false)}>
-              <Text style={styles.closeInteractText}>닫기</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
 
       {/* 4-Stage Evolution Milestone Celebration Modal */}
       <Modal
@@ -1906,10 +1812,6 @@ Core Design Instructions:
         initialTab={growthBookInitialTab}
         onSelectCharacter={(char) => {
           setGrowthBookTargetChar(char);
-        }}
-        onInteractWithCharacter={(char) => {
-          setFamilyBookModalVisible(false);
-          handleSubCharPress(char);
         }}
       />
 

@@ -2150,6 +2150,7 @@ export default function App() {
               onUpdateVitals={handleUpdatePetVitals}
               messages={messages}
               smallTalkState={smallTalk}
+              onNavigateScreen={setCurrentScreen}
             />
           </View>
         )}

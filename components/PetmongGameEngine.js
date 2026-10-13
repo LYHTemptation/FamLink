@@ -38,51 +38,108 @@ const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 // -------------------------------------------------------------
 const GUARDIAN_CONSTELLATIONS = [
   {
+    id: 'ursa_major',
+    name: '북두칠성',
+    meaning: '언제나 가족의 앞길을 밝혀주는 일곱 개의 빛',
+    stars: [
+      { id: 1, normX: 0.15, normY: 0.35 }, // 두베 (Dubhe)
+      { id: 2, normX: 0.16, normY: 0.65 }, // 메라크 (Merak)
+      { id: 3, normX: 0.36, normY: 0.68 }, // 페크다 (Phecda)
+      { id: 4, normX: 0.38, normY: 0.38 }, // 메그레즈 (Megrez)
+      { id: 5, normX: 0.54, normY: 0.44 }, // 알리오트 (Alioth)
+      { id: 6, normX: 0.70, normY: 0.56 }, // 미자르 (Mizar)
+      { id: 7, normX: 0.86, normY: 0.72 }, // 알카이드 (Alkaid)
+    ],
+  },
+  {
     id: 'cassiopeia',
     name: '카시오페이아자리',
-    meaning: '포근한 가족의 품',
+    meaning: '밤하늘 가장 높이 빛나는 어머니의 포근한 품',
     stars: [
-      { id: 1, normX: 0.16, normY: 0.38 },
-      { id: 2, normX: 0.33, normY: 0.68 },
-      { id: 3, normX: 0.50, normY: 0.40 },
-      { id: 4, normX: 0.68, normY: 0.70 },
-      { id: 5, normX: 0.85, normY: 0.30 },
+      { id: 1, normX: 0.14, normY: 0.36 }, // 카프 (Caph)
+      { id: 2, normX: 0.32, normY: 0.68 }, // 셰달 (Schedar)
+      { id: 3, normX: 0.50, normY: 0.38 }, // 나비 (Navi)
+      { id: 4, normX: 0.68, normY: 0.70 }, // 루크바 (Ruchbah)
+      { id: 5, normX: 0.86, normY: 0.32 }, // 세긴 (Segin)
     ],
   },
   {
     id: 'ursa_minor',
     name: '작은곰자리 북극성',
-    meaning: '언제나 길을 밝혀주는 수호별',
+    meaning: '언제나 변함없이 북쪽을 지켜주는 수호별',
     stars: [
-      { id: 1, normX: 0.16, normY: 0.62 },
-      { id: 2, normX: 0.32, normY: 0.66 },
-      { id: 3, normX: 0.48, normY: 0.48 },
-      { id: 4, normX: 0.66, normY: 0.38 },
-      { id: 5, normX: 0.84, normY: 0.24 },
-    ],
-  },
-  {
-    id: 'delphinus',
-    name: '돌고래자리',
-    meaning: '희망과 행복을 건네는 별빛',
-    stars: [
-      { id: 1, normX: 0.18, normY: 0.65 },
-      { id: 2, normX: 0.35, normY: 0.42 },
-      { id: 3, normX: 0.54, normY: 0.30 },
-      { id: 4, normX: 0.72, normY: 0.46 },
-      { id: 5, normX: 0.86, normY: 0.68 },
+      { id: 1, normX: 0.86, normY: 0.28 }, // 북극성 (Polaris)
+      { id: 2, normX: 0.70, normY: 0.38 }, // 일둔 (Yildun)
+      { id: 3, normX: 0.54, normY: 0.46 }, // 엡실론 (Epsilon UMi)
+      { id: 4, normX: 0.38, normY: 0.48 }, // 제타 (Zeta UMi)
+      { id: 5, normX: 0.22, normY: 0.42 }, // 에타 (Eta UMi)
+      { id: 6, normX: 0.14, normY: 0.64 }, // 페르카드 (Pherkad)
+      { id: 7, normX: 0.30, normY: 0.70 }, // 코카브 (Kochab)
     ],
   },
   {
     id: 'lyra',
     name: '거문고자리',
-    meaning: '포근한 꿈나라 자장가',
+    meaning: '포근한 꿈나라로 이끄는 직녀성의 자장가',
     stars: [
-      { id: 1, normX: 0.20, normY: 0.32 },
-      { id: 2, normX: 0.44, normY: 0.25 },
-      { id: 3, normX: 0.76, normY: 0.42 },
-      { id: 4, normX: 0.58, normY: 0.72 },
-      { id: 5, normX: 0.28, normY: 0.65 },
+      { id: 1, normX: 0.50, normY: 0.22 }, // 직녀성 (Vega)
+      { id: 2, normX: 0.36, normY: 0.44 }, // 제타 (Zeta Lyr)
+      { id: 3, normX: 0.34, normY: 0.72 }, // 셸리아크 (Sheliak)
+      { id: 4, normX: 0.64, normY: 0.74 }, // 술라파트 (Sulafat)
+      { id: 5, normX: 0.66, normY: 0.44 }, // 델타 (Delta Lyr)
+    ],
+  },
+  {
+    id: 'orion',
+    name: '오리온자리',
+    meaning: '어떤 추위에도 가족을 지켜주는 든든한 밤하늘 사냥꾼',
+    stars: [
+      { id: 1, normX: 0.28, normY: 0.26 }, // 베텔게우스 (Betelgeuse)
+      { id: 2, normX: 0.72, normY: 0.26 }, // 벨라트릭스 (Bellatrix)
+      { id: 3, normX: 0.62, normY: 0.48 }, // 민타카 (Mintaka)
+      { id: 4, normX: 0.50, normY: 0.50 }, // 알닐람 (Alnilam)
+      { id: 5, normX: 0.38, normY: 0.52 }, // 알니탁 (Alnitak)
+      { id: 6, normX: 0.28, normY: 0.74 }, // 사이프 (Saiph)
+      { id: 7, normX: 0.72, normY: 0.74 }, // 리겔 (Rigel)
+    ],
+  },
+  {
+    id: 'pegasus',
+    name: '페가수스자리',
+    meaning: '가족의 소원을 싣고 밤하늘을 날아오르는 날개',
+    stars: [
+      { id: 1, normX: 0.14, normY: 0.32 }, // 에니프 (Enif - 주둥이)
+      { id: 2, normX: 0.24, normY: 0.52 }, // 호맘 (Homam - 목)
+      { id: 3, normX: 0.38, normY: 0.66 }, // 마르카브 (Markab - 앞가슴)
+      { id: 4, normX: 0.72, normY: 0.66 }, // 알게니브 (Algenib - 배)
+      { id: 5, normX: 0.74, normY: 0.30 }, // 알페라츠 (Alpheratz - 등)
+      { id: 6, normX: 0.38, normY: 0.30 }, // 스케아트 (Scheat - 어깨)
+    ],
+  },
+  {
+    id: 'delphinus',
+    name: '돌고래자리',
+    meaning: '은하수 바다를 뛰노는 행복과 행운의 돌고래',
+    stars: [
+      { id: 1, normX: 0.16, normY: 0.70 }, // 덴드 (Deneb Dulfim - 꼬리끝)
+      { id: 2, normX: 0.34, normY: 0.56 }, // 엡실론 (꼬리접합)
+      { id: 3, normX: 0.52, normY: 0.64 }, // 로타네브 (Rotanev - 배)
+      { id: 4, normX: 0.74, normY: 0.48 }, // 수알로킨 (Sualocin - 주둥이)
+      { id: 5, normX: 0.56, normY: 0.34 }, // 감마 (등지느러미)
+    ],
+  },
+  {
+    id: 'corona_borealis',
+    name: '북쪽왕관자리',
+    meaning: '가족 모두의 머리 위에 씌워진 반짝이는 보석 왕관',
+    stars: [
+      { id: 1, normX: 0.14, normY: 0.38 }, // 세타
+      { id: 2, normX: 0.24, normY: 0.54 }, // 베타
+      { id: 3, normX: 0.38, normY: 0.66 }, // 알파 알페카 (Alphecca - 중앙 보석)
+      { id: 4, normX: 0.54, normY: 0.68 }, // 감마
+      { id: 5, normX: 0.68, normY: 0.56 }, // 델타
+      { id: 6, normX: 0.78, normY: 0.44 }, // 엡실론
+      { id: 7, normX: 0.86, normY: 0.32 }, // 요타
     ],
   },
 ];
@@ -123,6 +180,7 @@ export default function PetmongGameEngine({
   onOpenWriteWhisper = null,
   messages = [],
   smallTalkState = {},
+  onNavigateScreen = null,
 }) {
   const transparentCharImageUrl = useTransparentImage(character?.image_url);
 
@@ -172,12 +230,11 @@ export default function PetmongGameEngine({
   const [showWarmthModal, setShowWarmthModal] = useState(false);
   const [livingRoutine, setLivingRoutine] = useState(checkIsNightTime() ? 'napping' : 'happy');
 
-  // 오늘의 가족 수호 별자리 인룸 캔버스 상태 (대안 1: 원터치 힐링 이스터에그)
-  const todayConstIndex = useMemo(() => {
-    const day = new Date().getDate();
-    return day % GUARDIAN_CONSTELLATIONS.length;
-  }, []);
-  const currentConstellation = GUARDIAN_CONSTELLATIONS[todayConstIndex];
+  // 오늘의 가족 수호 별자리 인룸 캔버스 상태 (랜덤 수호 별자리 추첨)
+  const [constellationIndex, setConstellationIndex] = useState(() => {
+    return Math.floor(Math.random() * GUARDIAN_CONSTELLATIONS.length);
+  });
+  const currentConstellation = GUARDIAN_CONSTELLATIONS[constellationIndex] || GUARDIAN_CONSTELLATIONS[0];
 
   const [connectedStarIds, setConnectedStarIds] = useState([1]); // 1번 별부터 시작
   const [dragCurrentPos, setDragCurrentPos] = useState(null);
@@ -186,13 +243,16 @@ export default function PetmongGameEngine({
   const constGlowAnim = useRef(new Animated.Value(1.0)).current;
   const isMouseActiveRef = useRef(false);
 
-  // 오늘 이미 별자리를 완성했는지 로컬 캐시 확인
+  // 오늘 이미 해당 별자리를 완성했는지 로컬 캐시 확인
   useEffect(() => {
-    const todayKey = `@famlink_const_${new Date().toISOString().split('T')[0]}`;
+    const todayKey = `@famlink_const_${new Date().toISOString().split('T')[0]}_${currentConstellation.id}`;
     AsyncStorage.getItem(todayKey).then((val) => {
       if (val === 'true') {
         setIsConstCompleted(true);
         setConnectedStarIds(currentConstellation.stars.map((s) => s.id));
+      } else {
+        setIsConstCompleted(false);
+        setConnectedStarIds([1]);
       }
     }).catch(() => {});
   }, [currentConstellation]);
@@ -601,11 +661,14 @@ export default function PetmongGameEngine({
       `별자리가 완성되어 방 안의 불이 환하게 켜졌어요! "${currentConstellation.meaning}"의 은하수 축복으로 몽이의 꿀잠 에너지가 가득 찼어요 몽 🌟💡`
     );
 
-    const todayKey = `@famlink_const_${new Date().toISOString().split('T')[0]}`;
+    const todayKey = `@famlink_const_${new Date().toISOString().split('T')[0]}_${currentConstellation.id}`;
     AsyncStorage.setItem(todayKey, 'true').catch(() => {});
   };
 
   const handleResetConstellation = () => {
+    // 다음 다른 별자리를 랜덤으로 추첨
+    const nextIdx = Math.floor(Math.random() * GUARDIAN_CONSTELLATIONS.length);
+    setConstellationIndex(nextIdx);
     setIsConstCompleted(false);
     setConnectedStarIds([1]);
     setDragCurrentPos(null);
@@ -615,7 +678,7 @@ export default function PetmongGameEngine({
       duration: 600,
       useNativeDriver: USE_NATIVE_DRIVER,
     }).start();
-    spawnHeartToast('별자리를 다시 이어보세요 ✨');
+    spawnHeartToast(`새로운 수호 별자리: ${GUARDIAN_CONSTELLATIONS[nextIdx]?.name} ✨`);
   };
 
   const handleConstellationTouch = (e) => {
@@ -1020,30 +1083,50 @@ export default function PetmongGameEngine({
                 {/* Ground Contact Shadow */}
                 <View style={styles.petGroundShadow} />
 
-                {/* Autonomous Routine Indicator Badges */}
+                {/* Autonomous Routine Indicator Badges (Easter Egg Screen Navigation) */}
                 {livingRoutine === 'reading' && (
-                  <View style={[styles.routinePill, { backgroundColor: '#EDE9FE', borderColor: '#C4B5FD' }]}>
+                  <TouchableOpacity
+                    style={[styles.routinePill, { backgroundColor: '#EDE9FE', borderColor: '#C4B5FD' }]}
+                    onPress={() => onNavigateScreen && onNavigateScreen('smalltalk')}
+                    activeOpacity={0.75}
+                  >
                     <Text style={styles.routineEmoji}>📖</Text>
-                    <Text style={[styles.routineText, { color: '#6D28D9' }]}>일기 쓰는 중</Text>
-                  </View>
+                    <Text style={[styles.routineText, { color: '#6D28D9' }]}>스몰톡 읽는 중</Text>
+                    <ChevronRight size={10} color="#6D28D9" />
+                  </TouchableOpacity>
                 )}
                 {livingRoutine === 'photo' && (
-                  <View style={[styles.routinePill, { backgroundColor: '#FCE7F3', borderColor: '#FBCFE8' }]}>
+                  <TouchableOpacity
+                    style={[styles.routinePill, { backgroundColor: '#FCE7F3', borderColor: '#FBCFE8' }]}
+                    onPress={() => onNavigateScreen && onNavigateScreen('album')}
+                    activeOpacity={0.75}
+                  >
                     <Text style={styles.routineEmoji}>🖼️</Text>
-                    <Text style={[styles.routineText, { color: '#BE185D' }]}>가족 사진 감상</Text>
-                  </View>
+                    <Text style={[styles.routineText, { color: '#BE185D' }]}>가족 앨범 구경</Text>
+                    <ChevronRight size={10} color="#BE185D" />
+                  </TouchableOpacity>
                 )}
                 {livingRoutine === 'window' && (
-                  <View style={[styles.routinePill, { backgroundColor: '#FEF3C7', borderColor: '#FDE68A' }]}>
+                  <TouchableOpacity
+                    style={[styles.routinePill, { backgroundColor: '#FEF3C7', borderColor: '#FDE68A' }]}
+                    onPress={() => onNavigateScreen && onNavigateScreen('calendar')}
+                    activeOpacity={0.75}
+                  >
                     <Text style={styles.routineEmoji}>🪟</Text>
-                    <Text style={[styles.routineText, { color: '#B45309' }]}>창밖 구경</Text>
-                  </View>
+                    <Text style={[styles.routineText, { color: '#B45309' }]}>가족 일정 확인</Text>
+                    <ChevronRight size={10} color="#B45309" />
+                  </TouchableOpacity>
                 )}
                 {livingRoutine === 'napping' && (
-                  <View style={[styles.routinePill, { backgroundColor: '#E0E7FF', borderColor: '#C7D2FE' }]}>
+                  <TouchableOpacity
+                    style={[styles.routinePill, { backgroundColor: '#E0E7FF', borderColor: '#C7D2FE' }]}
+                    onPress={() => onNavigateScreen && onNavigateScreen('family')}
+                    activeOpacity={0.75}
+                  >
                     <Text style={styles.routineEmoji}>💤</Text>
-                    <Text style={[styles.routineText, { color: '#4338CA' }]}>쿨쿨 낮잠</Text>
-                  </View>
+                    <Text style={[styles.routineText, { color: '#4338CA' }]}>가족 공간 산책</Text>
+                    <ChevronRight size={10} color="#4338CA" />
+                  </TouchableOpacity>
                 )}
               </Animated.View>
             </TouchableOpacity>

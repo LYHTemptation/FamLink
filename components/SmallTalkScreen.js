@@ -32,9 +32,8 @@ import {
 } from 'lucide-react-native';
 import UserAvatar from './UserAvatar';
 import SnackCatchGame from './minigames/SnackCatchGame';
-import KeepyUppyGame from './minigames/KeepyUppyGame';
+import CardMatchGame from './minigames/CardMatchGame';
 import BubblePopGame from './minigames/BubblePopGame';
-import DreamConstellationGame from './minigames/DreamConstellationGame';
 import { useTransparentImage } from '../lib/imageTransparencyService';
 import { stripEmojis } from '../utils/topics';
 
@@ -133,11 +132,10 @@ export default function SmallTalkScreen({
   // 로컬 집안일 상태
   const [fallbackChores, setFallbackChores] = useState([]);
 
-  // 1. 체류형 4대 반려몽 미니게임 모달 상태
+  // 1. 체류형 3대 반려몽 미니게임 모달 상태
   const [isSnackGameVisible, setIsSnackGameVisible] = useState(false);
-  const [isKeepyUppyGameVisible, setIsKeepyUppyGameVisible] = useState(false);
+  const [isCardMatchGameVisible, setIsCardMatchGameVisible] = useState(false);
   const [isBubbleGameVisible, setIsBubbleGameVisible] = useState(false);
-  const [isDreamGameVisible, setIsDreamGameVisible] = useState(false);
 
   // 온디바이스 배경 투명화 처리된 펫 이미지 URI
   const cleanPetmongUri = useTransparentImage(petCharacter?.image_url);
@@ -851,7 +849,7 @@ export default function SmallTalkScreen({
               </Text>
             </View>
 
-            {/* 1. 반려몽과 함께하는 4대 액션 게임 */}
+            {/* 1. 반려몽과 함께하는 3대 액션 게임 */}
             <View style={{ marginBottom: 12 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, paddingHorizontal: 4 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -905,25 +903,25 @@ export default function SmallTalkScreen({
                   <Text style={styles.gameChevron}>›</Text>
                 </TouchableOpacity>
 
-                {/* 펫게임 2: 핑퐁 리프팅 랠리 */}
+                {/* 펫게임 2: 반려몽 카드 짝맞추기 */}
                 <TouchableOpacity
                   style={styles.gameActionCard}
-                  onPress={() => setIsKeepyUppyGameVisible(true)}
+                  onPress={() => setIsCardMatchGameVisible(true)}
                   activeOpacity={0.85}
                 >
-                  <View style={[styles.gameLargeIconBox, { backgroundColor: '#BAE6FD' }]}>
-                    <Text style={styles.gameLargeIcon}>⚽</Text>
+                  <View style={[styles.gameLargeIconBox, { backgroundColor: '#FEF3C7' }]}>
+                    <Text style={styles.gameLargeIcon}>🃏</Text>
                   </View>
                   <View style={styles.gameInfoCol}>
                     <View style={styles.gameTitleRow}>
-                      <Text style={styles.gameTitleText}>핑퐁 리프팅 랠리</Text>
-                      <View style={[styles.gameBadgePill, { backgroundColor: '#BAE6FD' }]}>
-                        <Text style={[styles.gameBadgePillText, { color: '#0369A1' }]}>멀티볼 ⚽</Text>
+                      <Text style={styles.gameTitleText}>카드 짝맞추기</Text>
+                      <View style={[styles.gameBadgePill, { backgroundColor: '#FEF3C7' }]}>
+                        <Text style={[styles.gameBadgePillText, { color: '#B45309' }]}>3×6 메모리 🃏</Text>
                       </View>
                     </View>
-                    <Text style={styles.gameDescText}>공이 2개로 증가하는 멀티볼 긴장감! 반려몽과 핑퐁 랠리!</Text>
+                    <Text style={styles.gameDescText}>뒤집힌 18장의 카드 속 반려몽과 보물들의 짝을 찾아라!</Text>
                     <Text style={[styles.gamePointsText, { color: canEarnReward ? '#16A34A' : '#78716C' }]}>
-                      {canEarnReward ? '+15 ~ +50 EXP 획득 🌱' : '자유 연습 모드 🎯 (EXP 완료)'}
+                      {canEarnReward ? '+25 ~ +50 EXP 획득 🌱' : '자유 연습 모드 🎯 (EXP 완료)'}
                     </Text>
                   </View>
                   <Text style={styles.gameChevron}>›</Text>
@@ -946,30 +944,6 @@ export default function SmallTalkScreen({
                       </View>
                     </View>
                     <Text style={styles.gameDescText}>수박게임 스타일! 방울을 합쳐 대왕 무지개 거품 완성!</Text>
-                    <Text style={[styles.gamePointsText, { color: canEarnReward ? '#16A34A' : '#78716C' }]}>
-                      {canEarnReward ? '+15 ~ +50 EXP 획득 🌱' : '자유 연습 모드 🎯 (EXP 완료)'}
-                    </Text>
-                  </View>
-                  <Text style={styles.gameChevron}>›</Text>
-                </TouchableOpacity>
-
-                {/* 펫게임 4: 꿈나라 별자리 잇기 */}
-                <TouchableOpacity
-                  style={styles.gameActionCard}
-                  onPress={() => setIsDreamGameVisible(true)}
-                  activeOpacity={0.85}
-                >
-                  <View style={[styles.gameLargeIconBox, { backgroundColor: '#EDE9FE' }]}>
-                    <Text style={styles.gameLargeIcon}>🌙</Text>
-                  </View>
-                  <View style={styles.gameInfoCol}>
-                    <View style={styles.gameTitleRow}>
-                      <Text style={styles.gameTitleText}>꿈나라 별자리 잇기</Text>
-                      <View style={[styles.gameBadgePill, { backgroundColor: '#EDE9FE' }]}>
-                        <Text style={[styles.gameBadgePillText, { color: '#6D28D9' }]}>별자리 잇기</Text>
-                      </View>
-                    </View>
-                    <Text style={styles.gameDescText}>밤하늘의 빛나는 별들을 이어 반려몽에게 달콤한 단꿈 선물!</Text>
                     <Text style={[styles.gamePointsText, { color: canEarnReward ? '#16A34A' : '#78716C' }]}>
                       {canEarnReward ? '+15 ~ +50 EXP 획득 🌱' : '자유 연습 모드 🎯 (EXP 완료)'}
                     </Text>
@@ -1222,15 +1196,15 @@ export default function SmallTalkScreen({
         onGameComplete={(result) => handleCompletePetmongGame('후르츠 닌자', result)}
       />
 
-      {/* 2. 핑퐁 리프팅 랠리 */}
-      <KeepyUppyGame
-        visible={isKeepyUppyGameVisible}
+      {/* 2. 반려몽 카드 짝맞추기 */}
+      <CardMatchGame
+        visible={isCardMatchGameVisible}
         character={petCharacter}
         transparentUrl={cleanPetmongUri || petCharacter?.image_url}
         canEarnReward={canEarnReward}
         remainingRewards={remainingRewards}
-        onClose={() => setIsKeepyUppyGameVisible(false)}
-        onGameComplete={(result) => handleCompletePetmongGame('핑퐁 리프팅 랠리', result)}
+        onClose={() => setIsCardMatchGameVisible(false)}
+        onGameComplete={(result) => handleCompletePetmongGame('카드 짝맞추기', result)}
       />
 
       {/* 3. 뽀득뽀득 버블 팝 */}
@@ -1242,17 +1216,6 @@ export default function SmallTalkScreen({
         remainingRewards={remainingRewards}
         onClose={() => setIsBubbleGameVisible(false)}
         onGameComplete={(result) => handleCompletePetmongGame('비누방울 머지', result)}
-      />
-
-      {/* 4. 꿈나라 별자리 잇기 */}
-      <DreamConstellationGame
-        visible={isDreamGameVisible}
-        character={petCharacter}
-        transparentUrl={cleanPetmongUri || petCharacter?.image_url}
-        canEarnReward={canEarnReward}
-        remainingRewards={remainingRewards}
-        onClose={() => setIsDreamGameVisible(false)}
-        onGameComplete={(result) => handleCompletePetmongGame('꿈나라 별자리 잇기', result)}
       />
     </View>
   );
