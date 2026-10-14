@@ -52,6 +52,7 @@ import {
   createPetmongSvg,
 } from '../lib/petmongEvolutionService';
 import { makeBackgroundTransparentOnDevice } from '../lib/imageTransparencyService';
+import { generatePetmongMascotFromPhoto } from '../services/geminiService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
@@ -905,121 +906,30 @@ export default function InteriorScreen({
 
       if (!result.canceled && result.assets[0].base64) {
       setIsGenerating(true);
-      const clientApiKey = (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_GEMINI_API_KEY) || '';
-      let generatedImageUrl = null;
-      let detailedError = null;
-      let detectedColor = '#FFAAA6';
-      let detectedSpecies = 'fantasy';
+      const targetStageNum = familyPetmong?.level
+        ? (familyPetmong.level >= 20 ? 4 : familyPetmong.level >= 10 ? 3 : familyPetmong.level >= 5 ? 2 : 1)
+        : 1;
 
-      // 1. Client-side AI pipeline (Gemini 2.5 Flash Vision -> Gemini 2.5 Flash Image Multimodal Image-to-Image)
-      if (clientApiKey) {
-        try {
-          const cleanBase64 = result.assets[0].base64.replace(/^data:image\/\w+;base64,/, '');
+      // 1. Unified Gemini Service Pipeline (Vision + Image-to-Image)
+      const aiResult = await generatePetmongMascotFromPhoto({
+        base64Photo: result.assets[0].base64,
+        personality: newPersonality,
+        targetStageNum,
+      });
 
-          // Step 1: Deep Vision analysis via active gemini-2.5-flash
-          let visualFeatureDescription = '';
-          try {
-            const visionResp = await fetch(
-              `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${clientApiKey}`,
-              {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  contents: [{
-                    parts: [
-                      { text: 'Analyze this photo in depth. What are the subject\'s most charming and distinctive visual features (facial expression, eye sparkle and shape, warm smile, hairstyle or ears/fur texture, signature accessories, and overall lovely energy)? Describe them in 2-3 vivid sentences so they can be captured as an irresistibly cute, lovable 2D pet creature mascot.' },
-                      { inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } }
-                    ]
-                  }]
-                })
-              }
-            );
+      let generatedImageUrl = aiResult.generatedImageUrl;
+      const detailedError = aiResult.detailedError;
+      const detectedColor = aiResult.detectedColor;
+      const detectedSpecies = aiResult.detectedSpecies;
 
-            if (visionResp.ok) {
-              const vData = await visionResp.json();
-              visualFeatureDescription = vData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-
-              // Optional helper parsing for fallback SVG/emoji only (not passed to prompt)
-              const lower = visualFeatureDescription.toLowerCase();
-              if (lower.includes('dog') || lower.includes('puppy') || lower.includes('canine')) detectedSpecies = 'canine';
-              else if (lower.includes('cat') || lower.includes('kitten') || lower.includes('feline')) detectedSpecies = 'feline';
-              else if (lower.includes('rabbit') || lower.includes('bunny')) detectedSpecies = 'rabbit';
-              else if (lower.includes('bear') || lower.includes('panda')) detectedSpecies = 'bear';
-              else if (lower.includes('bird') || lower.includes('chick')) detectedSpecies = 'bird';
-              else if (lower.includes('fox')) detectedSpecies = 'fox';
-              else if (lower.includes('hamster') || lower.includes('rodent')) detectedSpecies = 'rodent';
-            }
-          } catch (visionErr) {
-            console.warn('Vision photo analysis fallback:', visionErr);
-          }
-
-          // Step 2: Genuine Multimodal Image-to-Image Generation with uploaded photo
-          const imgCandidates = ['gemini-2.5-flash-image', 'gemini-3.1-flash-image'];
-          for (const m of imgCandidates) {
-            try {
-              const personalityTraitMap = {
-                '다정한': 'affectionate, gentle and warm smiling expression with loving eyes',
-                '장난꾸러기': 'playful, mischievous expression with a cheeky grin and lively sparkle',
-                '잠꾸러기': 'sleepy, cozy expression with eyelids drooping comfortably',
-                '애교쟁이': 'super cute, charming and loving sparkling eyes with blushy cheeks',
-                '호기심많은': 'curious, wide-eyed inquisitive expression tilted with wonder',
-              };
-              const trait = personalityTraitMap[newPersonality] || `${newPersonality} expression`;
-              const targetStageNum = familyPetmong?.level ? (familyPetmong.level >= 20 ? 4 : familyPetmong.level >= 10 ? 3 : familyPetmong.level >= 5 ? 2 : 1) : 1;
-              const finalPrompt = `IMAGE-TO-IMAGE CREATURE MASCOT GENERATION:
-Transform the uploaded photo into an irresistibly cute, lovable 2D flat kawaii pet creature mascot (Stage ${targetStageNum}) in the charming 'Sumone' app art style.
-
-Visual Analysis of the Photo:
-${visualFeatureDescription || 'Faithfully capture the cheerful facial expression, sweet eyes, and lovely aura from the provided photo.'}
-
-Core Design Instructions:
-1. Reinterpret the Subject: Seamlessly translate the subject's distinct facial expression, eye characteristics, lovely smile, and unique charm from the photo into an endearing creature face.
-2. Personality & Mood: Radiate an adorable ${trait}.
-3. Aesthetics: Minimalist 2D flat kawaii vector art, clean bold outlines, soft gentle pastel tones, rounded cuddly silhouette, iconic and lovable proportions, zero realistic human skin photorealism.
-4. Plain solid pure white background (#FFFFFF) only: Zero background elements, no scenery, no borders, NEVER draw checkerboard grid, NEVER draw checkered tiles or fake transparency squares. Centered standalone character on clean pure white canvas.`;
-
-              const imgResp = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${clientApiKey}`,
-                {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    contents: [{
-                      parts: [
-                        { text: finalPrompt },
-                        { inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } }
-                      ]
-                    }]
-                  })
-                }
-              );
-              if (imgResp.ok) {
-                const imgData = await imgResp.json();
-                const parts = imgData.candidates?.[0]?.content?.parts || [];
-                const imgPart = parts.find(p => p.inlineData);
-                if (imgPart?.inlineData?.data) {
-                  generatedImageUrl = `data:${imgPart.inlineData.mimeType || 'image/jpeg'};base64,${imgPart.inlineData.data}`;
-                  break;
-                }
-              }
-            } catch (imgErr) {
-              console.warn(`Image-to-image attempt failed on ${m}:`, imgErr);
-            }
-          }
-
-          // Step 3: Seamless Vector Petmong Generation (tailored to user's photo color, personality, and species)
-          if (!generatedImageUrl) {
-            const targetStageNum = familyPetmong?.level ? (familyPetmong.level >= 20 ? 4 : familyPetmong.level >= 10 ? 3 : familyPetmong.level >= 5 ? 2 : 1) : 1;
-            generatedImageUrl = createPetmongSvg(targetStageNum, detectedColor, newPersonality, detectedSpecies);
-          }
-        } catch (clientErr) {
-          console.error('Client direct generation failed:', clientErr);
-          detailedError = clientErr?.message || String(clientErr);
-        }
-      } else {
-        // Fallback: Seamless Vector Petmong Generation if clientApiKey is not set
-        const targetStageNum = familyPetmong?.level ? (familyPetmong.level >= 20 ? 4 : familyPetmong.level >= 10 ? 3 : familyPetmong.level >= 5 ? 2 : 1) : 1;
-        generatedImageUrl = createPetmongSvg(targetStageNum, detectedColor, newPersonality, detectedSpecies);
+      // 2. Fallback: Seamless Vector Petmong Generation
+      if (!generatedImageUrl) {
+        generatedImageUrl = createPetmongSvg(
+          targetStageNum,
+          detectedColor,
+          newPersonality,
+          detectedSpecies
+        );
       }
 
       // 3. If generation succeeded, save/update in database

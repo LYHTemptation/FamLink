@@ -2,15 +2,21 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
 import { EVOLUTION_STAGES, getStageEvolutionPrompt } from './petmongEvolution';
 import { makeBackgroundTransparentOnDevice } from './imageTransparencyService';
+import {
+  isGeminiConfigured,
+  analyzeImageWithGeminiVision,
+  generateImageWithGeminiModels,
+} from '../services/geminiService';
+import type { GeminiContentPart } from './aiSystemPrompts';
 
 const STAGE_IMAGES_PREFIX = '@famlink_petmong_stages_';
 const STAGE_SINGLE_PREFIX = '@famlink_petmong_stage_';
 
 // High-speed RAM Memory Cache for multi-megabyte base64 stage images
-const stageMemoryCache = new Map();
+const stageMemoryCache = new Map<string, Record<number, string>>();
 
 // Helper: Convert base64 data URI to Uint8Array for cross-platform upload
-function base64ToUint8Array(base64) {
+function base64ToUint8Array(base64: string): Uint8Array | Buffer {
   const clean = base64.replace(/^data:image\/[a-zA-Z0-9.+_-]+;base64,/, '');
   if (typeof Buffer !== 'undefined') {
     return Buffer.from(clean, 'base64');
@@ -24,7 +30,7 @@ function base64ToUint8Array(base64) {
 }
 
 // Upload stage image to Supabase Storage and return public HTTPS URL
-async function uploadStageImageToStorage(characterId, stageNum, imageUrl) {
+async function uploadStageImageToStorage(characterId: string, stageNum: number, imageUrl: string): Promise<string> {
   if (!characterId || !stageNum || !imageUrl) return imageUrl;
   if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
     return imageUrl;
@@ -63,7 +69,7 @@ async function uploadStageImageToStorage(characterId, stageNum, imageUrl) {
 const IDB_NAME = 'famlink_petmong_db';
 const IDB_STORE = 'stage_images';
 
-function getIndexedDB() {
+function getIndexedDB(): Promise<any> {
   if (typeof window === 'undefined' || !window.indexedDB) return Promise.resolve(null);
   return new Promise((resolve) => {
     try {
@@ -82,7 +88,7 @@ function getIndexedDB() {
   });
 }
 
-async function getIdbItem(key) {
+async function getIdbItem(key: string): Promise<any> {
   const db = await getIndexedDB();
   if (!db) return null;
   return new Promise((resolve) => {
@@ -98,7 +104,7 @@ async function getIdbItem(key) {
   });
 }
 
-async function setIdbItem(key, val) {
+async function setIdbItem(key: string, val: any): Promise<boolean> {
   const db = await getIndexedDB();
   if (!db) return false;
   return new Promise((resolve) => {
@@ -114,7 +120,7 @@ async function setIdbItem(key, val) {
   });
 }
 
-async function removeIdbItem(key) {
+async function removeIdbItem(key: string): Promise<boolean> {
   const db = await getIndexedDB();
   if (!db) return false;
   return new Promise((resolve) => {
@@ -131,7 +137,7 @@ async function removeIdbItem(key) {
 }
 
 // 1. Get cached stage images for a character: { 1: url, 2: url, 3: url, 4: url }
-export async function getPetmongStageImages(characterId, expectedBaseImageUrl = null) {
+export async function getPetmongStageImages(characterId?: string | null, expectedBaseImageUrl: string | null = null): Promise<Record<number, string>> {
   if (!characterId) return {};
 
   let stages = stageMemoryCache.get(characterId);
@@ -208,7 +214,7 @@ export async function getPetmongStageImages(characterId, expectedBaseImageUrl = 
 }
 
 // 2. Save a stage image to cache & upload to Supabase Storage for cross-device family sync
-export async function savePetmongStageImage(characterId, stageNum, imageUrl) {
+export async function savePetmongStageImage(characterId: string, stageNum: number, imageUrl: string): Promise<Record<number, string>> {
   if (!characterId || !stageNum || !imageUrl) return {};
   try {
     const current = (await getPetmongStageImages(characterId)) || {};
@@ -253,7 +259,7 @@ export async function savePetmongStageImage(characterId, stageNum, imageUrl) {
 }
 
 // Reset/clear cached stage images for a character (e.g., upon appearance change/reincarnation)
-export async function resetPetmongStageImages(characterId) {
+export async function resetPetmongStageImages(characterId?: string | null): Promise<boolean> {
   if (!characterId) return;
   stageMemoryCache.delete(characterId);
   try {
@@ -278,7 +284,7 @@ export async function resetPetmongStageImages(characterId) {
 }
 
 // Helper: Detect species from emoji or string (10 distinct lineages)
-export function detectSpecies(emoji = '', name = '') {
+export function detectSpecies(emoji: string = '', name: string = ''): string {
   const s = `${emoji || ''} ${name || ''}`.toLowerCase();
   if (s.includes('🐶') || s.includes('🐕') || s.includes('🐩') || s.includes('🐺') || s.includes('개') || s.includes('강아지') || s.includes('늑대') || s.includes('dog') || s.includes('wolf') || s.includes('canine') || s.includes('hound')) return 'canine';
   if (s.includes('🐱') || s.includes('🐈') || s.includes('🦁') || s.includes('🐯') || s.includes('고양이') || s.includes('냥') || s.includes('호랑이') || s.includes('표범') || s.includes('cat') || s.includes('tiger') || s.includes('feline') || s.includes('panther')) return 'feline';
@@ -294,7 +300,7 @@ export function detectSpecies(emoji = '', name = '') {
 }
 
 // Helper: 4-Stage True Physical & Magical Growth Vector SVG Generator
-export function createPetmongSvg(stage = 1, bodyColor = '#FFAAA6', personality = '다정한', speciesHint = 'fantasy') {
+export function createPetmongSvg(stage: number = 1, bodyColor: string = '#FFAAA6', personality: string = '다정한', speciesHint: string = 'fantasy'): string {
   const c = bodyColor || '#FFAAA6';
   const sp = (speciesHint || 'fantasy').toLowerCase();
   const stg = Math.min(Math.max(Number(stage) || 1, 1), 4);
@@ -667,7 +673,7 @@ export function createPetmongSvg(stage = 1, bodyColor = '#FFAAA6', personality =
 }
 
 // Helper: Extract or fetch base64 data ({ mimeType, data }) from data URI or remote HTTP(S) URL
-export async function getImageBase64Data(imgSource) {
+export async function getImageBase64Data(imgSource?: string | null): Promise<{ mimeType: string; data: string } | null> {
   if (!imgSource || typeof imgSource !== 'string') return null;
   // If data URI
   if (imgSource.startsWith('data:image')) {
@@ -712,7 +718,7 @@ export async function getImageBase64Data(imgSource) {
 }
 
 // 3. Generate a specific stage image for a petmong using AI (Strict Lineage Chaining)
-export async function generateStageAiImage(character, targetStage) {
+export async function generateStageAiImage(character: any, targetStage: number): Promise<string> {
   if (!character) throw new Error('No character to evolve');
 
   // Chaining: Stage 2 builds on Stage 1; Stage 3 builds on Stage 2; Stage 4 builds on Stage 3
@@ -726,14 +732,14 @@ export async function generateStageAiImage(character, targetStage) {
     refImage = cachedStages[1] || character.image_url;
   }
 
-  const clientApiKey = (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_GEMINI_API_KEY) || '';
-  let evolvedImageUrl = null;
+  const hasGeminiKey = isGeminiConfigured();
+  let evolvedImageUrl: string | null = null;
   let detectedColor = '#FFAAA6';
-  let detectedSpecies = detectSpecies(character.emoji, character.name);
+  const detectedSpecies = detectSpecies(character.emoji, character.name);
   let characterTraits = `${character.name} (${detectedSpecies})`;
 
   // Extract visual DNA from previous stage reference image (SVG or Raster)
-  let refBase64Data = null;
+  let refBase64Data: { mimeType: string; data: string } | null = null;
   if (refImage) {
     const isSvg = refImage.includes('image/svg') || refImage.includes('<svg');
     if (isSvg) {
@@ -747,9 +753,10 @@ export async function generateStageAiImage(character, targetStage) {
         }
 
         if (rawSvg) {
-          // Extract specific body fill color (ignore outline, white, and blush)
           const fillMatches = [...rawSvg.matchAll(/fill="(#[0-9a-fA-F]{6})"/g)].map(m => m[1]);
-          const candidateColor = fillMatches.find(c => c !== '#2D3142' && c !== '#FFFFFF' && c !== '#FF4D6D' && c !== '#000000');
+          const candidateColor = fillMatches.find(
+            c => c !== '#2D3142' && c !== '#FFFFFF' && c !== '#FF4D6D' && c !== '#000000'
+          );
           if (candidateColor) {
             detectedColor = candidateColor;
           } else {
@@ -759,7 +766,6 @@ export async function generateStageAiImage(character, targetStage) {
         }
       } catch (_) {}
     } else {
-      // Remote HTTPS URL or Data URI
       try {
         refBase64Data = await getImageBase64Data(refImage);
       } catch (err) {
@@ -768,89 +774,40 @@ export async function generateStageAiImage(character, targetStage) {
     }
   }
 
-  // Vision Analysis to extract precise visual features if raster base64 is available
-  if (clientApiKey && refBase64Data?.data) {
-    try {
-      const visionResp = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${clientApiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [
-                {
-                  inlineData: {
-                    mimeType: refBase64Data.mimeType === 'image/svg+xml' ? 'image/png' : refBase64Data.mimeType,
-                    data: refBase64Data.data
-                  }
-                },
-                {
-                  text: 'Analyze this creature mascot in detail. Describe its species, primary body color (hex code), facial features (eyes shape, expression, blush, smile), body shape, ears/horns/tail, and any unique accessories in 2-3 sentences. Focus strictly on visual identity so it can be evolved consistently.'
-                }
-              ]
-            }]
-          })
-        }
-      );
-      if (visionResp.ok) {
-        const vData = await visionResp.json();
-        const txt = vData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
-        if (txt) {
-          characterTraits = txt;
-          const colMatch = txt.match(/#[0-9a-fA-F]{6}/);
-          if (colMatch) detectedColor = colMatch[0];
-        }
-      }
-    } catch (visionErr) {
-      console.warn('Vision analysis fallback:', visionErr);
+  // Vision Analysis via unified geminiService
+  if (hasGeminiKey && refBase64Data?.data) {
+    const txt = await analyzeImageWithGeminiVision(
+      refBase64Data.data,
+      refBase64Data.mimeType,
+      'Analyze this creature mascot in detail. Describe its species, primary body color (hex code), facial features (eyes shape, expression, blush, smile), body shape, ears/horns/tail, and any unique accessories in 2-3 sentences. Focus strictly on visual identity so it can be evolved consistently.'
+    );
+    if (txt) {
+      characterTraits = txt;
+      const colMatch = txt.match(/#[0-9a-fA-F]{6}/);
+      if (colMatch) detectedColor = colMatch[0];
     }
   }
 
-  // Direct client Image-to-Image with Gemini / Imagen (Multimodal image-first reference)
-  if (!evolvedImageUrl && clientApiKey) {
+  // Multimodal Image-to-Image via unified geminiService
+  if (!evolvedImageUrl && hasGeminiKey) {
     const stagePrompt = getStageEvolutionPrompt(
       targetStage,
       `Character Visual Identity: ${characterTraits}`,
       character.personality || '다정한'
     );
 
-    const imgCandidates = ['gemini-2.5-flash-image', 'gemini-3.1-flash-image'];
-    for (const m of imgCandidates) {
-      try {
-        const parts = [];
-        // Supply base character image first so the model references visual identity directly
-        if (refBase64Data?.data) {
-          parts.push({
-            inlineData: {
-              mimeType: refBase64Data.mimeType === 'image/svg+xml' ? 'image/png' : refBase64Data.mimeType,
-              data: refBase64Data.data
-            }
-          });
-        }
-        parts.push({ text: stagePrompt });
-
-        const imgResp = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${clientApiKey}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts }] })
-          }
-        );
-
-        if (imgResp.ok) {
-          const imgData = await imgResp.json();
-          const imgPart = (imgData.candidates?.[0]?.content?.parts || []).find(p => p.inlineData);
-          if (imgPart?.inlineData?.data) {
-            evolvedImageUrl = `data:${imgPart.inlineData.mimeType || 'image/jpeg'};base64,${imgPart.inlineData.data}`;
-            break;
-          }
-        }
-      } catch (err) {
-        console.log(`Image generation attempt on ${m}:`, err);
-      }
+    const parts: GeminiContentPart[] = [];
+    if (refBase64Data?.data) {
+      parts.push({
+        inlineData: {
+          mimeType: refBase64Data.mimeType === 'image/svg+xml' ? 'image/png' : refBase64Data.mimeType,
+          data: refBase64Data.data,
+        },
+      });
     }
+    parts.push({ text: stagePrompt });
+
+    evolvedImageUrl = await generateImageWithGeminiModels(parts);
   }
 
   // 3. True Physical & Lineage Growth Vector SVG Fallback (instant & guaranteed)
@@ -872,9 +829,9 @@ export async function generateStageAiImage(character, targetStage) {
 }
 
 // 4. Background Queue Manager for Stages 2, 3, 4 (Sequential Lineage Growth)
-const runningJobs = new Set();
+const runningJobs = new Set<string>();
 
-export async function startBackgroundStagePreGeneration(character, onStageUpdated) {
+export async function startBackgroundStagePreGeneration(character: any, onStageUpdated?: (stage: number, url: string) => void): Promise<void> {
   if (!character?.id || !character?.image_url) return;
   if (runningJobs.has(character.id)) return;
 

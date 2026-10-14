@@ -1,3 +1,25 @@
+export interface EvolutionStageSpec {
+  stage: number;
+  minLevel: number;
+  maxLevel: number;
+  name: string;
+  stageTitle: string;
+  scale: number;
+  desc: string;
+  badgeColor: string;
+  targetPeriod: string;
+  requiredExp: string;
+  aura: string | null;
+}
+
+export interface PetmongSpeciesSpec {
+  id: string;
+  name: string;
+  emoji: string;
+  desc: string;
+  chain: string[];
+}
+
 // Family Companion Growth Milestones & System
 // Stage 1: Lv.1 ~ 4   (아기 시절 / Baby)
 // Stage 2: Lv.5 ~ 9   (개구쟁이 단짝 / Playful Friend)
@@ -13,7 +35,7 @@ export const EVOLUTION_MILESTONES = [1, 5, 10, 20];
 // Stage 4 (Lv.20+): 최종 진화 완료 (이후 레벨당 1,000 EXP 유지)
 export const TOTAL_FINAL_EXP = 14000;
 
-export const getRequiredExpForLevel = (level = 1) => {
+export const getRequiredExpForLevel = (level: number = 1): number => {
   const lvl = Math.max(1, Number(level) || 1);
   if (lvl < 5) {
     // Lv.1: 350, Lv.2: 450, Lv.3: 550, Lv.4: 650 -> 합계 2,000 EXP (Lv.5 달성)
@@ -32,7 +54,7 @@ export const getRequiredExpForLevel = (level = 1) => {
 };
 
 // 특정 레벨 도달까지 필요한 총 누적 EXP 계산
-export const getCumulativeExpForLevel = (targetLevel = 1) => {
+export const getCumulativeExpForLevel = (targetLevel: number = 1): number => {
   const target = Math.max(1, Number(targetLevel) || 1);
   let total = 0;
   for (let l = 1; l < target; l++) {
@@ -41,7 +63,7 @@ export const getCumulativeExpForLevel = (targetLevel = 1) => {
   return total;
 };
 
-export const EVOLUTION_STAGES = {
+export const EVOLUTION_STAGES: Record<number, EvolutionStageSpec> = {
   1: {
     stage: 1,
     minLevel: 1,
@@ -96,7 +118,7 @@ export const EVOLUTION_STAGES = {
   },
 };
 
-export const getStageNameWithPet = (stageNum = 1, petName = '반려친구') => {
+export const getStageNameWithPet = (stageNum: number = 1, petName: string = '반려친구'): string => {
   const name = petName || '반려친구';
   switch (Number(stageNum)) {
     case 1:
@@ -112,19 +134,19 @@ export const getStageNameWithPet = (stageNum = 1, petName = '반려친구') => {
   }
 };
 
-export const getEvolutionStage = (level = 1) => {
+export const getEvolutionStage = (level: number = 1): EvolutionStageSpec => {
   if (level >= 20) return EVOLUTION_STAGES[4];
   if (level >= 10) return EVOLUTION_STAGES[3];
   if (level >= 5) return EVOLUTION_STAGES[2];
   return EVOLUTION_STAGES[1];
 };
 
-export const isMilestoneLevel = (level) => {
+export const isMilestoneLevel = (level: number): boolean => {
   return [5, 10, 20].includes(level);
 };
 
 // // 10 Distinct Companion Species Lineages & Evolution Data
-export const PETMONG_SPECIES_LIST = [
+export const PETMONG_SPECIES_LIST: PetmongSpeciesSpec[] = [
   {
     id: 'canine',
     name: '강아지',
@@ -198,7 +220,7 @@ export const PETMONG_SPECIES_LIST = [
 ];
 
 // 4-Stage Emoji Evolution Tree
-const EMOJI_EVOLUTION_CHAINS = {
+const EMOJI_EVOLUTION_CHAINS: Record<string, string[]> = {
   '🐶': ['🥚', '🐶', '🐕', '✨🐕'],
   '🐕': ['🥚', '🐶', '🐕', '✨🐕'],
   '🐱': ['🥚', '🐱', '🐈', '✨🐱'],
@@ -218,9 +240,9 @@ const EMOJI_EVOLUTION_CHAINS = {
   '🌱': ['🌰', '🌱', '🌿', '🌳'],
 };
 
-export const getEvolvedEmoji = (baseEmoji = '🐶', level = 1) => {
-  let actualEmoji = baseEmoji;
-  let actualLevel = level;
+export const getEvolvedEmoji = (baseEmoji: string | number = '🐶', level: number | string = 1): string => {
+  let actualEmoji: string = String(baseEmoji);
+  let actualLevel: number = Number(level) || 1;
   if (typeof baseEmoji === 'number' && typeof level === 'string') {
     actualEmoji = level;
     actualLevel = baseEmoji;
@@ -238,7 +260,7 @@ export const getEvolvedEmoji = (baseEmoji = '🐶', level = 1) => {
 };
 
 // Image-to-Image Stage Prompts for AI Evolution (Warm Family Companionship - Sumone Style)
-export const getStageEvolutionPrompt = (targetStage, characterTraits = '', personalityTrait = '') => {
+export const getStageEvolutionPrompt = (targetStage: number, characterTraits: string = '', personalityTrait: string = ''): string => {
   const baseInstruction = `IMAGE-TO-IMAGE CHARACTER GROWTH & EVOLUTION:
 Reference character: ${characterTraits}.
 CRITICAL IDENTITY LOCK: Look at the provided input image. This is the exact character at an earlier stage. You MUST maintain 100% of the character's facial features, exact eye shape, expression, smile, ear/tail style, and lovely color palette from the reference image.

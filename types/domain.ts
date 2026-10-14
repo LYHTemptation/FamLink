@@ -126,3 +126,51 @@ export interface UpcomingKoreanHolidayInfo {
   diffDays: number;
   isToday: boolean;
 }
+
+export interface SmallTalkTopicRow {
+  id: string;
+  family_id?: string | null;
+  question: string;
+  category: string;
+  order_index?: number;
+  assigned_date?: string | null;
+}
+
+export interface PhotobookSyncPayload {
+  selectedVolume?: string;
+  selectedThemeId?: string;
+  bookFontFamily?: string;
+  bookFontSize?: number;
+  bookTitle?: string;
+  bookSubtitle?: string;
+  coverSignature?: string;
+  coverPhoto?: string | null;
+  coverStyle?: string;
+  pageFormats?: Record<string, any>;
+  spreadPhotos?: Record<string, any>;
+  spreadLayouts?: Record<string, any>;
+  spreadCaptions?: Record<string, any>;
+  customSpreadTopics?: Record<string, any>;
+  customGalleryPhotos?: any[];
+  prologueEssay?: string;
+  epilogueEssay?: string;
+  updatedBy?: string;
+  updatedAt?: number | string;
+}
+
+export interface PhotobookOrderRecord {
+  family_id: string | null;
+  profile_id: string | null;
+  volume_id: string;
+  order_number: string;
+  book_title: string;
+  cover_type: string;
+  page_count: number;
+  recipient_name: string;
+  recipient_phone: string;
+  postal_code: string;
+  shipping_address: string;
+  shipping_memo: string;
+  book_snapshot: Record<string, any>;
+  status: 'pending' | 'paid' | 'printing' | 'shipped' | string;
+}

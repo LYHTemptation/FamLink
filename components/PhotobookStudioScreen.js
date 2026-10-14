@@ -59,7 +59,14 @@ import { supabase } from '../lib/supabase';
 import { colors, typography, commonStyles } from '../theme';
 import UserAvatar from './UserAvatar';
 import { stripEmojis } from '../utils/topics';
-import { AI_SYSTEM_PROMPTS, buildGeminiPayload } from '../lib/aiSystemPrompts';
+import { generatePhotobookEssay } from '../services/geminiService';
+import {
+  mapPhotobookRowToState,
+  saveFamilyPhotobookToDB,
+  fetchFamilyPhotobookVolume,
+  fetchFamilyPhotobookVolumes,
+  createPhotobookOrderInDB,
+} from '../services/photobookService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -487,48 +494,14 @@ export default function PhotobookStudioScreen({
       }).catch(() => {});
     }
 
-    // Supabase 활동 백업 (비동기)
+    // 4. Supabase DB (family_photobooks) 영구 저장 및 활동 백업 (photobookService 위임)
     if (effectiveFamilyId && effectiveFamilyId !== 'default-family') {
-      supabase.from('petmong_activities').insert({
-        family_id: effectiveFamilyId,
-        action_type: 'PHOTOBOOK_SYNC_UPDATE',
-        exp_gained: 0,
-        points_awarded: 0,
-      }).then(() => {}).catch(() => {});
-
-      // 4. Supabase DB (family_photobooks) 영구 저장 (UPSERT)
       const currentVol = updatedPartial?.selectedVolume || selectedVolume || 'vol-1';
-      // file:/// 경로가 포함된 coverPhoto는 DB에 저장하지 않음 (null 또는 https://, data:만 허용)
-      const cleanCoverPhoto = fullPayload.coverPhoto && typeof fullPayload.coverPhoto === 'string' && fullPayload.coverPhoto.startsWith('file://')
-        ? null
-        : (fullPayload.coverPhoto || null);
-      supabase.from('family_photobooks').upsert({
-        family_id: effectiveFamilyId,
-        volume_id: currentVol,
-        title: fullPayload.bookTitle,
-        subtitle: fullPayload.bookSubtitle,
-        cover_signature: fullPayload.coverSignature,
-        cover_photo_url: cleanCoverPhoto,
-        cover_style: fullPayload.coverStyle,
-        theme_id: fullPayload.selectedThemeId,
-        font_family: fullPayload.bookFontFamily,
-        font_size: fullPayload.bookFontSize,
-        spread_photos: fullPayload.spreadPhotos,
-        spread_layouts: fullPayload.spreadLayouts,
-        page_formats: fullPayload.pageFormats,
-        spread_captions: fullPayload.spreadCaptions,
-        custom_spread_topics: fullPayload.customSpreadTopics,
-        custom_gallery_photos: fullPayload.customGalleryPhotos,
-        prologue_essay: fullPayload.prologueEssay,
-        epilogue_essay: fullPayload.epilogueEssay,
-        updated_by: currentUserName,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'family_id,volume_id' }).then(({ error: upsertErr }) => {
-        if (upsertErr) {
-          console.warn('⚠️ family_photobooks upsert 실패 (RLS 권한 또는 테이블 설정을 확인하세요):', upsertErr.message);
-        }
-      }).catch((dbErr) => {
-        console.warn('family_photobooks upsert sync note:', dbErr);
+      saveFamilyPhotobookToDB({
+        familyId: effectiveFamilyId,
+        volumeId: currentVol,
+        payload: fullPayload,
+        updatedBy: currentUserName,
       });
     }
   }, [
@@ -602,41 +575,15 @@ export default function PhotobookStudioScreen({
         resetVolumeToDefaults(volId, volObj);
       });
 
-    // 2. Supabase DB에서 해당 권차 데이터 조회
+    // 2. Supabase DB에서 해당 권차 데이터 조회 (photobookService 위임)
     if (effectiveFamilyId && effectiveFamilyId !== 'default-family') {
-      supabase
-        .from('family_photobooks')
-        .select('*')
-        .eq('family_id', effectiveFamilyId)
-        .eq('volume_id', volId)
-        .maybeSingle()
-        .then(({ data, error }) => {
-          if (!error && data) {
-            applyRemotePhotobookUpdate({
-              selectedVolume: data.volume_id,
-              selectedThemeId: data.theme_id,
-              bookFontFamily: data.font_family,
-              bookFontSize: data.font_size,
-              bookTitle: data.title,
-              bookSubtitle: data.subtitle,
-              coverSignature: data.cover_signature,
-              coverPhoto: data.cover_photo_url,
-              coverStyle: data.cover_style,
-              pageFormats: data.page_formats || {},
-              spreadPhotos: data.spread_photos || {},
-              spreadLayouts: data.spread_layouts || {},
-              spreadCaptions: data.spread_captions || {},
-              customSpreadTopics: data.custom_spread_topics || {},
-              customGalleryPhotos: data.custom_gallery_photos || [],
-              prologueEssay: data.prologue_essay,
-              epilogueEssay: data.epilogue_essay,
-              updatedBy: data.updated_by,
-            }, volId);
-          } else {
-            resetVolumeToDefaults(volId, volObj);
-          }
-        })
-        .catch(() => {});
+      fetchFamilyPhotobookVolume(effectiveFamilyId, volId).then((remoteState) => {
+        if (remoteState) {
+          applyRemotePhotobookUpdate(remoteState, volId);
+        } else {
+          resetVolumeToDefaults(volId, volObj);
+        }
+      });
     }
   }, [effectiveFamilyId, selectedVolume, applyRemotePhotobookUpdate, resetVolumeToDefaults]);
 
@@ -661,33 +608,28 @@ export default function PhotobookStudioScreen({
 
     // 0. 가족이 작성해 둔 모든 권차 목록 조회하여 volumeList에 동적 병합
     if (effectiveFamilyId !== 'default-family') {
-      supabase
-        .from('family_photobooks')
-        .select('volume_id, title')
-        .eq('family_id', effectiveFamilyId)
-        .then(({ data }) => {
-          if (data && data.length > 0) {
-            setVolumeList(prev => {
-              const existingIds = new Set(prev.map(v => v.id));
-              const additions = [];
-              data.forEach(row => {
-                if (row.volume_id && !existingIds.has(row.volume_id)) {
-                  const numMatch = row.volume_id.match(/\d+/);
-                  const num = numMatch ? numMatch[0] : (prev.length + additions.length + 1);
-                  additions.push({
-                    id: row.volume_id,
-                    title: `Vol. ${num}`,
-                    label: `제${num}권`,
-                    period: `${num * 180}일의 기록`,
-                    desc: row.title || `우리 가족 ${num}번째 이야기`,
-                  });
-                }
-              });
-              return additions.length > 0 ? [...prev, ...additions] : prev;
+      fetchFamilyPhotobookVolumes(effectiveFamilyId).then((rows) => {
+        if (rows.length > 0) {
+          setVolumeList(prev => {
+            const existingIds = new Set(prev.map(v => v.id));
+            const additions = [];
+            rows.forEach(row => {
+              if (row.volume_id && !existingIds.has(row.volume_id)) {
+                const numMatch = row.volume_id.match(/\d+/);
+                const num = numMatch ? numMatch[0] : (prev.length + additions.length + 1);
+                additions.push({
+                  id: row.volume_id,
+                  title: `Vol. ${num}`,
+                  label: `제${num}권`,
+                  period: `${num * 180}일의 기록`,
+                  desc: row.title || `우리 가족 ${num}번째 이야기`,
+                });
+              }
             });
-          }
-        })
-        .catch(() => {});
+            return additions.length > 0 ? [...prev, ...additions] : prev;
+          });
+        }
+      });
     }
 
     // 1. AsyncStorage 캐시 불러오기 (해당 권차 캐시)
@@ -704,37 +646,11 @@ export default function PhotobookStudioScreen({
 
     // 2. Supabase DB (family_photobooks)에서 최신 원격 설정 조회
     if (effectiveFamilyId !== 'default-family') {
-      supabase
-        .from('family_photobooks')
-        .select('*')
-        .eq('family_id', effectiveFamilyId)
-        .eq('volume_id', selectedVolume || 'vol-1')
-        .maybeSingle()
-        .then(({ data, error }) => {
-          if (!error && data) {
-            applyRemotePhotobookUpdate({
-              selectedVolume: data.volume_id,
-              selectedThemeId: data.theme_id,
-              bookFontFamily: data.font_family,
-              bookFontSize: data.font_size,
-              bookTitle: data.title,
-              bookSubtitle: data.subtitle,
-              coverSignature: data.cover_signature,
-              coverPhoto: data.cover_photo_url,
-              coverStyle: data.cover_style,
-              pageFormats: data.page_formats || {},
-              spreadPhotos: data.spread_photos || {},
-              spreadLayouts: data.spread_layouts || {},
-              spreadCaptions: data.spread_captions || {},
-              customSpreadTopics: data.custom_spread_topics || {},
-              customGalleryPhotos: data.custom_gallery_photos || [],
-              prologueEssay: data.prologue_essay,
-              epilogueEssay: data.epilogue_essay,
-              updatedBy: data.updated_by,
-            }, selectedVolume);
-          }
-        })
-        .catch(() => {});
+      fetchFamilyPhotobookVolume(effectiveFamilyId, selectedVolume || 'vol-1').then((remoteState) => {
+        if (remoteState) {
+          applyRemotePhotobookUpdate(remoteState, selectedVolume);
+        }
+      });
     }
 
     // 3. Supabase Realtime Broadcast 채널 연결
@@ -759,26 +675,7 @@ export default function PhotobookStudioScreen({
         (payload) => {
           const row = payload.new;
           if (row && row.volume_id === selectedVolume) {
-            applyRemotePhotobookUpdate({
-              selectedVolume: row.volume_id,
-              selectedThemeId: row.theme_id,
-              bookFontFamily: row.font_family,
-              bookFontSize: row.font_size,
-              bookTitle: row.title,
-              bookSubtitle: row.subtitle,
-              coverSignature: row.cover_signature,
-              coverPhoto: row.cover_photo_url,
-              coverStyle: row.cover_style,
-              pageFormats: row.page_formats || {},
-              spreadPhotos: row.spread_photos || {},
-              spreadLayouts: row.spread_layouts || {},
-              spreadCaptions: row.spread_captions || {},
-              customSpreadTopics: row.custom_spread_topics || {},
-              customGalleryPhotos: row.custom_gallery_photos || [],
-              prologueEssay: row.prologue_essay,
-              epilogueEssay: row.epilogue_essay,
-              updatedBy: row.updated_by,
-            }, selectedVolume);
+            applyRemotePhotobookUpdate(mapPhotobookRowToState(row), selectedVolume);
           }
         }
       )
@@ -1003,12 +900,10 @@ export default function PhotobookStudioScreen({
     ],
   }), []);
 
-  // AI 프롤로그(P.1) & 에필로그(P.32) 문학 에세이 실시간 집필 (스몰톡 문답 분석)
+  // AI 프롤로그(P.1) & 에필로그(P.16) 문학 에세이 실시간 집필 (geminiService 위임)
   const handleGenerateAiEssay = async (type = targetEssayType) => {
     setIsGeneratingAiEssay(true);
-    const clientApiKey = (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_GEMINI_API_KEY) || '';
 
-    // 책에 수록된 대표 스몰톡 문답 및 가족 답변 텍스트 수집 (최대 5개 추출)
     const topicSnippets = [];
     if (Array.isArray(smallTalkArchiveList) && smallTalkArchiveList.length > 0) {
       smallTalkArchiveList.slice(0, 6).forEach(item => {
@@ -1027,69 +922,13 @@ export default function PhotobookStudioScreen({
     }
 
     const memberNames = activeFamilyList.map(m => m.name || m.role).join(', ');
+    const essayText = await generatePhotobookEssay({
+      type,
+      memberNames,
+      topicSnippets,
+    });
 
-    if (clientApiKey) {
-      try {
-        const isPrologue = type === 'prologue';
-        const userPrompt = isPrologue
-          ? `[가족 도서 첫 페이지 '프롤로그(여는 글)' 집필 요청]
-가족 구성원: ${memberNames}
-가족들이 지난 6개월간 책에 실어둔 스몰톡 문답 기록:
-${topicSnippets.join('\n')}
-
-위 가족들의 실제 대화와 답변에 담긴 따스한 추억(음식, 일상, 감사, 소망 등)을 자연스럽게 녹여내어, 포토북 첫 장(P.1)에 수록될 감동적인 서문(프롤로그)을 작성해주세요.
-- 분량: 2개 단락 (약 150~220자 내외)
-- 어조: 다정하고 서정적인 문학 에세이 톤
-- 제목이나 군더더기 인사말 없이, 책 본문에 바로 인쇄될 수 있는 에세이 본문 문장만 출력하세요.`
-          : `[가족 도서 마지막 페이지 '에필로그(맺음말 & 가족 헌사)' 집필 요청]
-가족 구성원: ${memberNames}
-가족들이 지난 6개월간 책에 실어둔 스몰톡 문답 기록:
-${topicSnippets.join('\n')}
-
-위 가족들의 180일간의 여정을 마무리하며, 서로를 향한 고마움과 앞으로 다가올 계절(Vol. 2)에 대한 기대를 담은 감동적인 맺음말(에필로그)을 작성해주세요.
-- 분량: 2개 단락 (약 150~220자 내외)
-- 어조: 뭉클하고 깊은 울림을 주는 가족 헌정 에세이 톤
-- 제목이나 군더더기 인사말 없이, 책 본문에 바로 인쇄될 수 있는 에세이 본문 문장만 출력하세요.`;
-
-        const payload = buildGeminiPayload(
-          AI_SYSTEM_PROMPTS.FAMILY_STORY_AUTHOR,
-          userPrompt,
-          { generationConfig: { temperature: 0.85, maxOutputTokens: 300 } }
-        );
-
-        const resp = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${clientApiKey}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          }
-        );
-
-        if (resp.ok) {
-          const data = await resp.json();
-          const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim()?.replace(/^["'“”]/g, '')?.replace(/["'“”]$/g, '');
-          if (text) {
-            setCustomEssayInput(text);
-            setIsGeneratingAiEssay(false);
-            return;
-          }
-        }
-      } catch (err) {
-        console.warn('Gemini essay generation error:', err);
-      }
-    }
-
-    // Fallback: 정성스러운 프리셋 문장
-    if (type === 'prologue') {
-      setCustomEssayInput(
-        `가장 눈부신 순간은 언제나 멀리 있지 않았습니다. 함께 밥을 먹고, 사소한 농담을 주고받고, 문득 전해진 다정한 안부 속에 ${memberNames} 우리 가족의 가장 따뜻한 계절이 깃들어 있었습니다.\n\n지난 6개월간 매일 주고받은 스몰톡 문답과 카메라에 담긴 온기를 엮어, 우리들의 찬란했던 시간들을 이 한 권의 책에 고이 남깁니다.`
-      );
-    } else {
-      setCustomEssayInput(
-        `계절은 바뀌어도 우리가 함께 나눈 사랑의 온도는 변하지 않습니다. ${memberNames} 함께여서 눈부셨던 180일간의 발자취는 이제 우리 마음속 가장 깊은 보물이 되었습니다.\n\n다음 6개월 뒤에도 더 풍성하고 다정한 추억으로 이 자리를 채워나가길 소망하며, 서로의 든든한 버팀목이 되어준 온 가족에게 이 책을 바칩니다.`
-      );
-    }
+    setCustomEssayInput(essayText);
     setIsGeneratingAiEssay(false);
   };
 
@@ -1320,22 +1159,8 @@ ${topicSnippets.join('\n')}
       status: 'pending',
     };
 
-    // Supabase photobook_orders 테이블에 주문 데이터 INSERT
-    try {
-      const { data: insertedOrder, error: orderError } = await supabase
-        .from('photobook_orders')
-        .insert(orderRecord)
-        .select()
-        .single();
-
-      if (orderError) {
-        console.warn('photobook_orders insert error:', orderError);
-      } else {
-        console.log('Successfully inserted photobook order:', insertedOrder?.order_number);
-      }
-    } catch (err) {
-      console.warn('Exception during photobook order insert:', err);
-    }
+    // Supabase photobook_orders 테이블에 주문 데이터 INSERT (photobookService 위임)
+    await createPhotobookOrderInDB(orderRecord);
 
     setTimeout(() => {
       setIsSubmittingOrder(false);

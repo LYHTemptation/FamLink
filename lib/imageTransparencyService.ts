@@ -4,12 +4,12 @@ import jpeg from 'jpeg-js';
 import { Buffer } from 'buffer';
 
 // Global In-Memory Cache for processed transparent PNGs
-const transparentCache = new Map();
+const transparentCache = new Map<string, string>();
 
 /**
  * Pure JavaScript base64 to Buffer converter
  */
-function base64ToBuffer(base64) {
+function base64ToBuffer(base64: string): Buffer {
   const clean = base64.replace(/^data:image\/[a-zA-Z0-9.+_-]+;base64,/, '');
   return Buffer.from(clean, 'base64');
 }
@@ -17,7 +17,7 @@ function base64ToBuffer(base64) {
 /**
  * Pure JavaScript Buffer to base64 string converter
  */
-function bufferToBase64(bytes) {
+function bufferToBase64(bytes: Uint8Array | Buffer): string {
   return Buffer.from(bytes).toString('base64');
 }
 
@@ -30,7 +30,7 @@ function bufferToBase64(bytes) {
  * @param {number} threshold - white brightness cutoff (default: 228)
  * @returns {Promise<string>} - transparent PNG Data URI (`data:image/png;base64,...`)
  */
-export async function makeBackgroundTransparentOnDevice(imageSource, threshold = 228) {
+export async function makeBackgroundTransparentOnDevice(imageSource: string, threshold: number = 228): Promise<string> {
   if (!imageSource || typeof imageSource !== 'string') return imageSource;
 
   // Already transparent SVG
@@ -88,7 +88,7 @@ export async function makeBackgroundTransparentOnDevice(imageSource, threshold =
     let head = 0;
     let tail = 0;
 
-    const isWhitePixel = (idx) => {
+    const isWhitePixel = (idx: number): boolean => {
       // If already transparent, treat as transparent background so BFS traverses through
       if (rgbaData[idx + 3] < 50) return true;
       const r = rgbaData[idx];
@@ -103,7 +103,7 @@ export async function makeBackgroundTransparentOnDevice(imageSource, threshold =
       return false;
     };
 
-    const tryAddSeed = (x, y) => {
+    const tryAddSeed = (x: number, y: number): void => {
       const pIdx = y * width + x;
       if (visited[pIdx]) return;
       visited[pIdx] = 1;
@@ -205,8 +205,8 @@ export async function makeBackgroundTransparentOnDevice(imageSource, threshold =
 /**
  * React Hook for rendering a transparent version of any image URI
  */
-export function useTransparentImage(imageUri) {
-  const [cleanUri, setCleanUri] = useState(imageUri);
+export function useTransparentImage(imageUri?: string | null): string | null | undefined {
+  const [cleanUri, setCleanUri] = useState<string | null | undefined>(imageUri);
 
   useEffect(() => {
     if (!imageUri) {

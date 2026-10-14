@@ -256,11 +256,15 @@ FamLink/
 ├── types/                           # 전역 도메인 TypeScript 인터페이스 (domain.ts)
 ├── theme/                           # 전역 디자인 시스템 및 공통 스타일 (colors.ts, typography.ts, commonStyles.ts)
 ├── lib/                             # 공통 라이브러리 및 AI/DB 서비스
-│   ├── supabase.js                  # Supabase 클라이언트 인스턴스
-│   ├── aiSystemPrompts.js           # Gemini AI 표준 시스템 프롬프트 & 페르소나 모듈
-│   ├── imageTransparencyService.js  # 크로스플랫폼 순수 JS 온디바이스 배경 투명화 파이프라인 (BFS Flood-Fill)
-│   ├── petmongEvolution.js          # 반려몽 4단계 성장 마일스톤 및 동물상 진화 스펙
-│   └── petmongEvolutionService.js   # Gemini 2.5 Flash 기반 AI 진화 생성 & 상태 동기화 서비스
+│   ├── supabase.ts                  # Supabase 클라이언트 인스턴스 (TypeScript)
+│   ├── aiSystemPrompts.ts           # Gemini AI 표준 시스템 프롬프트 & 페르소나 모듈 (TypeScript)
+│   ├── imageTransparencyService.ts  # 크로스플랫폼 순수 TS 온디바이스 배경 투명화 파이프라인 (BFS Flood-Fill)
+│   ├── petmongEvolution.ts          # 반려몽 4단계 성장 마일스톤 및 동물상 진화 스펙 (TypeScript)
+│   └── petmongEvolutionService.ts   # Gemini 2.5 Flash 기반 AI 진화 생성 & 상태 동기화 서비스 (TypeScript)
+├── services/                        # 비즈니스 로직 및 외부 API/DB 연동 서비스 계층 (TypeScript)
+│   ├── geminiService.ts             # Gemini 2.5 Flash 텍스트/비전/이미지 생성 통합 AI 서비스
+│   ├── photobookService.ts          # 포토북 원격 동기화(family_photobooks) 및 POD 주문(photobook_orders) 서비스
+│   └── smallTalkService.ts          # 스몰톡 질문 DB 조회·시딩 및 날짜별 질문 매핑 서비스
 ├── screens/                         # 사용자 인증 및 로그인 (AuthScreen.js)
 ├── utils/                           # 알림(notifications.ts), 데일리 주제(topics.ts), 공휴일(koreanHolidays.ts), 에러 핸들러(errorHandler.ts)
 ├── scripts/                         # 유지보수 및 품질 검증 스크립트

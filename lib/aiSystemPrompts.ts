@@ -1,17 +1,43 @@
 /**
- * FamLink AI System Instructions & Developer Prompts Library
- * 
- * Google Gemini API의 공식 `systemInstruction` 필드 및 개발자가 활용할 수 있는
- * 표준 시스템 프롬프트 모음입니다.
- * 
- * REST API 페이로드 규격:
- * {
- *   systemInstruction: {
- *     parts: [{ text: AI_SYSTEM_PROMPTS.FAMILY_STORY_AUTHOR }]
- *   },
- *   contents: [{ parts: [{ text: userPrompt }] }]
- * }
+ * FamLink AI System Instructions & Developer Prompts Library (TypeScript)
+ *
+ * Google Gemini API의 공식 `systemInstruction` 필드 및 표준 시스템 프롬프트 모음입니다.
  */
+
+export interface GeminiInlineDataPart {
+  inlineData: {
+    mimeType: string;
+    data: string;
+  };
+}
+
+export interface GeminiTextPart {
+  text: string;
+}
+
+export type GeminiContentPart = GeminiTextPart | GeminiInlineDataPart;
+
+export interface GeminiGenerationConfig {
+  temperature?: number;
+  maxOutputTokens?: number;
+  topP?: number;
+  topK?: number;
+}
+
+export interface BuildGeminiPayloadOptions {
+  imagePart?: GeminiInlineDataPart;
+  generationConfig?: GeminiGenerationConfig;
+}
+
+export interface GeminiRequestPayload {
+  contents: Array<{
+    parts: GeminiContentPart[];
+  }>;
+  systemInstruction?: {
+    parts: GeminiTextPart[];
+  };
+  generationConfig?: GeminiGenerationConfig;
+}
 
 export const AI_SYSTEM_PROMPTS = {
   // 1. 가족 이야기책 전문 문학 작가
@@ -38,16 +64,14 @@ Follow these strict rules:
 4. Comments: Add concise comments only to complex logic. Do not over-comment obvious code.
 5. Error handling: Always include robust error handling and edge-case considerations.
 6. Ambiguity: If my request is missing crucial context, ask for clarification instead of guessing.`,
-};
+} as const;
 
-/**
- * 헬퍼 함수: Gemini generateContent REST 호출 페이로드 생성
- * @param {string} systemInstructionText - AI_SYSTEM_PROMPTS 중 하나
- * @param {string} userPromptText - 사용자 요청 프롬프트
- * @param {object} options - 추가 옵션 (imagePart 등)
- */
-export function buildGeminiPayload(systemInstructionText, userPromptText, options = {}) {
-  const payload = {
+export function buildGeminiPayload(
+  systemInstructionText: string | null | undefined,
+  userPromptText: string,
+  options: BuildGeminiPayloadOptions = {}
+): GeminiRequestPayload {
+  const payload: GeminiRequestPayload = {
     contents: [
       {
         parts: [

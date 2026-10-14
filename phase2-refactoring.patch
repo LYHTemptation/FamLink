@@ -1,0 +1,1935 @@
+diff --git a/README.md b/README.md
+index 30e0b8c..8fa320f 100644
+--- a/README.md
++++ b/README.md
+@@ -256,11 +256,15 @@ FamLink/
+ ├── types/                           # 전역 도메인 TypeScript 인터페이스 (domain.ts)
+ ├── theme/                           # 전역 디자인 시스템 및 공통 스타일 (colors.ts, typography.ts, commonStyles.ts)
+ ├── lib/                             # 공통 라이브러리 및 AI/DB 서비스
+-│   ├── supabase.js                  # Supabase 클라이언트 인스턴스
+-│   ├── aiSystemPrompts.js           # Gemini AI 표준 시스템 프롬프트 & 페르소나 모듈
+-│   ├── imageTransparencyService.js  # 크로스플랫폼 순수 JS 온디바이스 배경 투명화 파이프라인 (BFS Flood-Fill)
+-│   ├── petmongEvolution.js          # 반려몽 4단계 성장 마일스톤 및 동물상 진화 스펙
+-│   └── petmongEvolutionService.js   # Gemini 2.5 Flash 기반 AI 진화 생성 & 상태 동기화 서비스
++│   ├── supabase.ts                  # Supabase 클라이언트 인스턴스 (TypeScript)
++│   ├── aiSystemPrompts.ts           # Gemini AI 표준 시스템 프롬프트 & 페르소나 모듈 (TypeScript)
++│   ├── imageTransparencyService.ts  # 크로스플랫폼 순수 TS 온디바이스 배경 투명화 파이프라인 (BFS Flood-Fill)
++│   ├── petmongEvolution.ts          # 반려몽 4단계 성장 마일스톤 및 동물상 진화 스펙 (TypeScript)
++│   └── petmongEvolutionService.ts   # Gemini 2.5 Flash 기반 AI 진화 생성 & 상태 동기화 서비스 (TypeScript)
++├── services/                        # 비즈니스 로직 및 외부 API/DB 연동 서비스 계층 (TypeScript)
++│   ├── geminiService.ts             # Gemini 2.5 Flash 텍스트/비전/이미지 생성 통합 AI 서비스
++│   ├── photobookService.ts          # 포토북 원격 동기화(family_photobooks) 및 POD 주문(photobook_orders) 서비스
++│   └── smallTalkService.ts          # 스몰톡 질문 DB 조회·시딩 및 날짜별 질문 매핑 서비스
+ ├── screens/                         # 사용자 인증 및 로그인 (AuthScreen.js)
+ ├── utils/                           # 알림(notifications.ts), 데일리 주제(topics.ts), 공휴일(koreanHolidays.ts), 에러 핸들러(errorHandler.ts)
+ ├── scripts/                         # 유지보수 및 품질 검증 스크립트
+diff --git a/components/InteriorScreen.js b/components/InteriorScreen.js
+index e1db6f2..dd8ff7e 100644
+--- a/components/InteriorScreen.js
++++ b/components/InteriorScreen.js
+@@ -52,6 +52,7 @@ import {
+   createPetmongSvg,
+ } from '../lib/petmongEvolutionService';
+ import { makeBackgroundTransparentOnDevice } from '../lib/imageTransparencyService';
++import { generatePetmongMascotFromPhoto } from '../services/geminiService';
+ 
+ const { width: SCREEN_WIDTH } = Dimensions.get('window');
+ const USE_NATIVE_DRIVER = Platform.OS !== 'web';
+@@ -905,121 +906,30 @@ export default function InteriorScreen({
+ 
+       if (!result.canceled && result.assets[0].base64) {
+       setIsGenerating(true);
+-      const clientApiKey = (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_GEMINI_API_KEY) || '';
+-      let generatedImageUrl = null;
+-      let detailedError = null;
+-      let detectedColor = '#FFAAA6';
+-      let detectedSpecies = 'fantasy';
+-
+-      // 1. Client-side AI pipeline (Gemini 2.5 Flash Vision -> Gemini 2.5 Flash Image Multimodal Image-to-Image)
+-      if (clientApiKey) {
+-        try {
+-          const cleanBase64 = result.assets[0].base64.replace(/^data:image\/\w+;base64,/, '');
+-
+-          // Step 1: Deep Vision analysis via active gemini-2.5-flash
+-          let visualFeatureDescription = '';
+-          try {
+-            const visionResp = await fetch(
+-              `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${clientApiKey}`,
+-              {
+-                method: 'POST',
+-                headers: { 'Content-Type': 'application/json' },
+-                body: JSON.stringify({
+-                  contents: [{
+-                    parts: [
+-                      { text: 'Analyze this photo in depth. What are the subject\'s most charming and distinctive visual features (facial expression, eye sparkle and shape, warm smile, hairstyle or ears/fur texture, signature accessories, and overall lovely energy)? Describe them in 2-3 vivid sentences so they can be captured as an irresistibly cute, lovable 2D pet creature mascot.' },
+-                      { inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } }
+-                    ]
+-                  }]
+-                })
+-              }
+-            );
++      const targetStageNum = familyPetmong?.level
++        ? (familyPetmong.level >= 20 ? 4 : familyPetmong.level >= 10 ? 3 : familyPetmong.level >= 5 ? 2 : 1)
++        : 1;
+ 
+-            if (visionResp.ok) {
+-              const vData = await visionResp.json();
+-              visualFeatureDescription = vData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+-
+-              // Optional helper parsing for fallback SVG/emoji only (not passed to prompt)
+-              const lower = visualFeatureDescription.toLowerCase();
+-              if (lower.includes('dog') || lower.includes('puppy') || lower.includes('canine')) detectedSpecies = 'canine';
+-              else if (lower.includes('cat') || lower.includes('kitten') || lower.includes('feline')) detectedSpecies = 'feline';
+-              else if (lower.includes('rabbit') || lower.includes('bunny')) detectedSpecies = 'rabbit';
+-              else if (lower.includes('bear') || lower.includes('panda')) detectedSpecies = 'bear';
+-              else if (lower.includes('bird') || lower.includes('chick')) detectedSpecies = 'bird';
+-              else if (lower.includes('fox')) detectedSpecies = 'fox';
+-              else if (lower.includes('hamster') || lower.includes('rodent')) detectedSpecies = 'rodent';
+-            }
+-          } catch (visionErr) {
+-            console.warn('Vision photo analysis fallback:', visionErr);
+-          }
+-
+-          // Step 2: Genuine Multimodal Image-to-Image Generation with uploaded photo
+-          const imgCandidates = ['gemini-2.5-flash-image', 'gemini-3.1-flash-image'];
+-          for (const m of imgCandidates) {
+-            try {
+-              const personalityTraitMap = {
+-                '다정한': 'affectionate, gentle and warm smiling expression with loving eyes',
+-                '장난꾸러기': 'playful, mischievous expression with a cheeky grin and lively sparkle',
+-                '잠꾸러기': 'sleepy, cozy expression with eyelids drooping comfortably',
+-                '애교쟁이': 'super cute, charming and loving sparkling eyes with blushy cheeks',
+-                '호기심많은': 'curious, wide-eyed inquisitive expression tilted with wonder',
+-              };
+-              const trait = personalityTraitMap[newPersonality] || `${newPersonality} expression`;
+-              const targetStageNum = familyPetmong?.level ? (familyPetmong.level >= 20 ? 4 : familyPetmong.level >= 10 ? 3 : familyPetmong.level >= 5 ? 2 : 1) : 1;
+-              const finalPrompt = `IMAGE-TO-IMAGE CREATURE MASCOT GENERATION:
+-Transform the uploaded photo into an irresistibly cute, lovable 2D flat kawaii pet creature mascot (Stage ${targetStageNum}) in the charming 'Sumone' app art style.
+-
+-Visual Analysis of the Photo:
+-${visualFeatureDescription || 'Faithfully capture the cheerful facial expression, sweet eyes, and lovely aura from the provided photo.'}
+-
+-Core Design Instructions:
+-1. Reinterpret the Subject: Seamlessly translate the subject's distinct facial expression, eye characteristics, lovely smile, and unique charm from the photo into an endearing creature face.
+-2. Personality & Mood: Radiate an adorable ${trait}.
+-3. Aesthetics: Minimalist 2D flat kawaii vector art, clean bold outlines, soft gentle pastel tones, rounded cuddly silhouette, iconic and lovable proportions, zero realistic human skin photorealism.
+-4. Plain solid pure white background (#FFFFFF) only: Zero background elements, no scenery, no borders, NEVER draw checkerboard grid, NEVER draw checkered tiles or fake transparency squares. Centered standalone character on clean pure white canvas.`;
+-
+-              const imgResp = await fetch(
+-                `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${clientApiKey}`,
+-                {
+-                  method: 'POST',
+-                  headers: { 'Content-Type': 'application/json' },
+-                  body: JSON.stringify({
+-                    contents: [{
+-                      parts: [
+-                        { text: finalPrompt },
+-                        { inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } }
+-                      ]
+-                    }]
+-                  })
+-                }
+-              );
+-              if (imgResp.ok) {
+-                const imgData = await imgResp.json();
+-                const parts = imgData.candidates?.[0]?.content?.parts || [];
+-                const imgPart = parts.find(p => p.inlineData);
+-                if (imgPart?.inlineData?.data) {
+-                  generatedImageUrl = `data:${imgPart.inlineData.mimeType || 'image/jpeg'};base64,${imgPart.inlineData.data}`;
+-                  break;
+-                }
+-              }
+-            } catch (imgErr) {
+-              console.warn(`Image-to-image attempt failed on ${m}:`, imgErr);
+-            }
+-          }
++      // 1. Unified Gemini Service Pipeline (Vision + Image-to-Image)
++      const aiResult = await generatePetmongMascotFromPhoto({
++        base64Photo: result.assets[0].base64,
++        personality: newPersonality,
++        targetStageNum,
++      });
+ 
+-          // Step 3: Seamless Vector Petmong Generation (tailored to user's photo color, personality, and species)
+-          if (!generatedImageUrl) {
+-            const targetStageNum = familyPetmong?.level ? (familyPetmong.level >= 20 ? 4 : familyPetmong.level >= 10 ? 3 : familyPetmong.level >= 5 ? 2 : 1) : 1;
+-            generatedImageUrl = createPetmongSvg(targetStageNum, detectedColor, newPersonality, detectedSpecies);
+-          }
+-        } catch (clientErr) {
+-          console.error('Client direct generation failed:', clientErr);
+-          detailedError = clientErr?.message || String(clientErr);
+-        }
+-      } else {
+-        // Fallback: Seamless Vector Petmong Generation if clientApiKey is not set
+-        const targetStageNum = familyPetmong?.level ? (familyPetmong.level >= 20 ? 4 : familyPetmong.level >= 10 ? 3 : familyPetmong.level >= 5 ? 2 : 1) : 1;
+-        generatedImageUrl = createPetmongSvg(targetStageNum, detectedColor, newPersonality, detectedSpecies);
++      let generatedImageUrl = aiResult.generatedImageUrl;
++      const detailedError = aiResult.detailedError;
++      const detectedColor = aiResult.detectedColor;
++      const detectedSpecies = aiResult.detectedSpecies;
++
++      // 2. Fallback: Seamless Vector Petmong Generation
++      if (!generatedImageUrl) {
++        generatedImageUrl = createPetmongSvg(
++          targetStageNum,
++          detectedColor,
++          newPersonality,
++          detectedSpecies
++        );
+       }
+ 
+       // 3. If generation succeeded, save/update in database
+diff --git a/components/PhotobookStudioScreen.js b/components/PhotobookStudioScreen.js
+index cda2184..8faa3c7 100644
+--- a/components/PhotobookStudioScreen.js
++++ b/components/PhotobookStudioScreen.js
+@@ -59,7 +59,14 @@ import { supabase } from '../lib/supabase';
+ import { colors, typography, commonStyles } from '../theme';
+ import UserAvatar from './UserAvatar';
+ import { stripEmojis } from '../utils/topics';
+-import { AI_SYSTEM_PROMPTS, buildGeminiPayload } from '../lib/aiSystemPrompts';
++import { generatePhotobookEssay } from '../services/geminiService';
++import {
++  mapPhotobookRowToState,
++  saveFamilyPhotobookToDB,
++  fetchFamilyPhotobookVolume,
++  fetchFamilyPhotobookVolumes,
++  createPhotobookOrderInDB,
++} from '../services/photobookService';
+ 
+ const { width: SCREEN_WIDTH } = Dimensions.get('window');
+ 
+@@ -487,48 +494,14 @@ export default function PhotobookStudioScreen({
+       }).catch(() => {});
+     }
+ 
+-    // Supabase 활동 백업 (비동기)
++    // 4. Supabase DB (family_photobooks) 영구 저장 및 활동 백업 (photobookService 위임)
+     if (effectiveFamilyId && effectiveFamilyId !== 'default-family') {
+-      supabase.from('petmong_activities').insert({
+-        family_id: effectiveFamilyId,
+-        action_type: 'PHOTOBOOK_SYNC_UPDATE',
+-        exp_gained: 0,
+-        points_awarded: 0,
+-      }).then(() => {}).catch(() => {});
+-
+-      // 4. Supabase DB (family_photobooks) 영구 저장 (UPSERT)
+       const currentVol = updatedPartial?.selectedVolume || selectedVolume || 'vol-1';
+-      // file:/// 경로가 포함된 coverPhoto는 DB에 저장하지 않음 (null 또는 https://, data:만 허용)
+-      const cleanCoverPhoto = fullPayload.coverPhoto && typeof fullPayload.coverPhoto === 'string' && fullPayload.coverPhoto.startsWith('file://')
+-        ? null
+-        : (fullPayload.coverPhoto || null);
+-      supabase.from('family_photobooks').upsert({
+-        family_id: effectiveFamilyId,
+-        volume_id: currentVol,
+-        title: fullPayload.bookTitle,
+-        subtitle: fullPayload.bookSubtitle,
+-        cover_signature: fullPayload.coverSignature,
+-        cover_photo_url: cleanCoverPhoto,
+-        cover_style: fullPayload.coverStyle,
+-        theme_id: fullPayload.selectedThemeId,
+-        font_family: fullPayload.bookFontFamily,
+-        font_size: fullPayload.bookFontSize,
+-        spread_photos: fullPayload.spreadPhotos,
+-        spread_layouts: fullPayload.spreadLayouts,
+-        page_formats: fullPayload.pageFormats,
+-        spread_captions: fullPayload.spreadCaptions,
+-        custom_spread_topics: fullPayload.customSpreadTopics,
+-        custom_gallery_photos: fullPayload.customGalleryPhotos,
+-        prologue_essay: fullPayload.prologueEssay,
+-        epilogue_essay: fullPayload.epilogueEssay,
+-        updated_by: currentUserName,
+-        updated_at: new Date().toISOString(),
+-      }, { onConflict: 'family_id,volume_id' }).then(({ error: upsertErr }) => {
+-        if (upsertErr) {
+-          console.warn('⚠️ family_photobooks upsert 실패 (RLS 권한 또는 테이블 설정을 확인하세요):', upsertErr.message);
+-        }
+-      }).catch((dbErr) => {
+-        console.warn('family_photobooks upsert sync note:', dbErr);
++      saveFamilyPhotobookToDB({
++        familyId: effectiveFamilyId,
++        volumeId: currentVol,
++        payload: fullPayload,
++        updatedBy: currentUserName,
+       });
+     }
+   }, [
+@@ -602,41 +575,15 @@ export default function PhotobookStudioScreen({
+         resetVolumeToDefaults(volId, volObj);
+       });
+ 
+-    // 2. Supabase DB에서 해당 권차 데이터 조회
++    // 2. Supabase DB에서 해당 권차 데이터 조회 (photobookService 위임)
+     if (effectiveFamilyId && effectiveFamilyId !== 'default-family') {
+-      supabase
+-        .from('family_photobooks')
+-        .select('*')
+-        .eq('family_id', effectiveFamilyId)
+-        .eq('volume_id', volId)
+-        .maybeSingle()
+-        .then(({ data, error }) => {
+-          if (!error && data) {
+-            applyRemotePhotobookUpdate({
+-              selectedVolume: data.volume_id,
+-              selectedThemeId: data.theme_id,
+-              bookFontFamily: data.font_family,
+-              bookFontSize: data.font_size,
+-              bookTitle: data.title,
+-              bookSubtitle: data.subtitle,
+-              coverSignature: data.cover_signature,
+-              coverPhoto: data.cover_photo_url,
+-              coverStyle: data.cover_style,
+-              pageFormats: data.page_formats || {},
+-              spreadPhotos: data.spread_photos || {},
+-              spreadLayouts: data.spread_layouts || {},
+-              spreadCaptions: data.spread_captions || {},
+-              customSpreadTopics: data.custom_spread_topics || {},
+-              customGalleryPhotos: data.custom_gallery_photos || [],
+-              prologueEssay: data.prologue_essay,
+-              epilogueEssay: data.epilogue_essay,
+-              updatedBy: data.updated_by,
+-            }, volId);
+-          } else {
+-            resetVolumeToDefaults(volId, volObj);
+-          }
+-        })
+-        .catch(() => {});
++      fetchFamilyPhotobookVolume(effectiveFamilyId, volId).then((remoteState) => {
++        if (remoteState) {
++          applyRemotePhotobookUpdate(remoteState, volId);
++        } else {
++          resetVolumeToDefaults(volId, volObj);
++        }
++      });
+     }
+   }, [effectiveFamilyId, selectedVolume, applyRemotePhotobookUpdate, resetVolumeToDefaults]);
+ 
+@@ -661,33 +608,28 @@ export default function PhotobookStudioScreen({
+ 
+     // 0. 가족이 작성해 둔 모든 권차 목록 조회하여 volumeList에 동적 병합
+     if (effectiveFamilyId !== 'default-family') {
+-      supabase
+-        .from('family_photobooks')
+-        .select('volume_id, title')
+-        .eq('family_id', effectiveFamilyId)
+-        .then(({ data }) => {
+-          if (data && data.length > 0) {
+-            setVolumeList(prev => {
+-              const existingIds = new Set(prev.map(v => v.id));
+-              const additions = [];
+-              data.forEach(row => {
+-                if (row.volume_id && !existingIds.has(row.volume_id)) {
+-                  const numMatch = row.volume_id.match(/\d+/);
+-                  const num = numMatch ? numMatch[0] : (prev.length + additions.length + 1);
+-                  additions.push({
+-                    id: row.volume_id,
+-                    title: `Vol. ${num}`,
+-                    label: `제${num}권`,
+-                    period: `${num * 180}일의 기록`,
+-                    desc: row.title || `우리 가족 ${num}번째 이야기`,
+-                  });
+-                }
+-              });
+-              return additions.length > 0 ? [...prev, ...additions] : prev;
++      fetchFamilyPhotobookVolumes(effectiveFamilyId).then((rows) => {
++        if (rows.length > 0) {
++          setVolumeList(prev => {
++            const existingIds = new Set(prev.map(v => v.id));
++            const additions = [];
++            rows.forEach(row => {
++              if (row.volume_id && !existingIds.has(row.volume_id)) {
++                const numMatch = row.volume_id.match(/\d+/);
++                const num = numMatch ? numMatch[0] : (prev.length + additions.length + 1);
++                additions.push({
++                  id: row.volume_id,
++                  title: `Vol. ${num}`,
++                  label: `제${num}권`,
++                  period: `${num * 180}일의 기록`,
++                  desc: row.title || `우리 가족 ${num}번째 이야기`,
++                });
++              }
+             });
+-          }
+-        })
+-        .catch(() => {});
++            return additions.length > 0 ? [...prev, ...additions] : prev;
++          });
++        }
++      });
+     }
+ 
+     // 1. AsyncStorage 캐시 불러오기 (해당 권차 캐시)
+@@ -704,37 +646,11 @@ export default function PhotobookStudioScreen({
+ 
+     // 2. Supabase DB (family_photobooks)에서 최신 원격 설정 조회
+     if (effectiveFamilyId !== 'default-family') {
+-      supabase
+-        .from('family_photobooks')
+-        .select('*')
+-        .eq('family_id', effectiveFamilyId)
+-        .eq('volume_id', selectedVolume || 'vol-1')
+-        .maybeSingle()
+-        .then(({ data, error }) => {
+-          if (!error && data) {
+-            applyRemotePhotobookUpdate({
+-              selectedVolume: data.volume_id,
+-              selectedThemeId: data.theme_id,
+-              bookFontFamily: data.font_family,
+-              bookFontSize: data.font_size,
+-              bookTitle: data.title,
+-              bookSubtitle: data.subtitle,
+-              coverSignature: data.cover_signature,
+-              coverPhoto: data.cover_photo_url,
+-              coverStyle: data.cover_style,
+-              pageFormats: data.page_formats || {},
+-              spreadPhotos: data.spread_photos || {},
+-              spreadLayouts: data.spread_layouts || {},
+-              spreadCaptions: data.spread_captions || {},
+-              customSpreadTopics: data.custom_spread_topics || {},
+-              customGalleryPhotos: data.custom_gallery_photos || [],
+-              prologueEssay: data.prologue_essay,
+-              epilogueEssay: data.epilogue_essay,
+-              updatedBy: data.updated_by,
+-            }, selectedVolume);
+-          }
+-        })
+-        .catch(() => {});
++      fetchFamilyPhotobookVolume(effectiveFamilyId, selectedVolume || 'vol-1').then((remoteState) => {
++        if (remoteState) {
++          applyRemotePhotobookUpdate(remoteState, selectedVolume);
++        }
++      });
+     }
+ 
+     // 3. Supabase Realtime Broadcast 채널 연결
+@@ -759,26 +675,7 @@ export default function PhotobookStudioScreen({
+         (payload) => {
+           const row = payload.new;
+           if (row && row.volume_id === selectedVolume) {
+-            applyRemotePhotobookUpdate({
+-              selectedVolume: row.volume_id,
+-              selectedThemeId: row.theme_id,
+-              bookFontFamily: row.font_family,
+-              bookFontSize: row.font_size,
+-              bookTitle: row.title,
+-              bookSubtitle: row.subtitle,
+-              coverSignature: row.cover_signature,
+-              coverPhoto: row.cover_photo_url,
+-              coverStyle: row.cover_style,
+-              pageFormats: row.page_formats || {},
+-              spreadPhotos: row.spread_photos || {},
+-              spreadLayouts: row.spread_layouts || {},
+-              spreadCaptions: row.spread_captions || {},
+-              customSpreadTopics: row.custom_spread_topics || {},
+-              customGalleryPhotos: row.custom_gallery_photos || [],
+-              prologueEssay: row.prologue_essay,
+-              epilogueEssay: row.epilogue_essay,
+-              updatedBy: row.updated_by,
+-            }, selectedVolume);
++            applyRemotePhotobookUpdate(mapPhotobookRowToState(row), selectedVolume);
+           }
+         }
+       )
+@@ -1003,12 +900,10 @@ export default function PhotobookStudioScreen({
+     ],
+   }), []);
+ 
+-  // AI 프롤로그(P.1) & 에필로그(P.32) 문학 에세이 실시간 집필 (스몰톡 문답 분석)
++  // AI 프롤로그(P.1) & 에필로그(P.16) 문학 에세이 실시간 집필 (geminiService 위임)
+   const handleGenerateAiEssay = async (type = targetEssayType) => {
+     setIsGeneratingAiEssay(true);
+-    const clientApiKey = (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_GEMINI_API_KEY) || '';
+ 
+-    // 책에 수록된 대표 스몰톡 문답 및 가족 답변 텍스트 수집 (최대 5개 추출)
+     const topicSnippets = [];
+     if (Array.isArray(smallTalkArchiveList) && smallTalkArchiveList.length > 0) {
+       smallTalkArchiveList.slice(0, 6).forEach(item => {
+@@ -1027,69 +922,13 @@ export default function PhotobookStudioScreen({
+     }
+ 
+     const memberNames = activeFamilyList.map(m => m.name || m.role).join(', ');
++    const essayText = await generatePhotobookEssay({
++      type,
++      memberNames,
++      topicSnippets,
++    });
+ 
+-    if (clientApiKey) {
+-      try {
+-        const isPrologue = type === 'prologue';
+-        const userPrompt = isPrologue
+-          ? `[가족 도서 첫 페이지 '프롤로그(여는 글)' 집필 요청]
+-가족 구성원: ${memberNames}
+-가족들이 지난 6개월간 책에 실어둔 스몰톡 문답 기록:
+-${topicSnippets.join('\n')}
+-
+-위 가족들의 실제 대화와 답변에 담긴 따스한 추억(음식, 일상, 감사, 소망 등)을 자연스럽게 녹여내어, 포토북 첫 장(P.1)에 수록될 감동적인 서문(프롤로그)을 작성해주세요.
+-- 분량: 2개 단락 (약 150~220자 내외)
+-- 어조: 다정하고 서정적인 문학 에세이 톤
+-- 제목이나 군더더기 인사말 없이, 책 본문에 바로 인쇄될 수 있는 에세이 본문 문장만 출력하세요.`
+-          : `[가족 도서 마지막 페이지 '에필로그(맺음말 & 가족 헌사)' 집필 요청]
+-가족 구성원: ${memberNames}
+-가족들이 지난 6개월간 책에 실어둔 스몰톡 문답 기록:
+-${topicSnippets.join('\n')}
+-
+-위 가족들의 180일간의 여정을 마무리하며, 서로를 향한 고마움과 앞으로 다가올 계절(Vol. 2)에 대한 기대를 담은 감동적인 맺음말(에필로그)을 작성해주세요.
+-- 분량: 2개 단락 (약 150~220자 내외)
+-- 어조: 뭉클하고 깊은 울림을 주는 가족 헌정 에세이 톤
+-- 제목이나 군더더기 인사말 없이, 책 본문에 바로 인쇄될 수 있는 에세이 본문 문장만 출력하세요.`;
+-
+-        const payload = buildGeminiPayload(
+-          AI_SYSTEM_PROMPTS.FAMILY_STORY_AUTHOR,
+-          userPrompt,
+-          { generationConfig: { temperature: 0.85, maxOutputTokens: 300 } }
+-        );
+-
+-        const resp = await fetch(
+-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${clientApiKey}`,
+-          {
+-            method: 'POST',
+-            headers: { 'Content-Type': 'application/json' },
+-            body: JSON.stringify(payload),
+-          }
+-        );
+-
+-        if (resp.ok) {
+-          const data = await resp.json();
+-          const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim()?.replace(/^["'“”]/g, '')?.replace(/["'“”]$/g, '');
+-          if (text) {
+-            setCustomEssayInput(text);
+-            setIsGeneratingAiEssay(false);
+-            return;
+-          }
+-        }
+-      } catch (err) {
+-        console.warn('Gemini essay generation error:', err);
+-      }
+-    }
+-
+-    // Fallback: 정성스러운 프리셋 문장
+-    if (type === 'prologue') {
+-      setCustomEssayInput(
+-        `가장 눈부신 순간은 언제나 멀리 있지 않았습니다. 함께 밥을 먹고, 사소한 농담을 주고받고, 문득 전해진 다정한 안부 속에 ${memberNames} 우리 가족의 가장 따뜻한 계절이 깃들어 있었습니다.\n\n지난 6개월간 매일 주고받은 스몰톡 문답과 카메라에 담긴 온기를 엮어, 우리들의 찬란했던 시간들을 이 한 권의 책에 고이 남깁니다.`
+-      );
+-    } else {
+-      setCustomEssayInput(
+-        `계절은 바뀌어도 우리가 함께 나눈 사랑의 온도는 변하지 않습니다. ${memberNames} 함께여서 눈부셨던 180일간의 발자취는 이제 우리 마음속 가장 깊은 보물이 되었습니다.\n\n다음 6개월 뒤에도 더 풍성하고 다정한 추억으로 이 자리를 채워나가길 소망하며, 서로의 든든한 버팀목이 되어준 온 가족에게 이 책을 바칩니다.`
+-      );
+-    }
++    setCustomEssayInput(essayText);
+     setIsGeneratingAiEssay(false);
+   };
+ 
+@@ -1320,22 +1159,8 @@ ${topicSnippets.join('\n')}
+       status: 'pending',
+     };
+ 
+-    // Supabase photobook_orders 테이블에 주문 데이터 INSERT
+-    try {
+-      const { data: insertedOrder, error: orderError } = await supabase
+-        .from('photobook_orders')
+-        .insert(orderRecord)
+-        .select()
+-        .single();
+-
+-      if (orderError) {
+-        console.warn('photobook_orders insert error:', orderError);
+-      } else {
+-        console.log('Successfully inserted photobook order:', insertedOrder?.order_number);
+-      }
+-    } catch (err) {
+-      console.warn('Exception during photobook order insert:', err);
+-    }
++    // Supabase photobook_orders 테이블에 주문 데이터 INSERT (photobookService 위임)
++    await createPhotobookOrderInDB(orderRecord);
+ 
+     setTimeout(() => {
+       setIsSubmittingOrder(false);
+diff --git a/lib/aiSystemPrompts.js b/lib/aiSystemPrompts.ts
+similarity index 72%
+rename from lib/aiSystemPrompts.js
+rename to lib/aiSystemPrompts.ts
+index 6d66075..03f4320 100644
+--- a/lib/aiSystemPrompts.js
++++ b/lib/aiSystemPrompts.ts
+@@ -1,18 +1,44 @@
+ /**
+- * FamLink AI System Instructions & Developer Prompts Library
+- * 
+- * Google Gemini API의 공식 `systemInstruction` 필드 및 개발자가 활용할 수 있는
+- * 표준 시스템 프롬프트 모음입니다.
+- * 
+- * REST API 페이로드 규격:
+- * {
+- *   systemInstruction: {
+- *     parts: [{ text: AI_SYSTEM_PROMPTS.FAMILY_STORY_AUTHOR }]
+- *   },
+- *   contents: [{ parts: [{ text: userPrompt }] }]
+- * }
++ * FamLink AI System Instructions & Developer Prompts Library (TypeScript)
++ *
++ * Google Gemini API의 공식 `systemInstruction` 필드 및 표준 시스템 프롬프트 모음입니다.
+  */
+ 
++export interface GeminiInlineDataPart {
++  inlineData: {
++    mimeType: string;
++    data: string;
++  };
++}
++
++export interface GeminiTextPart {
++  text: string;
++}
++
++export type GeminiContentPart = GeminiTextPart | GeminiInlineDataPart;
++
++export interface GeminiGenerationConfig {
++  temperature?: number;
++  maxOutputTokens?: number;
++  topP?: number;
++  topK?: number;
++}
++
++export interface BuildGeminiPayloadOptions {
++  imagePart?: GeminiInlineDataPart;
++  generationConfig?: GeminiGenerationConfig;
++}
++
++export interface GeminiRequestPayload {
++  contents: Array<{
++    parts: GeminiContentPart[];
++  }>;
++  systemInstruction?: {
++    parts: GeminiTextPart[];
++  };
++  generationConfig?: GeminiGenerationConfig;
++}
++
+ export const AI_SYSTEM_PROMPTS = {
+   // 1. 가족 이야기책 전문 문학 작가
+   FAMILY_STORY_AUTHOR: `당신은 가족들의 일상과 대화를 아름다운 한 편의 문학적 수필로 엮어내는 전문 가족 에세이 작가입니다.
+@@ -38,16 +64,14 @@ Follow these strict rules:
+ 4. Comments: Add concise comments only to complex logic. Do not over-comment obvious code.
+ 5. Error handling: Always include robust error handling and edge-case considerations.
+ 6. Ambiguity: If my request is missing crucial context, ask for clarification instead of guessing.`,
+-};
++} as const;
+ 
+-/**
+- * 헬퍼 함수: Gemini generateContent REST 호출 페이로드 생성
+- * @param {string} systemInstructionText - AI_SYSTEM_PROMPTS 중 하나
+- * @param {string} userPromptText - 사용자 요청 프롬프트
+- * @param {object} options - 추가 옵션 (imagePart 등)
+- */
+-export function buildGeminiPayload(systemInstructionText, userPromptText, options = {}) {
+-  const payload = {
++export function buildGeminiPayload(
++  systemInstructionText: string | null | undefined,
++  userPromptText: string,
++  options: BuildGeminiPayloadOptions = {}
++): GeminiRequestPayload {
++  const payload: GeminiRequestPayload = {
+     contents: [
+       {
+         parts: [
+diff --git a/lib/imageTransparencyService.js b/lib/imageTransparencyService.ts
+similarity index 93%
+rename from lib/imageTransparencyService.js
+rename to lib/imageTransparencyService.ts
+index 3d90bea..54c247d 100644
+--- a/lib/imageTransparencyService.js
++++ b/lib/imageTransparencyService.ts
+@@ -4,12 +4,12 @@ import jpeg from 'jpeg-js';
+ import { Buffer } from 'buffer';
+ 
+ // Global In-Memory Cache for processed transparent PNGs
+-const transparentCache = new Map();
++const transparentCache = new Map<string, string>();
+ 
+ /**
+  * Pure JavaScript base64 to Buffer converter
+  */
+-function base64ToBuffer(base64) {
++function base64ToBuffer(base64: string): Buffer {
+   const clean = base64.replace(/^data:image\/[a-zA-Z0-9.+_-]+;base64,/, '');
+   return Buffer.from(clean, 'base64');
+ }
+@@ -17,7 +17,7 @@ function base64ToBuffer(base64) {
+ /**
+  * Pure JavaScript Buffer to base64 string converter
+  */
+-function bufferToBase64(bytes) {
++function bufferToBase64(bytes: Uint8Array | Buffer): string {
+   return Buffer.from(bytes).toString('base64');
+ }
+ 
+@@ -30,7 +30,7 @@ function bufferToBase64(bytes) {
+  * @param {number} threshold - white brightness cutoff (default: 228)
+  * @returns {Promise<string>} - transparent PNG Data URI (`data:image/png;base64,...`)
+  */
+-export async function makeBackgroundTransparentOnDevice(imageSource, threshold = 228) {
++export async function makeBackgroundTransparentOnDevice(imageSource: string, threshold: number = 228): Promise<string> {
+   if (!imageSource || typeof imageSource !== 'string') return imageSource;
+ 
+   // Already transparent SVG
+@@ -88,7 +88,7 @@ export async function makeBackgroundTransparentOnDevice(imageSource, threshold =
+     let head = 0;
+     let tail = 0;
+ 
+-    const isWhitePixel = (idx) => {
++    const isWhitePixel = (idx: number): boolean => {
+       // If already transparent, treat as transparent background so BFS traverses through
+       if (rgbaData[idx + 3] < 50) return true;
+       const r = rgbaData[idx];
+@@ -103,7 +103,7 @@ export async function makeBackgroundTransparentOnDevice(imageSource, threshold =
+       return false;
+     };
+ 
+-    const tryAddSeed = (x, y) => {
++    const tryAddSeed = (x: number, y: number): void => {
+       const pIdx = y * width + x;
+       if (visited[pIdx]) return;
+       visited[pIdx] = 1;
+@@ -205,8 +205,8 @@ export async function makeBackgroundTransparentOnDevice(imageSource, threshold =
+ /**
+  * React Hook for rendering a transparent version of any image URI
+  */
+-export function useTransparentImage(imageUri) {
+-  const [cleanUri, setCleanUri] = useState(imageUri);
++export function useTransparentImage(imageUri?: string | null): string | null | undefined {
++  const [cleanUri, setCleanUri] = useState<string | null | undefined>(imageUri);
+ 
+   useEffect(() => {
+     if (!imageUri) {
+diff --git a/lib/petmongEvolution.js b/lib/petmongEvolution.ts
+similarity index 89%
+rename from lib/petmongEvolution.js
+rename to lib/petmongEvolution.ts
+index 872f760..dcc20ab 100644
+--- a/lib/petmongEvolution.js
++++ b/lib/petmongEvolution.ts
+@@ -1,3 +1,25 @@
++export interface EvolutionStageSpec {
++  stage: number;
++  minLevel: number;
++  maxLevel: number;
++  name: string;
++  stageTitle: string;
++  scale: number;
++  desc: string;
++  badgeColor: string;
++  targetPeriod: string;
++  requiredExp: string;
++  aura: string | null;
++}
++
++export interface PetmongSpeciesSpec {
++  id: string;
++  name: string;
++  emoji: string;
++  desc: string;
++  chain: string[];
++}
++
+ // Family Companion Growth Milestones & System
+ // Stage 1: Lv.1 ~ 4   (아기 시절 / Baby)
+ // Stage 2: Lv.5 ~ 9   (개구쟁이 단짝 / Playful Friend)
+@@ -13,7 +35,7 @@ export const EVOLUTION_MILESTONES = [1, 5, 10, 20];
+ // Stage 4 (Lv.20+): 최종 진화 완료 (이후 레벨당 1,000 EXP 유지)
+ export const TOTAL_FINAL_EXP = 14000;
+ 
+-export const getRequiredExpForLevel = (level = 1) => {
++export const getRequiredExpForLevel = (level: number = 1): number => {
+   const lvl = Math.max(1, Number(level) || 1);
+   if (lvl < 5) {
+     // Lv.1: 350, Lv.2: 450, Lv.3: 550, Lv.4: 650 -> 합계 2,000 EXP (Lv.5 달성)
+@@ -32,7 +54,7 @@ export const getRequiredExpForLevel = (level = 1) => {
+ };
+ 
+ // 특정 레벨 도달까지 필요한 총 누적 EXP 계산
+-export const getCumulativeExpForLevel = (targetLevel = 1) => {
++export const getCumulativeExpForLevel = (targetLevel: number = 1): number => {
+   const target = Math.max(1, Number(targetLevel) || 1);
+   let total = 0;
+   for (let l = 1; l < target; l++) {
+@@ -41,7 +63,7 @@ export const getCumulativeExpForLevel = (targetLevel = 1) => {
+   return total;
+ };
+ 
+-export const EVOLUTION_STAGES = {
++export const EVOLUTION_STAGES: Record<number, EvolutionStageSpec> = {
+   1: {
+     stage: 1,
+     minLevel: 1,
+@@ -96,7 +118,7 @@ export const EVOLUTION_STAGES = {
+   },
+ };
+ 
+-export const getStageNameWithPet = (stageNum = 1, petName = '반려친구') => {
++export const getStageNameWithPet = (stageNum: number = 1, petName: string = '반려친구'): string => {
+   const name = petName || '반려친구';
+   switch (Number(stageNum)) {
+     case 1:
+@@ -112,19 +134,19 @@ export const getStageNameWithPet = (stageNum = 1, petName = '반려친구') => {
+   }
+ };
+ 
+-export const getEvolutionStage = (level = 1) => {
++export const getEvolutionStage = (level: number = 1): EvolutionStageSpec => {
+   if (level >= 20) return EVOLUTION_STAGES[4];
+   if (level >= 10) return EVOLUTION_STAGES[3];
+   if (level >= 5) return EVOLUTION_STAGES[2];
+   return EVOLUTION_STAGES[1];
+ };
+ 
+-export const isMilestoneLevel = (level) => {
++export const isMilestoneLevel = (level: number): boolean => {
+   return [5, 10, 20].includes(level);
+ };
+ 
+ // // 10 Distinct Companion Species Lineages & Evolution Data
+-export const PETMONG_SPECIES_LIST = [
++export const PETMONG_SPECIES_LIST: PetmongSpeciesSpec[] = [
+   {
+     id: 'canine',
+     name: '강아지',
+@@ -198,7 +220,7 @@ export const PETMONG_SPECIES_LIST = [
+ ];
+ 
+ // 4-Stage Emoji Evolution Tree
+-const EMOJI_EVOLUTION_CHAINS = {
++const EMOJI_EVOLUTION_CHAINS: Record<string, string[]> = {
+   '🐶': ['🥚', '🐶', '🐕', '✨🐕'],
+   '🐕': ['🥚', '🐶', '🐕', '✨🐕'],
+   '🐱': ['🥚', '🐱', '🐈', '✨🐱'],
+@@ -218,9 +240,9 @@ const EMOJI_EVOLUTION_CHAINS = {
+   '🌱': ['🌰', '🌱', '🌿', '🌳'],
+ };
+ 
+-export const getEvolvedEmoji = (baseEmoji = '🐶', level = 1) => {
+-  let actualEmoji = baseEmoji;
+-  let actualLevel = level;
++export const getEvolvedEmoji = (baseEmoji: string | number = '🐶', level: number | string = 1): string => {
++  let actualEmoji: string = String(baseEmoji);
++  let actualLevel: number = Number(level) || 1;
+   if (typeof baseEmoji === 'number' && typeof level === 'string') {
+     actualEmoji = level;
+     actualLevel = baseEmoji;
+@@ -238,7 +260,7 @@ export const getEvolvedEmoji = (baseEmoji = '🐶', level = 1) => {
+ };
+ 
+ // Image-to-Image Stage Prompts for AI Evolution (Warm Family Companionship - Sumone Style)
+-export const getStageEvolutionPrompt = (targetStage, characterTraits = '', personalityTrait = '') => {
++export const getStageEvolutionPrompt = (targetStage: number, characterTraits: string = '', personalityTrait: string = ''): string => {
+   const baseInstruction = `IMAGE-TO-IMAGE CHARACTER GROWTH & EVOLUTION:
+ Reference character: ${characterTraits}.
+ CRITICAL IDENTITY LOCK: Look at the provided input image. This is the exact character at an earlier stage. You MUST maintain 100% of the character's facial features, exact eye shape, expression, smile, ear/tail style, and lovely color palette from the reference image.
+diff --git a/lib/petmongEvolutionService.js b/lib/petmongEvolutionService.ts
+similarity index 89%
+rename from lib/petmongEvolutionService.js
+rename to lib/petmongEvolutionService.ts
+index cf7db11..95d4587 100644
+--- a/lib/petmongEvolutionService.js
++++ b/lib/petmongEvolutionService.ts
+@@ -2,15 +2,21 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
+ import { supabase } from './supabase';
+ import { EVOLUTION_STAGES, getStageEvolutionPrompt } from './petmongEvolution';
+ import { makeBackgroundTransparentOnDevice } from './imageTransparencyService';
++import {
++  isGeminiConfigured,
++  analyzeImageWithGeminiVision,
++  generateImageWithGeminiModels,
++} from '../services/geminiService';
++import type { GeminiContentPart } from './aiSystemPrompts';
+ 
+ const STAGE_IMAGES_PREFIX = '@famlink_petmong_stages_';
+ const STAGE_SINGLE_PREFIX = '@famlink_petmong_stage_';
+ 
+ // High-speed RAM Memory Cache for multi-megabyte base64 stage images
+-const stageMemoryCache = new Map();
++const stageMemoryCache = new Map<string, Record<number, string>>();
+ 
+ // Helper: Convert base64 data URI to Uint8Array for cross-platform upload
+-function base64ToUint8Array(base64) {
++function base64ToUint8Array(base64: string): Uint8Array | Buffer {
+   const clean = base64.replace(/^data:image\/[a-zA-Z0-9.+_-]+;base64,/, '');
+   if (typeof Buffer !== 'undefined') {
+     return Buffer.from(clean, 'base64');
+@@ -24,7 +30,7 @@ function base64ToUint8Array(base64) {
+ }
+ 
+ // Upload stage image to Supabase Storage and return public HTTPS URL
+-async function uploadStageImageToStorage(characterId, stageNum, imageUrl) {
++async function uploadStageImageToStorage(characterId: string, stageNum: number, imageUrl: string): Promise<string> {
+   if (!characterId || !stageNum || !imageUrl) return imageUrl;
+   if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+     return imageUrl;
+@@ -63,7 +69,7 @@ async function uploadStageImageToStorage(characterId, stageNum, imageUrl) {
+ const IDB_NAME = 'famlink_petmong_db';
+ const IDB_STORE = 'stage_images';
+ 
+-function getIndexedDB() {
++function getIndexedDB(): Promise<any> {
+   if (typeof window === 'undefined' || !window.indexedDB) return Promise.resolve(null);
+   return new Promise((resolve) => {
+     try {
+@@ -82,7 +88,7 @@ function getIndexedDB() {
+   });
+ }
+ 
+-async function getIdbItem(key) {
++async function getIdbItem(key: string): Promise<any> {
+   const db = await getIndexedDB();
+   if (!db) return null;
+   return new Promise((resolve) => {
+@@ -98,7 +104,7 @@ async function getIdbItem(key) {
+   });
+ }
+ 
+-async function setIdbItem(key, val) {
++async function setIdbItem(key: string, val: any): Promise<boolean> {
+   const db = await getIndexedDB();
+   if (!db) return false;
+   return new Promise((resolve) => {
+@@ -114,7 +120,7 @@ async function setIdbItem(key, val) {
+   });
+ }
+ 
+-async function removeIdbItem(key) {
++async function removeIdbItem(key: string): Promise<boolean> {
+   const db = await getIndexedDB();
+   if (!db) return false;
+   return new Promise((resolve) => {
+@@ -131,7 +137,7 @@ async function removeIdbItem(key) {
+ }
+ 
+ // 1. Get cached stage images for a character: { 1: url, 2: url, 3: url, 4: url }
+-export async function getPetmongStageImages(characterId, expectedBaseImageUrl = null) {
++export async function getPetmongStageImages(characterId?: string | null, expectedBaseImageUrl: string | null = null): Promise<Record<number, string>> {
+   if (!characterId) return {};
+ 
+   let stages = stageMemoryCache.get(characterId);
+@@ -208,7 +214,7 @@ export async function getPetmongStageImages(characterId, expectedBaseImageUrl =
+ }
+ 
+ // 2. Save a stage image to cache & upload to Supabase Storage for cross-device family sync
+-export async function savePetmongStageImage(characterId, stageNum, imageUrl) {
++export async function savePetmongStageImage(characterId: string, stageNum: number, imageUrl: string): Promise<Record<number, string>> {
+   if (!characterId || !stageNum || !imageUrl) return {};
+   try {
+     const current = (await getPetmongStageImages(characterId)) || {};
+@@ -253,7 +259,7 @@ export async function savePetmongStageImage(characterId, stageNum, imageUrl) {
+ }
+ 
+ // Reset/clear cached stage images for a character (e.g., upon appearance change/reincarnation)
+-export async function resetPetmongStageImages(characterId) {
++export async function resetPetmongStageImages(characterId?: string | null): Promise<boolean> {
+   if (!characterId) return;
+   stageMemoryCache.delete(characterId);
+   try {
+@@ -278,7 +284,7 @@ export async function resetPetmongStageImages(characterId) {
+ }
+ 
+ // Helper: Detect species from emoji or string (10 distinct lineages)
+-export function detectSpecies(emoji = '', name = '') {
++export function detectSpecies(emoji: string = '', name: string = ''): string {
+   const s = `${emoji || ''} ${name || ''}`.toLowerCase();
+   if (s.includes('🐶') || s.includes('🐕') || s.includes('🐩') || s.includes('🐺') || s.includes('개') || s.includes('강아지') || s.includes('늑대') || s.includes('dog') || s.includes('wolf') || s.includes('canine') || s.includes('hound')) return 'canine';
+   if (s.includes('🐱') || s.includes('🐈') || s.includes('🦁') || s.includes('🐯') || s.includes('고양이') || s.includes('냥') || s.includes('호랑이') || s.includes('표범') || s.includes('cat') || s.includes('tiger') || s.includes('feline') || s.includes('panther')) return 'feline';
+@@ -294,7 +300,7 @@ export function detectSpecies(emoji = '', name = '') {
+ }
+ 
+ // Helper: 4-Stage True Physical & Magical Growth Vector SVG Generator
+-export function createPetmongSvg(stage = 1, bodyColor = '#FFAAA6', personality = '다정한', speciesHint = 'fantasy') {
++export function createPetmongSvg(stage: number = 1, bodyColor: string = '#FFAAA6', personality: string = '다정한', speciesHint: string = 'fantasy'): string {
+   const c = bodyColor || '#FFAAA6';
+   const sp = (speciesHint || 'fantasy').toLowerCase();
+   const stg = Math.min(Math.max(Number(stage) || 1, 1), 4);
+@@ -667,7 +673,7 @@ export function createPetmongSvg(stage = 1, bodyColor = '#FFAAA6', personality =
+ }
+ 
+ // Helper: Extract or fetch base64 data ({ mimeType, data }) from data URI or remote HTTP(S) URL
+-export async function getImageBase64Data(imgSource) {
++export async function getImageBase64Data(imgSource?: string | null): Promise<{ mimeType: string; data: string } | null> {
+   if (!imgSource || typeof imgSource !== 'string') return null;
+   // If data URI
+   if (imgSource.startsWith('data:image')) {
+@@ -712,7 +718,7 @@ export async function getImageBase64Data(imgSource) {
+ }
+ 
+ // 3. Generate a specific stage image for a petmong using AI (Strict Lineage Chaining)
+-export async function generateStageAiImage(character, targetStage) {
++export async function generateStageAiImage(character: any, targetStage: number): Promise<string> {
+   if (!character) throw new Error('No character to evolve');
+ 
+   // Chaining: Stage 2 builds on Stage 1; Stage 3 builds on Stage 2; Stage 4 builds on Stage 3
+@@ -726,14 +732,14 @@ export async function generateStageAiImage(character, targetStage) {
+     refImage = cachedStages[1] || character.image_url;
+   }
+ 
+-  const clientApiKey = (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_GEMINI_API_KEY) || '';
+-  let evolvedImageUrl = null;
++  const hasGeminiKey = isGeminiConfigured();
++  let evolvedImageUrl: string | null = null;
+   let detectedColor = '#FFAAA6';
+-  let detectedSpecies = detectSpecies(character.emoji, character.name);
++  const detectedSpecies = detectSpecies(character.emoji, character.name);
+   let characterTraits = `${character.name} (${detectedSpecies})`;
+ 
+   // Extract visual DNA from previous stage reference image (SVG or Raster)
+-  let refBase64Data = null;
++  let refBase64Data: { mimeType: string; data: string } | null = null;
+   if (refImage) {
+     const isSvg = refImage.includes('image/svg') || refImage.includes('<svg');
+     if (isSvg) {
+@@ -747,9 +753,10 @@ export async function generateStageAiImage(character, targetStage) {
+         }
+ 
+         if (rawSvg) {
+-          // Extract specific body fill color (ignore outline, white, and blush)
+           const fillMatches = [...rawSvg.matchAll(/fill="(#[0-9a-fA-F]{6})"/g)].map(m => m[1]);
+-          const candidateColor = fillMatches.find(c => c !== '#2D3142' && c !== '#FFFFFF' && c !== '#FF4D6D' && c !== '#000000');
++          const candidateColor = fillMatches.find(
++            c => c !== '#2D3142' && c !== '#FFFFFF' && c !== '#FF4D6D' && c !== '#000000'
++          );
+           if (candidateColor) {
+             detectedColor = candidateColor;
+           } else {
+@@ -759,7 +766,6 @@ export async function generateStageAiImage(character, targetStage) {
+         }
+       } catch (_) {}
+     } else {
+-      // Remote HTTPS URL or Data URI
+       try {
+         refBase64Data = await getImageBase64Data(refImage);
+       } catch (err) {
+@@ -768,89 +774,40 @@ export async function generateStageAiImage(character, targetStage) {
+     }
+   }
+ 
+-  // Vision Analysis to extract precise visual features if raster base64 is available
+-  if (clientApiKey && refBase64Data?.data) {
+-    try {
+-      const visionResp = await fetch(
+-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${clientApiKey}`,
+-        {
+-          method: 'POST',
+-          headers: { 'Content-Type': 'application/json' },
+-          body: JSON.stringify({
+-            contents: [{
+-              parts: [
+-                {
+-                  inlineData: {
+-                    mimeType: refBase64Data.mimeType === 'image/svg+xml' ? 'image/png' : refBase64Data.mimeType,
+-                    data: refBase64Data.data
+-                  }
+-                },
+-                {
+-                  text: 'Analyze this creature mascot in detail. Describe its species, primary body color (hex code), facial features (eyes shape, expression, blush, smile), body shape, ears/horns/tail, and any unique accessories in 2-3 sentences. Focus strictly on visual identity so it can be evolved consistently.'
+-                }
+-              ]
+-            }]
+-          })
+-        }
+-      );
+-      if (visionResp.ok) {
+-        const vData = await visionResp.json();
+-        const txt = vData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+-        if (txt) {
+-          characterTraits = txt;
+-          const colMatch = txt.match(/#[0-9a-fA-F]{6}/);
+-          if (colMatch) detectedColor = colMatch[0];
+-        }
+-      }
+-    } catch (visionErr) {
+-      console.warn('Vision analysis fallback:', visionErr);
++  // Vision Analysis via unified geminiService
++  if (hasGeminiKey && refBase64Data?.data) {
++    const txt = await analyzeImageWithGeminiVision(
++      refBase64Data.data,
++      refBase64Data.mimeType,
++      'Analyze this creature mascot in detail. Describe its species, primary body color (hex code), facial features (eyes shape, expression, blush, smile), body shape, ears/horns/tail, and any unique accessories in 2-3 sentences. Focus strictly on visual identity so it can be evolved consistently.'
++    );
++    if (txt) {
++      characterTraits = txt;
++      const colMatch = txt.match(/#[0-9a-fA-F]{6}/);
++      if (colMatch) detectedColor = colMatch[0];
+     }
+   }
+ 
+-  // Direct client Image-to-Image with Gemini / Imagen (Multimodal image-first reference)
+-  if (!evolvedImageUrl && clientApiKey) {
++  // Multimodal Image-to-Image via unified geminiService
++  if (!evolvedImageUrl && hasGeminiKey) {
+     const stagePrompt = getStageEvolutionPrompt(
+       targetStage,
+       `Character Visual Identity: ${characterTraits}`,
+       character.personality || '다정한'
+     );
+ 
+-    const imgCandidates = ['gemini-2.5-flash-image', 'gemini-3.1-flash-image'];
+-    for (const m of imgCandidates) {
+-      try {
+-        const parts = [];
+-        // Supply base character image first so the model references visual identity directly
+-        if (refBase64Data?.data) {
+-          parts.push({
+-            inlineData: {
+-              mimeType: refBase64Data.mimeType === 'image/svg+xml' ? 'image/png' : refBase64Data.mimeType,
+-              data: refBase64Data.data
+-            }
+-          });
+-        }
+-        parts.push({ text: stagePrompt });
+-
+-        const imgResp = await fetch(
+-          `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${clientApiKey}`,
+-          {
+-            method: 'POST',
+-            headers: { 'Content-Type': 'application/json' },
+-            body: JSON.stringify({ contents: [{ parts }] })
+-          }
+-        );
+-
+-        if (imgResp.ok) {
+-          const imgData = await imgResp.json();
+-          const imgPart = (imgData.candidates?.[0]?.content?.parts || []).find(p => p.inlineData);
+-          if (imgPart?.inlineData?.data) {
+-            evolvedImageUrl = `data:${imgPart.inlineData.mimeType || 'image/jpeg'};base64,${imgPart.inlineData.data}`;
+-            break;
+-          }
+-        }
+-      } catch (err) {
+-        console.log(`Image generation attempt on ${m}:`, err);
+-      }
++    const parts: GeminiContentPart[] = [];
++    if (refBase64Data?.data) {
++      parts.push({
++        inlineData: {
++          mimeType: refBase64Data.mimeType === 'image/svg+xml' ? 'image/png' : refBase64Data.mimeType,
++          data: refBase64Data.data,
++        },
++      });
+     }
++    parts.push({ text: stagePrompt });
++
++    evolvedImageUrl = await generateImageWithGeminiModels(parts);
+   }
+ 
+   // 3. True Physical & Lineage Growth Vector SVG Fallback (instant & guaranteed)
+@@ -872,9 +829,9 @@ export async function generateStageAiImage(character, targetStage) {
+ }
+ 
+ // 4. Background Queue Manager for Stages 2, 3, 4 (Sequential Lineage Growth)
+-const runningJobs = new Set();
++const runningJobs = new Set<string>();
+ 
+-export async function startBackgroundStagePreGeneration(character, onStageUpdated) {
++export async function startBackgroundStagePreGeneration(character: any, onStageUpdated?: (stage: number, url: string) => void): Promise<void> {
+   if (!character?.id || !character?.image_url) return;
+   if (runningJobs.has(character.id)) return;
+ 
+diff --git a/lib/supabase.js b/lib/supabase.js
+deleted file mode 100644
+index b0a103a..0000000
+--- a/lib/supabase.js
++++ /dev/null
+@@ -1,34 +0,0 @@
+-import 'react-native-url-polyfill/auto';
+-import AsyncStorage from '@react-native-async-storage/async-storage';
+-import { createClient } from '@supabase/supabase-js';
+-
+-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+-
+-// If credentials are placeholders or empty, print a warning in the console
+-const isConfigured = 
+-  supabaseUrl && 
+-  supabaseAnonKey && 
+-  !supabaseUrl.includes('your-project-ref') && 
+-  !supabaseAnonKey.includes('your-anon-public-key');
+-
+-if (!isConfigured) {
+-  console.warn(
+-    '⚠️ Supabase가 아직 구성되지 않았습니다. 프로젝트 루트의 .env 파일에 실제 Supabase URL과 Anon Key를 입력해 주세요.'
+-  );
+-}
+-
+-export const supabase = createClient(
+-  isConfigured ? supabaseUrl : 'https://placeholder-project.supabase.co', 
+-  isConfigured ? supabaseAnonKey : 'placeholder-anon-key', 
+-  {
+-    auth: {
+-      storage: AsyncStorage,
+-      autoRefreshToken: true,
+-      persistSession: true,
+-      detectSessionInUrl: false,
+-    },
+-  }
+-);
+-
+-export const isSupabaseReady = isConfigured;
+diff --git a/lib/supabase.ts b/lib/supabase.ts
+new file mode 100644
+index 0000000..14cf6f4
+--- /dev/null
++++ b/lib/supabase.ts
+@@ -0,0 +1,34 @@
++import 'react-native-url-polyfill/auto';
++import AsyncStorage from '@react-native-async-storage/async-storage';
++import { createClient, SupabaseClient } from '@supabase/supabase-js';
++
++const supabaseUrl: string = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
++const supabaseAnonKey: string = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
++
++const isConfigured: boolean = Boolean(
++  supabaseUrl &&
++    supabaseAnonKey &&
++    !supabaseUrl.includes('your-project-ref') &&
++    !supabaseAnonKey.includes('your-anon-public-key')
++);
++
++if (!isConfigured) {
++  console.warn(
++    '⚠️ Supabase가 아직 구성되지 않았습니다. 프로젝트 루트의 .env 파일에 실제 Supabase URL과 Anon Key를 입력해 주세요.'
++  );
++}
++
++export const supabase: SupabaseClient = createClient(
++  isConfigured ? supabaseUrl : 'https://placeholder-project.supabase.co',
++  isConfigured ? supabaseAnonKey : 'placeholder-anon-key',
++  {
++    auth: {
++      storage: AsyncStorage,
++      autoRefreshToken: true,
++      persistSession: true,
++      detectSessionInUrl: false,
++    },
++  }
++);
++
++export const isSupabaseReady: boolean = isConfigured;
+diff --git a/services/geminiService.ts b/services/geminiService.ts
+new file mode 100644
+index 0000000..6303add
+--- /dev/null
++++ b/services/geminiService.ts
+@@ -0,0 +1,291 @@
++/**
++ * FamLink Unified Gemini AI Service (TypeScript)
++ *
++ * 프로젝트 전역의 Gemini 2.5 Flash 텍스트/비전/이미지 생성 REST 호출을 단일 서비스 계층으로 캡슐화합니다.
++ * - API 키 참조 일원화 (Zero Hardcoded Secrets)
++ * - 최신 모델 고정 (gemini-2.5-flash, gemini-2.5-flash-image, gemini-3.1-flash-image)
++ * - 카멜케이스 REST 페이로드 준수 (inlineData, mimeType)
++ */
++
++import {
++  AI_SYSTEM_PROMPTS,
++  buildGeminiPayload,
++  GeminiContentPart,
++  GeminiGenerationConfig,
++} from '../lib/aiSystemPrompts';
++
++export const GEMINI_TEXT_MODEL = 'gemini-2.5-flash';
++export const GEMINI_IMAGE_MODELS = [
++  'gemini-2.5-flash-image',
++  'gemini-3.1-flash-image',
++] as const;
++
++const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
++
++export function getGeminiApiKey(): string {
++  if (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_GEMINI_API_KEY) {
++    return process.env.EXPO_PUBLIC_GEMINI_API_KEY;
++  }
++  return '';
++}
++
++export function isGeminiConfigured(): boolean {
++  return Boolean(getGeminiApiKey());
++}
++
++/**
++ * 1. 범용 Gemini 텍스트 생성 (systemInstruction 지원)
++ */
++export async function generateGeminiText(
++  userPrompt: string,
++  options: {
++    systemInstruction?: string;
++    generationConfig?: GeminiGenerationConfig;
++    model?: string;
++  } = {}
++): Promise<string | null> {
++  const apiKey = getGeminiApiKey();
++  if (!apiKey) return null;
++
++  const model = options.model || GEMINI_TEXT_MODEL;
++  const payload = buildGeminiPayload(
++    options.systemInstruction,
++    userPrompt,
++    { generationConfig: options.generationConfig }
++  );
++
++  const resp = await fetch(
++    `${GEMINI_API_BASE}/${model}:generateContent?key=${apiKey}`,
++    {
++      method: 'POST',
++      headers: { 'Content-Type': 'application/json' },
++      body: JSON.stringify(payload),
++    }
++  );
++
++  if (!resp.ok) {
++    return null;
++  }
++
++  const data = await resp.json();
++  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
++  return text || null;
++}
++
++/**
++ * 2. Gemini 2.5 Flash 멀티모달 비전 분석 (이미지 -> 텍스트 특징 추출)
++ */
++export async function analyzeImageWithGeminiVision(
++  base64Data: string,
++  mimeType: string = 'image/jpeg',
++  promptText: string
++): Promise<string> {
++  const apiKey = getGeminiApiKey();
++  if (!apiKey || !base64Data) return '';
++
++  const normalizedMime = mimeType === 'image/svg+xml' ? 'image/png' : mimeType;
++
++  try {
++    const resp = await fetch(
++      `${GEMINI_API_BASE}/${GEMINI_TEXT_MODEL}:generateContent?key=${apiKey}`,
++      {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({
++          contents: [
++            {
++              parts: [
++                { text: promptText },
++                { inlineData: { mimeType: normalizedMime, data: base64Data } },
++              ],
++            },
++          ],
++        }),
++      }
++    );
++
++    if (resp.ok) {
++      const vData = await resp.json();
++      return vData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
++    }
++  } catch (err) {
++    console.warn('[geminiService] Vision analysis fallback:', err);
++  }
++  return '';
++}
++
++/**
++ * 3. Gemini Flash Image 멀티모달 Image-to-Image 생성
++ */
++export async function generateImageWithGeminiModels(
++  parts: GeminiContentPart[],
++  models: readonly string[] = GEMINI_IMAGE_MODELS
++): Promise<string | null> {
++  const apiKey = getGeminiApiKey();
++  if (!apiKey) return null;
++
++  for (const model of models) {
++    try {
++      const imgResp = await fetch(
++        `${GEMINI_API_BASE}/${model}:generateContent?key=${apiKey}`,
++        {
++          method: 'POST',
++          headers: { 'Content-Type': 'application/json' },
++          body: JSON.stringify({ contents: [{ parts }] }),
++        }
++      );
++
++      if (imgResp.ok) {
++        const imgData = await imgResp.json();
++        const respParts = imgData?.candidates?.[0]?.content?.parts || [];
++        const imgPart = respParts.find((p: any) => p?.inlineData?.data);
++        if (imgPart?.inlineData?.data) {
++          const outMime = imgPart.inlineData.mimeType || 'image/jpeg';
++          return `data:${outMime};base64,${imgPart.inlineData.data}`;
++        }
++      }
++    } catch (err) {
++      console.warn(`[geminiService] Image generation attempt on ${model} failed:`, err);
++    }
++  }
++
++  return null;
++}
++
++/**
++ * 4. 포토북 프롤로그(P.1) / 에필로그(P.16) AI 문학 에세이 집필 서비스
++ */
++export async function generatePhotobookEssay(params: {
++  type: 'prologue' | 'epilogue' | string;
++  memberNames: string;
++  topicSnippets: string[];
++}): Promise<string> {
++  const { type, memberNames, topicSnippets } = params;
++  const isPrologue = type === 'prologue';
++
++  if (isGeminiConfigured()) {
++    try {
++      const userPrompt = isPrologue
++        ? `[가족 도서 첫 페이지 '프롤로그(여는 글)' 집필 요청]
++가족 구성원: ${memberNames}
++가족들이 지난 6개월간 책에 실어둔 스몰톡 문답 기록:
++${topicSnippets.join('\n')}
++
++위 가족들의 실제 대화와 답변에 담긴 따스한 추억(음식, 일상, 감사, 소망 등)을 자연스럽게 녹여내어, 포토북 첫 장(P.1)에 수록될 감동적인 서문(프롤로그)을 작성해주세요.
++- 분량: 2개 단락 (약 150~220자 내외)
++- 어조: 다정하고 서정적인 문학 에세이 톤
++- 제목이나 군더더기 인사말 없이, 책 본문에 바로 인쇄될 수 있는 에세이 본문 문장만 출력하세요.`
++        : `[가족 도서 마지막 페이지 '에필로그(맺음말 & 가족 헌사)' 집필 요청]
++가족 구성원: ${memberNames}
++가족들이 지난 6개월간 책에 실어둔 스몰톡 문답 기록:
++${topicSnippets.join('\n')}
++
++위 가족들의 180일간의 여정을 마무리하며, 서로를 향한 고마움과 앞으로 다가올 계절(Vol. 2)에 대한 기대를 담은 감동적인 맺음말(에필로그)을 작성해주세요.
++- 분량: 2개 단락 (약 150~220자 내외)
++- 어조: 뭉클하고 깊은 울림을 주는 가족 헌정 에세이 톤
++- 제목이나 군더더기 인사말 없이, 책 본문에 바로 인쇄될 수 있는 에세이 본문 문장만 출력하세요.`;
++
++      const generated = await generateGeminiText(userPrompt, {
++        systemInstruction: AI_SYSTEM_PROMPTS.FAMILY_STORY_AUTHOR,
++        generationConfig: { temperature: 0.85, maxOutputTokens: 300 },
++      });
++
++      if (generated) {
++        const cleaned = generated
++          .replace(/^["'“”]/g, '')
++          .replace(/["'“”]$/g, '');
++        if (cleaned) return cleaned;
++      }
++    } catch (err) {
++      console.warn('[geminiService] Essay generation error:', err);
++    }
++  }
++
++  // Fallback 프리셋 에세이
++  if (isPrologue) {
++    return `가장 눈부신 순간은 언제나 멀리 있지 않았습니다. 함께 밥을 먹고, 사소한 농담을 주고받고, 문득 전해진 다정한 안부 속에 ${memberNames} 우리 가족의 가장 따뜻한 계절이 깃들어 있었습니다.\n\n지난 6개월간 매일 주고받은 스몰톡 문답과 카메라에 담긴 온기를 엮어, 우리들의 찬란했던 시간들을 이 한 권의 책에 고이 남깁니다.`;
++  }
++  return `계절은 바뀌어도 우리가 함께 나눈 사랑의 온도는 변하지 않습니다. ${memberNames} 함께여서 눈부셨던 180일간의 발자취는 이제 우리 마음속 가장 깊은 보물이 되었습니다.\n\n다음 6개월 뒤에도 더 풍성하고 다정한 추억으로 이 자리를 채워나가길 소망하며, 서로의 든든한 버팀목이 되어준 온 가족에게 이 책을 바칩니다.`;
++}
++
++/**
++ * 5. 사용자 업로드 사진 기반 반려몽 마스코트 생성 파이프라인 (Vision + Image-to-Image)
++ */
++export async function generatePetmongMascotFromPhoto(params: {
++  base64Photo: string;
++  personality: string;
++  targetStageNum: number;
++}): Promise<{
++  generatedImageUrl: string | null;
++  detectedSpecies: string;
++  detectedColor: string;
++  detailedError: string | null;
++}> {
++  const { base64Photo, personality, targetStageNum } = params;
++  let generatedImageUrl: string | null = null;
++  let detailedError: string | null = null;
++  const detectedColor = '#FFAAA6';
++  let detectedSpecies = 'fantasy';
++
++  if (!isGeminiConfigured()) {
++    return { generatedImageUrl: null, detectedSpecies, detectedColor, detailedError: null };
++  }
++
++  try {
++    const cleanBase64 = base64Photo.replace(/^data:image\/\w+;base64,/, '');
++
++    // Step 1: Vision 분석으로 피사체 특징 및 동물상 추론
++    const visualFeatureDescription = await analyzeImageWithGeminiVision(
++      cleanBase64,
++      'image/jpeg',
++      "Analyze this photo in depth. What are the subject's most charming and distinctive visual features (facial expression, eye sparkle and shape, warm smile, hairstyle or ears/fur texture, signature accessories, and overall lovely energy)? Describe them in 2-3 vivid sentences so they can be captured as an irresistibly cute, lovable 2D pet creature mascot."
++    );
++
++    if (visualFeatureDescription) {
++      const lower = visualFeatureDescription.toLowerCase();
++      if (lower.includes('dog') || lower.includes('puppy') || lower.includes('canine')) detectedSpecies = 'canine';
++      else if (lower.includes('cat') || lower.includes('kitten') || lower.includes('feline')) detectedSpecies = 'feline';
++      else if (lower.includes('rabbit') || lower.includes('bunny')) detectedSpecies = 'rabbit';
++      else if (lower.includes('bear') || lower.includes('panda')) detectedSpecies = 'bear';
++      else if (lower.includes('bird') || lower.includes('chick')) detectedSpecies = 'bird';
++      else if (lower.includes('fox')) detectedSpecies = 'fox';
++      else if (lower.includes('hamster') || lower.includes('rodent')) detectedSpecies = 'rodent';
++    }
++
++    // Step 2: 멀티모달 Image-to-Image 캐릭터 생성
++    const personalityTraitMap: Record<string, string> = {
++      '다정한': 'affectionate, gentle and warm smiling expression with loving eyes',
++      '장난꾸러기': 'playful, mischievous expression with a cheeky grin and lively sparkle',
++      '잠꾸러기': 'sleepy, cozy expression with eyelids drooping comfortably',
++      '애교쟁이': 'super cute, charming and loving sparkling eyes with blushy cheeks',
++      '호기심많은': 'curious, wide-eyed inquisitive expression tilted with wonder',
++    };
++    const trait = personalityTraitMap[personality] || `${personality} expression`;
++    const finalPrompt = `IMAGE-TO-IMAGE CREATURE MASCOT GENERATION:
++Transform the uploaded photo into an irresistibly cute, lovable 2D flat kawaii pet creature mascot (Stage ${targetStageNum}) in the charming 'Sumone' app art style.
++
++Visual Analysis of the Photo:
++${visualFeatureDescription || 'Faithfully capture the cheerful facial expression, sweet eyes, and lovely aura from the provided photo.'}
++
++Core Design Instructions:
++1. Reinterpret the Subject: Seamlessly translate the subject's distinct facial expression, eye characteristics, lovely smile, and unique charm from the photo into an endearing creature face.
++2. Personality & Mood: Radiate an adorable ${trait}.
++3. Aesthetics: Minimalist 2D flat kawaii vector art, clean bold outlines, soft gentle pastel tones, rounded cuddly silhouette, iconic and lovable proportions, zero realistic human skin photorealism.
++4. Plain solid pure white background (#FFFFFF) only: Zero background elements, no scenery, no borders, NEVER draw checkerboard grid, NEVER draw checkered tiles or fake transparency squares. Centered standalone character on clean pure white canvas.`;
++
++    generatedImageUrl = await generateImageWithGeminiModels([
++      { text: finalPrompt },
++      { inlineData: { mimeType: 'image/jpeg', data: cleanBase64 } },
++    ]);
++  } catch (clientErr: any) {
++    console.error('[geminiService] Client direct generation failed:', clientErr);
++    detailedError = clientErr?.message || String(clientErr);
++  }
++
++  return {
++    generatedImageUrl,
++    detectedSpecies,
++    detectedColor,
++    detailedError,
++  };
++}
+diff --git a/services/photobookService.ts b/services/photobookService.ts
+new file mode 100644
+index 0000000..8fe742c
+--- /dev/null
++++ b/services/photobookService.ts
+@@ -0,0 +1,189 @@
++/**
++ * FamLink Photobook Supabase Persistence & Order Service (TypeScript)
++ *
++ * `PhotobookStudioScreen`의 Supabase DB 조회, 실시간 동기화 행 변환,
++ * 권차(Volume) 목록 조회, 실물 도서 발주(`photobook_orders`) 로직을 전담합니다.
++ */
++
++import { supabase } from '../lib/supabase';
++import type {
++  PhotobookSyncPayload,
++  PhotobookOrderRecord,
++} from '../types/domain';
++
++export interface PhotobookVolumeMeta {
++  id: string;
++  title: string;
++  label: string;
++  period: string;
++  desc: string;
++}
++
++/**
++ * DB `family_photobooks` 테이블 행(Row)을 화면 상태 페이로드로 정규화합니다.
++ */
++export function mapPhotobookRowToState(row: Record<string, any>): PhotobookSyncPayload {
++  return {
++    selectedVolume: row.volume_id,
++    selectedThemeId: row.theme_id,
++    bookFontFamily: row.font_family,
++    bookFontSize: row.font_size,
++    bookTitle: row.title,
++    bookSubtitle: row.subtitle,
++    coverSignature: row.cover_signature,
++    coverPhoto: row.cover_photo_url,
++    coverStyle: row.cover_style,
++    pageFormats: row.page_formats || {},
++    spreadPhotos: row.spread_photos || {},
++    spreadLayouts: row.spread_layouts || {},
++    spreadCaptions: row.spread_captions || {},
++    customSpreadTopics: row.custom_spread_topics || {},
++    customGalleryPhotos: row.custom_gallery_photos || [],
++    prologueEssay: row.prologue_essay || '',
++    epilogueEssay: row.epilogue_essay || '',
++    updatedBy: row.updated_by || '가족',
++    updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
++  };
++}
++
++/**
++ * 가족 포토북 상태 영구 저장 (UPSERT) 및 활동 기록
++ */
++export async function saveFamilyPhotobookToDB(params: {
++  familyId: string;
++  volumeId: string;
++  payload: PhotobookSyncPayload;
++  updatedBy: string;
++}): Promise<void> {
++  const { familyId, volumeId, payload, updatedBy } = params;
++  if (!familyId || familyId === 'default-family') return;
++
++  supabase
++    .from('petmong_activities')
++    .insert({
++      family_id: familyId,
++      action_type: 'PHOTOBOOK_SYNC_UPDATE',
++      exp_gained: 0,
++      points_awarded: 0,
++    })
++    .then(() => {})
++    .catch(() => {});
++
++  const cleanCoverPhoto =
++    payload.coverPhoto &&
++    typeof payload.coverPhoto === 'string' &&
++    payload.coverPhoto.startsWith('file://')
++      ? null
++      : payload.coverPhoto || null;
++
++  try {
++    const { error: upsertErr } = await supabase
++      .from('family_photobooks')
++      .upsert(
++        {
++          family_id: familyId,
++          volume_id: volumeId,
++          title: payload.bookTitle,
++          subtitle: payload.bookSubtitle,
++          cover_signature: payload.coverSignature,
++          cover_photo_url: cleanCoverPhoto,
++          cover_style: payload.coverStyle,
++          theme_id: payload.selectedThemeId,
++          font_family: payload.bookFontFamily,
++          font_size: payload.bookFontSize,
++          spread_photos: payload.spreadPhotos,
++          spread_layouts: payload.spreadLayouts,
++          page_formats: payload.pageFormats,
++          spread_captions: payload.spreadCaptions,
++          custom_spread_topics: payload.customSpreadTopics,
++          custom_gallery_photos: payload.customGalleryPhotos,
++          prologue_essay: payload.prologueEssay,
++          epilogue_essay: payload.epilogueEssay,
++          updated_by: updatedBy,
++          updated_at: new Date().toISOString(),
++        },
++        { onConflict: 'family_id,volume_id' }
++      );
++
++    if (upsertErr) {
++      console.warn(
++        '⚠️ family_photobooks upsert 실패 (RLS 권한 또는 테이블 설정을 확인하세요):',
++        upsertErr.message
++      );
++    }
++  } catch (dbErr) {
++    console.warn('family_photobooks upsert sync note:', dbErr);
++  }
++}
++
++/**
++ * 특정 권차(volume_id) 포토북 원격 데이터 단건 조회
++ */
++export async function fetchFamilyPhotobookVolume(
++  familyId: string,
++  volumeId: string
++): Promise<PhotobookSyncPayload | null> {
++  if (!familyId || familyId === 'default-family') return null;
++
++  try {
++    const { data, error } = await supabase
++      .from('family_photobooks')
++      .select('*')
++      .eq('family_id', familyId)
++      .eq('volume_id', volumeId || 'vol-1')
++      .maybeSingle();
++
++    if (!error && data) {
++      return mapPhotobookRowToState(data);
++    }
++  } catch (_) {}
++  return null;
++}
++
++/**
++ * 가족이 생성한 전체 권차(volume_id, title) 목록 조회
++ */
++export async function fetchFamilyPhotobookVolumes(
++  familyId: string
++): Promise<Array<{ volume_id: string; title?: string }>> {
++  if (!familyId || familyId === 'default-family') return [];
++
++  try {
++    const { data } = await supabase
++      .from('family_photobooks')
++      .select('volume_id, title')
++      .eq('family_id', familyId);
++
++    return Array.isArray(data) ? data : [];
++  } catch (_) {
++    return [];
++  }
++}
++
++/**
++ * 실물 양장본 도서 주문(`photobook_orders`) 생성
++ */
++export async function createPhotobookOrderInDB(
++  orderRecord: PhotobookOrderRecord
++): Promise<{ order_number?: string } | null> {
++  try {
++    const { data: insertedOrder, error: orderError } = await supabase
++      .from('photobook_orders')
++      .insert(orderRecord)
++      .select()
++      .single();
++
++    if (orderError) {
++      console.warn('photobook_orders insert error:', orderError);
++      return null;
++    }
++    console.log(
++      'Successfully inserted photobook order:',
++      insertedOrder?.order_number
++    );
++    return insertedOrder;
++  } catch (err) {
++    console.warn('Exception during photobook order insert:', err);
++    return null;
++  }
++}
+diff --git a/services/smallTalkService.js b/services/smallTalkService.ts
+similarity index 66%
+rename from services/smallTalkService.js
+rename to services/smallTalkService.ts
+index 8cefe1c..3565b51 100644
+--- a/services/smallTalkService.js
++++ b/services/smallTalkService.ts
+@@ -1,16 +1,17 @@
+ import { supabase, isSupabaseReady } from '../lib/supabase';
+ import { PREDEFINED_TOPICS, stripEmojis } from '../utils/topics';
++import type { SmallTalkTopicRow } from '../types/domain';
+ 
+ // 메모리 캐시 (불필요한 반복 쿼리 방지)
+-let cachedTopics = null;
+-let lastFetchedFamilyId = null;
++let cachedTopics: SmallTalkTopicRow[] | null = null;
++let lastFetchedFamilyId: string | null | undefined = null;
+ 
+ /**
+  * Supabase DB에서 스몰톡 질문 목록을 조회하고, 없을 경우 자동 시딩합니다.
+- * @param {string} familyId - 가족 ID
+- * @returns {Promise<Array<{id: string, question: string, category: string, assigned_date?: string}>>}
+  */
+-export async function fetchSmallTalkTopicsFromDB(familyId) {
++export async function fetchSmallTalkTopicsFromDB(
++  familyId?: string | null
++): Promise<SmallTalkTopicRow[]> {
+   try {
+     if (!isSupabaseReady) {
+       return PREDEFINED_TOPICS.map((q, idx) => ({
+@@ -21,7 +22,10 @@ export async function fetchSmallTalkTopicsFromDB(familyId) {
+       }));
+     }
+ 
+-    // 1. DB에서 공용 질문(family_id is null) 또는 해당 가족 전용 질문 조회
++    if (cachedTopics && lastFetchedFamilyId === familyId) {
++      return cachedTopics;
++    }
++
+     let query = supabase
+       .from('small_talk_topics')
+       .select('*')
+@@ -35,9 +39,8 @@ export async function fetchSmallTalkTopicsFromDB(familyId) {
+ 
+     const { data, error } = await query;
+ 
+-    // 2. 테이블이 존재하고 데이터가 있는 경우
+     if (!error && Array.isArray(data) && data.length > 0) {
+-      const sanitized = data.map(item => ({
++      const sanitized: SmallTalkTopicRow[] = data.map((item: any) => ({
+         ...item,
+         question: stripEmojis(item.question),
+       }));
+@@ -46,13 +49,12 @@ export async function fetchSmallTalkTopicsFromDB(familyId) {
+       return sanitized;
+     }
+ 
+-    // 3. 만약 테이블이 비어있다면 (초기 데이터 시딩)
+     if (!error && Array.isArray(data) && data.length === 0) {
+       const seedRows = PREDEFINED_TOPICS.map((q, idx) => ({
+         question: stripEmojis(q),
+         category: '일상',
+         order_index: idx,
+-        family_id: null, // 전체 가족 공용
++        family_id: null,
+       }));
+ 
+       const { data: insertedData, error: insertErr } = await supabase
+@@ -61,7 +63,7 @@ export async function fetchSmallTalkTopicsFromDB(familyId) {
+         .select('*');
+ 
+       if (!insertErr && Array.isArray(insertedData) && insertedData.length > 0) {
+-        const sanitized = insertedData.map(item => ({
++        const sanitized: SmallTalkTopicRow[] = insertedData.map((item: any) => ({
+           ...item,
+           question: stripEmojis(item.question),
+         }));
+@@ -74,7 +76,6 @@ export async function fetchSmallTalkTopicsFromDB(familyId) {
+     console.warn('[smallTalkService] DB 조회 중 예외 발생 (Fallback 사용):', e);
+   }
+ 
+-  // 4. Fallback: 코드에 정의된 이모티콘 없는 기본 질문 반환
+   return PREDEFINED_TOPICS.map((q, idx) => ({
+     id: `local-topic-${idx}`,
+     question: stripEmojis(q),
+@@ -85,13 +86,13 @@ export async function fetchSmallTalkTopicsFromDB(familyId) {
+ 
+ /**
+  * 새 스몰톡 질문을 DB에 추가합니다. 이모티콘은 사전에 100% 필터링됩니다.
+- * @param {string} familyId - 가족 ID (null이면 공용)
+- * @param {string} rawQuestion - 생성할 질문 텍스트
+- * @param {string} category - 카테고리 (기본 '일상')
+- * @param {string} [assignedDate] - 특정 날짜 지정 (YYYY-MM-DD)
+  */
+-export async function addSmallTalkTopicToDB(familyId, rawQuestion, category = '일상', assignedDate = null) {
+-  // 이모티콘 완전 제거
++export async function addSmallTalkTopicToDB(
++  familyId: string | null | undefined,
++  rawQuestion: string,
++  category: string = '일상',
++  assignedDate: string | null = null
++): Promise<SmallTalkTopicRow> {
+   const cleanQuestion = stripEmojis(rawQuestion);
+   if (!cleanQuestion || cleanQuestion.length < 3) {
+     throw new Error('질문 내용이 너무 짧거나 비어있습니다.');
+@@ -103,7 +104,7 @@ export async function addSmallTalkTopicToDB(familyId, rawQuestion, category = '
+       question: cleanQuestion,
+       category,
+       assigned_date: assignedDate,
+-      family_id: familyId,
++      family_id: familyId || null,
+     };
+   }
+ 
+@@ -125,7 +126,6 @@ export async function addSmallTalkTopicToDB(familyId, rawQuestion, category = '
+     throw error;
+   }
+ 
+-  // 캐시 무효화
+   cachedTopics = null;
+ 
+   return {
+@@ -136,35 +136,42 @@ export async function addSmallTalkTopicToDB(familyId, rawQuestion, category = '
+ 
+ /**
+  * 특정 날짜에 배정된 질문을 가져옵니다.
+- * @param {Array} topicsList - DB 또는 기본 질문 목록
+- * @param {Date|string} date - 대상 날짜
+- * @returns {string} 이모티콘이 제거된 질문 텍스트
+  */
+-export function getTopicForDateFromList(topicsList, date = new Date()) {
++export function getTopicForDateFromList(
++  topicsList?: Array<SmallTalkTopicRow | string> | null,
++  date: Date | string | number = new Date()
++): string {
+   const d = new Date(date);
+   const y = d.getFullYear();
+   const m = String(d.getMonth() + 1).padStart(2, '0');
+   const day = String(d.getDate()).padStart(2, '0');
+   const dateStr = `${y}-${m}-${day}`;
+ 
+-  const list = Array.isArray(topicsList) && topicsList.length > 0 ? topicsList : PREDEFINED_TOPICS;
++  const list =
++    Array.isArray(topicsList) && topicsList.length > 0
++      ? topicsList
++      : PREDEFINED_TOPICS;
+ 
+-  // 1. 해당 날짜로 직접 배정(assigned_date)된 질문이 있는지 확인
+   if (Array.isArray(topicsList) && topicsList.length > 0) {
+-    const directMatch = topicsList.find(t => t.assigned_date === dateStr);
++    const directMatch = topicsList.find(
++      (t): t is SmallTalkTopicRow =>
++        typeof t === 'object' && t !== null && t.assigned_date === dateStr
++    );
+     if (directMatch && directMatch.question) {
+       return stripEmojis(directMatch.question);
+     }
+   }
+ 
+-  // 2. 결정론적 인덱스 계산 (day of year)
+   const start = new Date(d.getFullYear(), 0, 0);
+-  const diff = d - start;
++  const diff = d.getTime() - start.getTime();
+   const oneDay = 1000 * 60 * 60 * 24;
+   const dayOfYear = Math.floor(diff / oneDay);
+   const index = Math.abs(dayOfYear) % list.length;
+ 
+   const item = list[index];
+-  const qText = typeof item === 'object' && item.question ? item.question : item;
++  const qText =
++    typeof item === 'object' && item !== null && 'question' in item
++      ? item.question
++      : String(item);
+   return stripEmojis(qText);
+ }
+diff --git a/types/domain.ts b/types/domain.ts
+index ca29c30..01cdb38 100644
+--- a/types/domain.ts
++++ b/types/domain.ts
+@@ -126,3 +126,51 @@ export interface UpcomingKoreanHolidayInfo {
+   diffDays: number;
+   isToday: boolean;
+ }
++
++export interface SmallTalkTopicRow {
++  id: string;
++  family_id?: string | null;
++  question: string;
++  category: string;
++  order_index?: number;
++  assigned_date?: string | null;
++}
++
++export interface PhotobookSyncPayload {
++  selectedVolume?: string;
++  selectedThemeId?: string;
++  bookFontFamily?: string;
++  bookFontSize?: number;
++  bookTitle?: string;
++  bookSubtitle?: string;
++  coverSignature?: string;
++  coverPhoto?: string | null;
++  coverStyle?: string;
++  pageFormats?: Record<string, any>;
++  spreadPhotos?: Record<string, any>;
++  spreadLayouts?: Record<string, any>;
++  spreadCaptions?: Record<string, any>;
++  customSpreadTopics?: Record<string, any>;
++  customGalleryPhotos?: any[];
++  prologueEssay?: string;
++  epilogueEssay?: string;
++  updatedBy?: string;
++  updatedAt?: number | string;
++}
++
++export interface PhotobookOrderRecord {
++  family_id: string | null;
++  profile_id: string | null;
++  volume_id: string;
++  order_number: string;
++  book_title: string;
++  cover_type: string;
++  page_count: number;
++  recipient_name: string;
++  recipient_phone: string;
++  postal_code: string;
++  shipping_address: string;
++  shipping_memo: string;
++  book_snapshot: Record<string, any>;
++  status: 'pending' | 'paid' | 'printing' | 'shipped' | string;
++}
