@@ -34,15 +34,15 @@ const { width: INITIAL_WIDTH, height: INITIAL_HEIGHT } = Dimensions.get('window'
 // -----------------------------------------------------------------
 // Crystal Music Box Chime Synth (Web Audio API)
 // -----------------------------------------------------------------
-function playChimeNote(freq = 523.25) {
+function playChimeNote(freq: number = 523.25) {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     try {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
       if (!AudioCtx) return;
-      if (!window._starlightAudioCtx) {
-        window._starlightAudioCtx = new AudioCtx();
+      if (!(window as any)._starlightAudioCtx) {
+        (window as any)._starlightAudioCtx = new AudioCtx();
       }
-      const ctx = window._starlightAudioCtx;
+      const ctx = (window as any)._starlightAudioCtx;
       if (ctx.state === 'suspended') {
         ctx.resume().catch(() => {});
       }
@@ -154,6 +154,16 @@ const CONSTELLATIONS = [
 
 const GAME_DURATION = 45; // 45 seconds relaxed cosmic healing
 
+export interface DreamConstellationGameProps {
+  visible: boolean;
+  character?: any;
+  transparentUrl?: string | null;
+  onClose: () => void;
+  onGameComplete?: (result: any) => void;
+  canEarnReward?: boolean;
+  remainingRewards?: number;
+}
+
 export default function DreamConstellationGame({
   visible,
   character,
@@ -162,7 +172,7 @@ export default function DreamConstellationGame({
   onGameComplete,
   canEarnReward = true,
   remainingRewards = 1,
-}) {
+}: DreamConstellationGameProps) {
   const [dimensions, setDimensions] = useState(Dimensions.get('window'));
   const screenWidth = dimensions.width;
   const screenHeight = dimensions.height;
@@ -181,13 +191,13 @@ export default function DreamConstellationGame({
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
   const [score, setScore] = useState(0);
   const [currentConstIndex, setCurrentConstIndex] = useState(0);
-  const [connectedStarIds, setConnectedStarIds] = useState([1]);
+  const [connectedStarIds, setConnectedStarIds] = useState<number[]>([1]);
   const [completedConstCount, setCompletedConstCount] = useState(0);
-  const [toasts, setToasts] = useState([]);
-  const [shootingStar, setShootingStar] = useState(null);
+  const [toasts, setToasts] = useState<any[]>([]);
+  const [shootingStar, setShootingStar] = useState<any>(null);
 
   // Live Dragging Beam Line
-  const [dragCurrentPos, setDragCurrentPos] = useState(null);
+  const [dragCurrentPos, setDragCurrentPos] = useState<{ x: number; y: number } | null>(null);
 
   // Animation Refs
   const petBreath = useRef(new Animated.Value(1)).current;
@@ -199,7 +209,7 @@ export default function DreamConstellationGame({
   gameStateRef.current = gameState;
 
   const currentConstIndexRef = useRef(0);
-  const connectedStarIdsRef = useRef([1]);
+  const connectedStarIdsRef = useRef<number[]>([1]);
   const completedConstCountRef = useRef(0);
 
   const screenWidthRef = useRef(screenWidth);
@@ -209,9 +219,9 @@ export default function DreamConstellationGame({
   screenHeightRef.current = screenHeight;
 
   // Timers
-  const gameTimerRef = useRef(null);
-  const shootingStarTimerRef = useRef(null);
-  const transitionTimerRef = useRef(null);
+  const gameTimerRef = useRef<any>(null);
+  const shootingStarTimerRef = useRef<any>(null);
+  const transitionTimerRef = useRef<any>(null);
 
   // -----------------------------------------------------------------
   // 1. Generate Starry Night Sky Field (40 background stars)
@@ -257,7 +267,7 @@ export default function DreamConstellationGame({
   }, [auraPulse, petBreath]);
 
   // Toast Trigger
-  const triggerToast = useCallback((text, color = '#38BDF8', x = null, y = null) => {
+  const triggerToast = useCallback((text: string, color: string = '#38BDF8', x: number | null = null, y: number | null = null) => {
     const id = `toast_${Date.now()}_${Math.random()}`;
     const toastX = x !== null ? Math.max(20, Math.min(screenWidthRef.current - 140, x - 50)) : screenWidthRef.current / 2 - 60;
     const toastY = y !== null ? Math.max(90, Math.min(screenHeightRef.current - 180, y - 30)) : screenHeightRef.current / 2;
@@ -324,7 +334,7 @@ export default function DreamConstellationGame({
   // -----------------------------------------------------------------
   // Connect Target Star in Order
   // -----------------------------------------------------------------
-  const handleConnectStar = useCallback((targetStarId, starPixelX, starPixelY) => {
+  const handleConnectStar = useCallback((targetStarId: number, starPixelX: number, starPixelY: number) => {
     if (gameStateRef.current !== 'playing') return;
 
     const currentList = connectedStarIdsRef.current;
@@ -385,7 +395,7 @@ export default function DreamConstellationGame({
   }, [currentConstellation, constCompleteAnim, finishGame, triggerToast]);
 
   // Touch Move / Drag Beam Line
-  const handleTouchMove = useCallback((touchX, touchY) => {
+  const handleTouchMove = useCallback((touchX: number, touchY: number) => {
     if (gameStateRef.current !== 'playing') return;
     if (typeof touchX !== 'number' || typeof touchY !== 'number') return;
 
@@ -463,7 +473,7 @@ export default function DreamConstellationGame({
   };
 
   // Evaluation Grade
-  const getGameGrade = (finalScore, completedCount) => {
+  const getGameGrade = (finalScore: number, completedCount: number) => {
     if (completedCount >= 4 || finalScore >= 800) {
       return { grade: 'S', color: '#FAAD14', title: '은하수 별자리 마스터! 👑' };
     }
@@ -548,19 +558,21 @@ export default function DreamConstellationGame({
           handleTouchMove(x, y);
         }}
         onTouchEnd={() => setDragCurrentPos(null)}
-        onMouseDown={(e) => {
-          const x = e.nativeEvent?.pageX || e.clientX || 0;
-          const y = e.nativeEvent?.pageY || e.clientY || 0;
-          handleTouchMove(x, y);
-        }}
-        onMouseMove={(e) => {
-          if (e.buttons === 1 || e.nativeEvent?.which === 1) {
+        {...({
+          onMouseDown: (e: any) => {
             const x = e.nativeEvent?.pageX || e.clientX || 0;
             const y = e.nativeEvent?.pageY || e.clientY || 0;
             handleTouchMove(x, y);
-          }
-        }}
-        onMouseUp={() => setDragCurrentPos(null)}
+          },
+          onMouseMove: (e: any) => {
+            if (e.buttons === 1 || e.nativeEvent?.which === 1) {
+              const x = e.nativeEvent?.pageX || e.clientX || 0;
+              const y = e.nativeEvent?.pageY || e.clientY || 0;
+              handleTouchMove(x, y);
+            }
+          },
+          onMouseUp: () => setDragCurrentPos(null),
+        } as any)}
       >
         {/* Deep Romantic Night Sky Atmosphere */}
         <View style={styles.deepSkyLayer} pointerEvents="none" />
@@ -678,9 +690,8 @@ export default function DreamConstellationGame({
                 key={s.id}
                 style={[
                   styles.targetStarTouchArea,
-                  { left: posX - 32, top: posY - 32, pointerEvents: 'auto' },
+                  { left: posX - 32, top: posY - 32 },
                 ]}
-                pointerEvents="auto"
                 onPress={() => handleConnectStar(s.id, posX, posY)}
                 activeOpacity={0.7}
               >

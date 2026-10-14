@@ -212,7 +212,7 @@ function TickingBombIcon({ size = 56 }) {
   );
 }
 
-function FruitWholeRenderer({ type, size = 56 }) {
+function FruitWholeRenderer({ type, size = 56 }: { type: string; size?: number }) {
   switch (type) {
     case 'watermelon': return <WatermelonWhole size={size} />;
     case 'apple': return <AppleWhole size={size} />;
@@ -224,7 +224,7 @@ function FruitWholeRenderer({ type, size = 56 }) {
   }
 }
 
-function FruitHalfRenderer({ type, size = 56, isLeft = true }) {
+function FruitHalfRenderer({ type, size = 56, isLeft = true }: { type: string; size?: number; isLeft?: boolean }) {
   switch (type) {
     case 'watermelon': return <WatermelonHalf size={size} isLeft={isLeft} />;
     case 'apple': return <AppleHalf size={size} isLeft={isLeft} />;
@@ -256,7 +256,7 @@ const GAME_CONFIG = {
 };
 
 // Distance from point to line segment
-function distToSegment(px, py, x1, y1, x2, y2) {
+function distToSegment(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
   const dx = x2 - x1;
   const dy = y2 - y1;
   const lenSq = dx * dx + dy * dy;
@@ -267,6 +267,72 @@ function distToSegment(px, py, x1, y1, x2, y2) {
   return Math.hypot(px - projX, py - projY);
 }
 
+export interface FruitItem {
+  id: string;
+  type: string;
+  name: string;
+  points: number;
+  size: number;
+  color: string;
+  splashColor?: string;
+  isRare?: boolean;
+  isBomb?: boolean;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  rotation: number;
+  rotationSpeed?: number;
+  rotSpeed?: number;
+}
+
+export interface HalfItem {
+  id: string;
+  type: string;
+  size: number;
+  isLeft: boolean;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  rotation: number;
+  rotSpeed: number;
+  opacity?: number;
+}
+
+export interface SplashItem {
+  id: string;
+  x: number;
+  y: number;
+  color: string;
+  size?: number;
+  opacity?: number;
+}
+
+export interface ToastItem {
+  id: string;
+  text: string;
+  color: string;
+  x: number;
+  y: number;
+}
+
+export interface SlashPoint {
+  x: number;
+  y: number;
+  time: number;
+}
+
+export interface SnackCatchGameProps {
+  visible: boolean;
+  character?: any;
+  transparentUrl?: string | null;
+  onClose: () => void;
+  onGameComplete?: (result: any) => void;
+  canEarnReward?: boolean;
+  remainingRewards?: number;
+}
+
 export default function SnackCatchGame({
   visible,
   character,
@@ -275,7 +341,7 @@ export default function SnackCatchGame({
   onGameComplete,
   canEarnReward = true,
   remainingRewards = 1,
-}) {
+}: SnackCatchGameProps) {
   const [dimensions, setDimensions] = useState(Dimensions.get('window'));
   const screenWidth = dimensions.width;
   const screenHeight = dimensions.height;
@@ -300,14 +366,14 @@ export default function SnackCatchGame({
   const [fullness, setFullness] = useState(0); // 0% ~ 100%
 
   // Active Flying Fruits & Sliced Halves
-  const [fruits, setFruits] = useState([]);
-  const [halves, setHalves] = useState([]);
-  const [splashes, setSplashes] = useState([]);
-  const [toasts, setToasts] = useState([]);
+  const [fruits, setFruits] = useState<FruitItem[]>([]);
+  const [halves, setHalves] = useState<HalfItem[]>([]);
+  const [splashes, setSplashes] = useState<SplashItem[]>([]);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   // Blade Slash Trail
-  const [slashPoints, setSlashPoints] = useState([]);
-  const lastTouchPosRef = useRef(null);
+  const [slashPoints, setSlashPoints] = useState<SlashPoint[]>([]);
+  const lastTouchPosRef = useRef<{ x: number; y: number } | null>(null);
 
   // Animations
   const petBounce = useRef(new Animated.Value(1)).current;
@@ -323,19 +389,19 @@ export default function SnackCatchGame({
   const screenHeightRef = useRef(screenHeight);
   screenHeightRef.current = screenHeight;
 
-  const fruitsRef = useRef([]);
-  const halvesRef = useRef([]);
+  const fruitsRef = useRef<FruitItem[]>([]);
+  const halvesRef = useRef<HalfItem[]>([]);
   const comboRef = useRef(0);
   const lastSliceTimeRef = useRef(0);
 
   // Timers
-  const gameTimerRef = useRef(null);
-  const tossTimerRef = useRef(null);
-  const animFrameRef = useRef(null);
-  const slashClearTimerRef = useRef(null);
+  const gameTimerRef = useRef<any>(null);
+  const tossTimerRef = useRef<any>(null);
+  const animFrameRef = useRef<number | null>(null);
+  const slashClearTimerRef = useRef<any>(null);
 
   // Trigger Score / Message Toast
-  const triggerToast = useCallback((text, color = '#F59E0B', x = null, y = null) => {
+  const triggerToast = useCallback((text: string, color = '#F59E0B', x: number | null = null, y: number | null = null) => {
     const id = `toast_${Date.now()}_${Math.random()}`;
     const toastX = x !== null ? Math.max(20, Math.min(screenWidthRef.current - 140, x - 50)) : screenWidthRef.current / 2 - 60;
     const toastY = y !== null ? Math.max(90, Math.min(screenHeightRef.current - 180, y - 30)) : screenHeightRef.current / 2;
@@ -438,7 +504,7 @@ export default function SnackCatchGame({
 
       const rotationSpeed = (Math.random() - 0.5) * 8.0;
 
-      const newFruit = {
+      const newFruit: FruitItem = {
         id: `fruit_${Date.now()}_${Math.random()}`,
         x: startX,
         y: startY,
@@ -446,6 +512,7 @@ export default function SnackCatchGame({
         vy: -speedY,
         rotation: Math.random() * 360,
         rotationSpeed,
+        rotSpeed: rotationSpeed,
         ...fruitData,
       };
 
@@ -458,7 +525,7 @@ export default function SnackCatchGame({
   // -----------------------------------------------------------------
   // Slice Single Fruit
   // -----------------------------------------------------------------
-  const sliceFruit = useCallback((fruit, sliceX, sliceY, sliceAngle) => {
+  const sliceFruit = useCallback((fruit: FruitItem, sliceX: number, sliceY: number, sliceAngle: number) => {
     // 1. Bomb Explosion
     if (fruit.isBomb) {
       triggerShake();
@@ -502,7 +569,7 @@ export default function SnackCatchGame({
     const halfLeftId = `half_L_${Date.now()}_${Math.random()}`;
     const halfRightId = `half_R_${Date.now()}_${Math.random()}`;
 
-    const halfLeft = {
+    const halfLeft: HalfItem = {
       id: halfLeftId,
       type: fruit.type,
       size: fruit.size,
@@ -515,7 +582,7 @@ export default function SnackCatchGame({
       rotSpeed: -14,
     };
 
-    const halfRight = {
+    const halfRight: HalfItem = {
       id: halfRightId,
       type: fruit.type,
       size: fruit.size,
@@ -540,12 +607,12 @@ export default function SnackCatchGame({
   // -----------------------------------------------------------------
   // Process Continuous Blade Slash
   // -----------------------------------------------------------------
-  const processBladeSlash = useCallback((currentX, currentY) => {
+  const processBladeSlash = useCallback((currentX: number, currentY: number) => {
     if (gameStateRef.current !== 'playing') return;
     if (typeof currentX !== 'number' || typeof currentY !== 'number') return;
 
     // Track Blade Line Points
-    const newPoint = { x: currentX, y: currentY, time: Date.now() };
+    const newPoint: SlashPoint = { x: currentX, y: currentY, time: Date.now() };
     setSlashPoints(prev => [...prev.slice(-8), newPoint]);
 
     if (slashClearTimerRef.current) clearTimeout(slashClearTimerRef.current);
@@ -568,8 +635,8 @@ export default function SnackCatchGame({
 
     // Collision Detection against active flying fruits
     const activeList = fruitsRef.current;
-    const sliced = [];
-    const remaining = [];
+    const sliced: FruitItem[] = [];
+    const remaining: FruitItem[] = [];
 
     for (let i = 0; i < activeList.length; i++) {
       const f = activeList[i];
@@ -673,14 +740,14 @@ export default function SnackCatchGame({
 
       // 1. Update whole fruits (delta-time gravity + arc + rotation)
       const currentFruits = fruitsRef.current;
-      const remainingFruits = [];
+      const remainingFruits: FruitItem[] = [];
 
       for (let i = 0; i < currentFruits.length; i++) {
         const f = currentFruits[i];
         f.x += f.vx * dtScale;
         f.y += f.vy * dtScale;
         f.vy += GRAVITY * dtScale;
-        f.rotation += f.rotationSpeed * dtScale;
+        f.rotation += (f.rotSpeed || 0) * dtScale;
 
         // Keep until falls below screen bottom
         if (f.y < stageHeight + 60) {
@@ -693,7 +760,7 @@ export default function SnackCatchGame({
 
       // 2. Update sliced halves (flying apart + spinning)
       const currentHalves = halvesRef.current;
-      const remainingHalves = [];
+      const remainingHalves: HalfItem[] = [];
 
       for (let i = 0; i < currentHalves.length; i++) {
         const h = currentHalves[i];
@@ -753,7 +820,7 @@ export default function SnackCatchGame({
   }, [gameState, tossWave, finishGame]);
 
   // Evaluation Grade
-  const getGameGrade = (finalScore, finalFullness) => {
+  const getGameGrade = (finalScore: number, finalFullness: number) => {
     if (finalFullness >= 90 || finalScore >= 550) {
       return { grade: 'S', color: '#FAAD14', title: '전설의 후르츠 닌자 마스터! 👑' };
     }
@@ -814,30 +881,28 @@ export default function SnackCatchGame({
           setSlashPoints([]);
         }}
         // Web Mouse Drag Handlers
-        onMouseDown={
-          gameState === 'playing'
-            ? (e) => {
-                const targetX = e.nativeEvent.pageX || e.clientX || 0;
-                const targetY = e.nativeEvent.pageY || e.clientY || 0;
+        {...({
+          onMouseDown: gameState === 'playing'
+            ? (e: any) => {
+                const targetX = e.nativeEvent?.pageX || e.clientX || 0;
+                const targetY = e.nativeEvent?.pageY || e.clientY || 0;
                 processBladeSlash(targetX, targetY);
               }
-            : undefined
-        }
-        onMouseMove={
-          gameState === 'playing'
-            ? (e) => {
-                if (e.buttons === 1 || e.nativeEvent.which === 1) {
-                  const targetX = e.nativeEvent.pageX || e.clientX || 0;
-                  const targetY = e.nativeEvent.pageY || e.clientY || 0;
+            : undefined,
+          onMouseMove: gameState === 'playing'
+            ? (e: any) => {
+                if (e.buttons === 1 || e.nativeEvent?.which === 1) {
+                  const targetX = e.nativeEvent?.pageX || e.clientX || 0;
+                  const targetY = e.nativeEvent?.pageY || e.clientY || 0;
                   processBladeSlash(targetX, targetY);
                 }
               }
-            : undefined
-        }
-        onMouseUp={() => {
-          lastTouchPosRef.current = null;
-          setSlashPoints([]);
-        }}
+            : undefined,
+          onMouseUp: () => {
+            lastTouchPosRef.current = null;
+            setSlashPoints([]);
+          },
+        } as any)}
       >
         {/* Japanese Dojo / Wooden Cutting Board Theme Background */}
         <View style={styles.dojoBackgroundLayer} pointerEvents="none">

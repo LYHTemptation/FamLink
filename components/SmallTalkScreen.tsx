@@ -48,6 +48,47 @@ import styles from './smalltalk/SmallTalkStyles';
 
 export { getChoreIconMeta, renderGoalCategorySvg };
 
+import {
+  FamilyMember,
+  ChatMessage,
+  UserProfile,
+  PetmongCharacter,
+} from '../types/domain';
+
+export interface ChoreItem {
+  id: string;
+  title: string;
+  category: string;
+  assignee: string;
+  points: number;
+  repeat_type: string;
+  is_completed: boolean;
+  completed_date?: string | null;
+  completed_at?: string | null;
+  rawItem?: any;
+}
+
+export interface SmallTalkScreenProps {
+  smallTalkState?: any;
+  currentUser?: any;
+  currentUserProfile?: UserProfile | null;
+  points?: number;
+  pointHistory?: any[];
+  onAddResponse?: (targetOrText: any, text?: string) => Promise<boolean> | boolean | void;
+  familyMembers?: FamilyMember[];
+  messages?: ChatMessage[];
+  onSendOrderNotice?: (orderInfo: any) => Promise<void> | void;
+  shoppingItems?: any[];
+  onAddItem?: (item: any) => Promise<void> | void;
+  onToggleItem?: (item: any, isCompleted?: boolean) => Promise<void> | void;
+  onDeleteItem?: (id: string) => Promise<void> | void;
+  onClearCompleted?: () => Promise<void> | void;
+  onToggleRepeat?: (item: any) => Promise<void> | void;
+  petCharacter?: PetmongCharacter | any | null;
+  onAwardPetExp?: ((actorId: any, amount: number, reason?: string) => void) | null;
+  onAwardPoints?: ((amount: number, reason?: string) => void) | null;
+}
+
 export default function SmallTalkScreen({
   smallTalkState = {},
   currentUser,
@@ -67,16 +108,16 @@ export default function SmallTalkScreen({
   petCharacter = null,
   onAwardPetExp = null,
   onAwardPoints = null,
-}) {
+}: SmallTalkScreenProps) {
   // Figma 2대 서브탭: 'chores' (✅ 집안일) | 'games' (🎮 게임)
-  const [activeTab, setActiveTab] = useState('chores');
+  const [activeTab, setActiveTab] = useState<'chores' | 'games' | string>('chores');
 
   // 대화 답변 작성 모달 상태 (로그인 사용자 전용)
   const [answerModalVisible, setAnswerModalVisible] = useState(false);
   const [answerText, setAnswerText] = useState('');
 
   // 다른 가족 멤버 답변 열람 모달 상태 (Read-Only)
-  const [viewingMemberAnswer, setViewingMemberAnswer] = useState(null); // { member, text }
+  const [viewingMemberAnswer, setViewingMemberAnswer] = useState<{ member: any; text: string } | null>(null);
 
   // 집안일 추가 모달 상태
   const [addChoreModalVisible, setAddChoreModalVisible] = useState(false);
@@ -88,7 +129,7 @@ export default function SmallTalkScreen({
   const previewIconMeta = useMemo(() => getChoreIconMeta(null, newChoreTitle), [newChoreTitle]);
 
   // 로컬 집안일 상태
-  const [fallbackChores, setFallbackChores] = useState([]);
+  const [fallbackChores, setFallbackChores] = useState<ChoreItem[]>([]);
 
   // 1. 체류형 3대 반려몽 미니게임 모달 상태
   const [isSnackGameVisible, setIsSnackGameVisible] = useState(false);
@@ -148,7 +189,7 @@ export default function SmallTalkScreen({
   const canEarnReward = remainingRewards > 0;
 
   // 반려몽 체류형 미니게임 완료 콜백 (사용자별 일일 한도 체크 및 연습 모드 분기)
-  const handleCompletePetmongGame = async (gameTitle, { score = 0, exp: awardedExp = 0, isPractice = false }) => {
+  const handleCompletePetmongGame = async (gameTitle: string, { score = 0, exp: awardedExp = 0, isPractice = false }: any) => {
     if (!isPractice && dailyGameRewardCount < DAILY_GAME_REWARD_LIMIT) {
       const nextCount = dailyGameRewardCount + 1;
       setDailyGameRewardCount(nextCount);
@@ -221,7 +262,7 @@ export default function SmallTalkScreen({
   const myRole = currentUserProfile?.role;
 
   // 멤버별 스몰톡 답변 조회 (고유 ID 우선, 이름 차선 - 역할 role 기반 공유 절대 방지)
-  const getMemberResponse = (member) => {
+  const getMemberResponse = (member: any) => {
     if (!member || !responses) return '';
     if (member.id && responses[member.id]) {
       return responses[member.id];
@@ -242,7 +283,7 @@ export default function SmallTalkScreen({
   const hasAnswered = Boolean(myAnswer);
 
   // 현재 로그인한 본인 여부 확인 (고유 ID 엄격 비교 -> 이름 비교 -> ID/이름 둘 다 없을 때만 예외적 역할 비교)
-  const isCurrentMember = (member) => {
+  const isCurrentMember = (member: any) => {
     if (!member) return false;
     // 1. 고유 ID 엄격 비교 (Supabase UUID 및 mock 고유 ID)
     if (myId && member.id) {
@@ -278,7 +319,7 @@ export default function SmallTalkScreen({
 
   // 3. 집안일 목록 구성 (DB shoppingItems 실시간 양방향 동기화)
   const choresList = useMemo(() => {
-    const source = (shoppingItems !== undefined && shoppingItems !== null) ? shoppingItems : fallbackChores;
+    const source: any[] = (shoppingItems !== undefined && shoppingItems !== null) ? shoppingItems : fallbackChores;
     return source.map((item, idx) => {
       const iconMeta = getChoreIconMeta(item.category, item.title);
       return {
@@ -317,7 +358,7 @@ export default function SmallTalkScreen({
   }, [todayCompletedChores]);
 
   // 집안일 완료 토글 (홈 화면 퀘스트 보드와 양방향 100% 실시간 연동)
-  const handleToggleChoreItem = (chore) => {
+  const handleToggleChoreItem = (chore: any) => {
     if (onToggleItem) {
       onToggleItem(chore.rawItem || chore, !chore.is_completed);
     } else {
@@ -328,7 +369,7 @@ export default function SmallTalkScreen({
   };
 
   // 집안일 개별 삭제 핸들러 (할 일 및 완료 항목 공통)
-  const handleDeleteChoreItem = (chore) => {
+  const handleDeleteChoreItem = (chore: any) => {
     const isDaily = chore.repeat_type === 'daily';
     const msg = isDaily
       ? `'${chore.title}' [매일 루틴] 항목을 완전히 삭제하시겠습니까?\n내일부터도 목록에 나타나지 않습니다.`
@@ -428,7 +469,7 @@ export default function SmallTalkScreen({
   };
 
   // 가족 멤버 항목 탭: 본인이면 작성/수정, 타인이면 답변 열람 모달 팝업
-  const handlePressMemberCard = (member) => {
+  const handlePressMemberCard = (member: any) => {
     const isMe = isCurrentMember(member);
     if (isMe) {
       handleOpenAnswerModal();

@@ -47,23 +47,38 @@ import {
 } from '../lib/petmongEvolutionService';
 import { colors, typography, commonStyles } from '../theme';
 
+import { PetmongCharacter, FamilyMember, UserProfile } from '../types/domain';
+
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-
-
+export interface PetmongGrowthBookModalProps {
+  visible: boolean;
+  onClose: () => void;
+  character?: PetmongCharacter | null;
+  allCharacters?: PetmongCharacter[];
+  familyMembers?: FamilyMember[];
+  currentUserProfile?: UserProfile | null;
+  initialTab?: string;
+  onSelectCharacter?: (char: any) => void;
+}
 
 export default function PetmongGrowthBookModal({
   visible,
   onClose,
   character,
-}) {
+  allCharacters,
+  familyMembers,
+  currentUserProfile,
+  initialTab,
+  onSelectCharacter,
+}: PetmongGrowthBookModalProps) {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const isMobile = windowWidth < 600;
   const isSmallMobile = windowWidth < 380;
 
-  const [selectedStageNum, setSelectedStageNum] = useState(1);
-  const [stageImages, setStageImages] = useState({});
-  const [generatingStages, setGeneratingStages] = useState({});
+  const [selectedStageNum, setSelectedStageNum] = useState<number>(1);
+  const [stageImages, setStageImages] = useState<Record<number, string>>({});
+  const [generatingStages, setGeneratingStages] = useState<Record<number, boolean>>({});
 
   // Active family petmong
   const activeChar = character || null;
@@ -121,7 +136,7 @@ export default function PetmongGrowthBookModal({
     }
   }, [visible, activeChar?.id, loadStageImages]);
 
-  const handleSelectStage = useCallback((sNum) => {
+  const handleSelectStage = useCallback((sNum: number) => {
     // 1. Instant 0ms synchronous state switch: Tab button highlights immediately!
     setSelectedStageNum(sNum);
 
@@ -161,7 +176,7 @@ export default function PetmongGrowthBookModal({
   const detectedAnimalBadge = (() => {
     if (!activeChar) return '가족 반려친구 🐾';
     const spec = detectSpecies(activeChar.emoji, activeChar.name);
-    const map = {
+    const map: Record<string, string> = {
       canine: '다정한 강아지상 🐶',
       feline: '도도한 고양이상 🐱',
       rabbit: '호기심 토끼상 🐰',

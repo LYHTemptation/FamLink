@@ -33,15 +33,15 @@ import { colors } from '../../theme/colors';
 // -----------------------------------------------------------------
 // Sound Synthesizer via Web Audio API (Silent fallback on native)
 // -----------------------------------------------------------------
-const playAudioTone = (freq, duration = 0.08, type = 'sine') => {
+const playAudioTone = (freq: number, duration: number = 0.08, type: OscillatorType = 'sine') => {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return;
   try {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
     if (!AudioCtx) return;
-    if (!window.__famlinkCardAudioCtx) {
-      window.__famlinkCardAudioCtx = new AudioCtx();
+    if (!(window as any).__famlinkCardAudioCtx) {
+      (window as any).__famlinkCardAudioCtx = new AudioCtx();
     }
-    const ctx = window.__famlinkCardAudioCtx;
+    const ctx = (window as any).__famlinkCardAudioCtx;
     if (ctx.state === 'suspended') {
       ctx.resume().catch(() => {});
     }
@@ -153,8 +153,28 @@ const CARD_PAIR_DEFINITIONS = [
   },
 ];
 
+export interface CardItem {
+  id: string;
+  pairId: string | number;
+  name: string;
+  emoji?: string;
+  color?: string;
+  bgColor?: string;
+  isHero?: boolean;
+}
+
+export interface CardMatchGameProps {
+  visible: boolean;
+  character?: any;
+  transparentUrl?: string | null;
+  onClose: () => void;
+  onGameComplete?: (result: any) => void;
+  canEarnReward?: boolean;
+  remainingRewards?: number;
+}
+
 // Helper: Shuffle Array (Fisher-Yates)
-function shuffleArray(array) {
+function shuffleArray<T>(array: T[]): T[] {
   const arr = [...array];
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -166,7 +186,7 @@ function shuffleArray(array) {
 // -----------------------------------------------------------------
 // Vector Paw Stamp for Card Back
 // -----------------------------------------------------------------
-function PawVectorStamp({ size = 26, color = '#FF6B47' }) {
+function PawVectorStamp({ size = 26, color = '#FF6B47' }: { size?: number; color?: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
       <Circle cx="8.5" cy="5.5" r="2.2" />
@@ -189,7 +209,7 @@ export default function CardMatchGame({
   onGameComplete,
   canEarnReward = true,
   remainingRewards = 1,
-}) {
+}: CardMatchGameProps) {
   const [dimensions, setDimensions] = useState(Dimensions.get('window'));
   const screenWidth = dimensions.width;
   const screenHeight = dimensions.height;
@@ -207,15 +227,15 @@ export default function CardMatchGame({
   const [gameState, setGameState] = useState('ready');
 
   // Deck of 18 Cards
-  const [cards, setCards] = useState([]);
-  const [flippedIndices, setFlippedIndices] = useState([]); // indices currently flipped open (max 2)
-  const [matchedPairIds, setMatchedPairIds] = useState(new Set()); // set of matched pairIds
+  const [cards, setCards] = useState<CardItem[]>([]);
+  const [flippedIndices, setFlippedIndices] = useState<number[]>([]); // indices currently flipped open (max 2)
+  const [matchedPairIds, setMatchedPairIds] = useState<Set<string | number>>(new Set()); // set of matched pairIds
   const [turns, setTurns] = useState(0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [combo, setCombo] = useState(0);
   const [maxCombo, setMaxCombo] = useState(0);
   const [isChecking, setIsChecking] = useState(false);
-  const [toasts, setToasts] = useState([]);
+  const [toasts, setToasts] = useState<any[]>([]);
 
   // Animation values for 18 cards
   const flipAnims = useRef(Array.from({ length: 18 }, () => new Animated.Value(0))).current;
@@ -226,12 +246,12 @@ export default function CardMatchGame({
   const petHopY = useRef(new Animated.Value(0)).current;
 
   // Timer Ref
-  const timerRef = useRef(null);
+  const timerRef = useRef<any>(null);
   const gameStateRef = useRef(gameState);
   gameStateRef.current = gameState;
 
   // Floating Toast Notification
-  const triggerToast = useCallback((text, color = '#10B981') => {
+  const triggerToast = useCallback((text: string, color: string = '#10B981') => {
     const id = `toast_${Date.now()}_${Math.random()}`;
     setToasts((prev) => [...prev.slice(-2), { id, text, color }]);
     setTimeout(() => {
@@ -251,11 +271,11 @@ export default function CardMatchGame({
   // Deck Initialization (3x6 Grid = 9 Pairs x 2 = 18 Cards)
   // ---------------------------------------------------------------
   const initGameDeck = useCallback(() => {
-    const initialDeck = [];
+    const initialDeck: CardItem[] = [];
     CARD_PAIR_DEFINITIONS.forEach((pair) => {
       // 2 identical cards for each pair
       initialDeck.push({
-        id: initialDeck.length,
+        id: String(initialDeck.length),
         pairId: pair.pairId,
         name: pair.name,
         emoji: pair.isHero ? (character?.emoji || pair.emoji) : pair.emoji,
@@ -264,7 +284,7 @@ export default function CardMatchGame({
         isHero: pair.isHero,
       });
       initialDeck.push({
-        id: initialDeck.length,
+        id: String(initialDeck.length),
         pairId: pair.pairId,
         name: pair.name,
         emoji: pair.isHero ? (character?.emoji || pair.emoji) : pair.emoji,
@@ -343,7 +363,7 @@ export default function CardMatchGame({
   // ---------------------------------------------------------------
   // Card Flip and Match Logic
   // ---------------------------------------------------------------
-  const handleCardPress = useCallback((index) => {
+  const handleCardPress = useCallback((index: number) => {
     if (isChecking) return;
     if (flippedIndices.includes(index)) return;
 
@@ -497,7 +517,7 @@ export default function CardMatchGame({
   }, [turns, elapsedSeconds]);
 
   // Format mm:ss
-  const formatTime = (secs) => {
+  const formatTime = (secs: number) => {
     const m = Math.floor(secs / 60);
     const s = secs % 60;
     return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;

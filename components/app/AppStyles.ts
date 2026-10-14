@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
   },
   celebrationTitle: {
     fontSize: 20,
-    fontWeight: '950',
+    fontWeight: '900',
     color: '#1C1C1E',
     marginBottom: 8,
   },

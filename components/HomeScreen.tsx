@@ -18,11 +18,28 @@ import { getEvolutionStage, getStageNameWithPet, getRequiredExpForLevel } from '
 import { stripEmojis } from '../utils/topics';
 import { getKoreanHoliday } from '../utils/koreanHolidays';
 import { useTransparentImage } from '../lib/imageTransparencyService';
+import {
+  CalendarEvent,
+  ChatMessage,
+  FamilyMember,
+  PetmongCharacter,
+  PetmongVitals,
+  ShoppingItem,
+  SmallTalkState,
+  UserProfile,
+} from '../types/domain';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
+export interface ChoreIconMeta {
+  icon: string;
+  category: string;
+  iconBg: string;
+  tagColor: string;
+}
+
 // 한국형 생활 행동 기반 아이콘 & 카테고리 스마트 매퍼
-export const getChoreIconMeta = (category, title = '') => {
+export const getChoreIconMeta = (category?: string, title: string = ''): ChoreIconMeta => {
   const safe = (title || '').toLowerCase();
   // 1. 쓰레기 / 분리수거
   if (safe.includes('분리수거') || safe.includes('쓰레기') || safe.includes('음식물') || safe.includes('재활용')) {
@@ -60,17 +77,35 @@ export const getChoreIconMeta = (category, title = '') => {
     return { icon: '🛒', category: '심부름', iconBg: '#FBCFE8', tagColor: '#9D174D' };
   }
 
-  const meta = {
+  const metaMap: Record<string, ChoreIconMeta> = {
     야외: { icon: '🌿', category: '야외', iconBg: '#A7F3D0', tagColor: '#064E3B' },
     거실: { icon: '🛋️', category: '거실', iconBg: '#DDD6FE', tagColor: '#5B21B6' },
     기타: { icon: '📋', category: '기타', iconBg: '#F5F0E8', tagColor: '#78716C' },
     침실: { icon: '🛏️', category: '침실', iconBg: '#FBCFE8', tagColor: '#9D174D' },
     욕실: { icon: '🚿', category: '욕실', iconBg: '#BFDBFE', tagColor: '#1E40AF' },
     주방: { icon: '🍳', category: '주방', iconBg: '#FDE68A', tagColor: '#78350F' },
-  }[category];
+  };
 
+  const meta = category ? metaMap[category] : undefined;
   return meta || { icon: '✅', category: category || '할 일', iconBg: '#E8E0D0', tagColor: '#1C1917' };
 };
+
+export interface HomeScreenProps {
+  points?: number;
+  events?: CalendarEvent[];
+  messages?: ChatMessage[];
+  currentUser?: any;
+  currentUserProfile?: UserProfile | null;
+  familyMembers?: FamilyMember[];
+  shoppingItems?: ShoppingItem[];
+  petmongCharacters?: PetmongCharacter[];
+  petVitals?: PetmongVitals | null;
+  smallTalkState?: SmallTalkState | null;
+  onNavigateScreen?: (screen: string) => void;
+  onToggleQuest?: (questId: string, currentStatus?: boolean) => void;
+  onAwardPoints?: (amount: number, reason?: string) => void;
+  onAddResponse?: (textOrId: any, maybeText?: string) => void;
+}
 
 export default function HomeScreen({
   points = 0,
@@ -82,12 +117,12 @@ export default function HomeScreen({
   shoppingItems = [],
   petmongCharacters = [],
   petVitals,
-  smallTalkState = {},
+  smallTalkState = { topic: '', responses: {} },
   onNavigateScreen,
   onToggleQuest,
   onAwardPoints,
   onAddResponse,
-}) {
+}: HomeScreenProps) {
   // shoppingItems를 기반으로 홈 화면 집안일/미션 목록 구성 (함께 페이지와 양방향 100% 실시간 연동)
   const quests = useMemo(() => {
     const source = shoppingItems || [];
@@ -285,7 +320,7 @@ export default function HomeScreen({
   }, [topic]);
 
   const topicCategory = useMemo(() => {
-    if (typeof topic === 'object' && topic?.category) return topic.category;
+    if (typeof topic === 'object' && topic && 'category' in (topic as any)) return (topic as any).category;
     return '오늘의 스몰톡 질문';
   }, [topic]);
 
@@ -293,7 +328,7 @@ export default function HomeScreen({
   const myResponse = myId ? (responses[myId] || responses[currentUser]) : responses[currentUser];
 
   const answeredMembersCount = useMemo(() => {
-    return displayFamilyMembers.filter(m => responses[m.id] || responses[m.name] || responses[m.role]).length;
+    return displayFamilyMembers.filter(m => responses[m.id] || responses[m.name] || (m.role ? responses[m.role] : false)).length;
   }, [displayFamilyMembers, responses]);
 
   const allAnswered = displayFamilyMembers.length > 0 && answeredMembersCount >= displayFamilyMembers.length;
@@ -828,6 +863,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#DDA0DD',
     opacity: 0.18,
     borderRadius: 18,
+  },
+  blobLavender: {
+    backgroundColor: '#DDA0DD',
+    opacity: 0.18,
   },
   headerTopRow: {
     flexDirection: 'row',

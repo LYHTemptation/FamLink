@@ -135,7 +135,67 @@ const PETMONG_DIALOGUES = {
   ],
 };
 
-const getRandomDialogue = (personality) => {
+import {
+  FamilyMember,
+  UserProfile,
+  ChatMessage,
+  SmallTalkState,
+  PetmongCharacter,
+} from '../types/domain';
+
+export interface PetVitals {
+  warmth?: number;
+  hunger?: number;
+  happiness?: number;
+  cleanliness?: number;
+  energy?: number;
+  [key: string]: any;
+}
+
+export interface WhisperItem {
+  id: string;
+  family_id?: string;
+  from_user_id: string;
+  to_user_id: string;
+  message: string;
+  is_read: boolean;
+  has_heart?: boolean;
+  heart_count?: number;
+  created_at: string;
+  from_user_name?: string;
+  to_user_name?: string;
+  [key: string]: any;
+}
+
+export interface EvolutionData {
+  character?: PetmongCharacter;
+  stage?: any;
+  previousLevel?: number;
+  previousImageUrl?: string | null;
+  newLevel?: number;
+  isAiEvolving?: boolean;
+  newImageUrl?: string | null;
+}
+
+export interface InteriorScreenProps {
+  points?: number;
+  onDeductPoints?: (pts: number, reason?: string) => Promise<boolean> | boolean | void;
+  onAwardPoints?: (pts: number, reason?: string) => Promise<boolean> | boolean | void;
+  currentUser?: any;
+  currentUserProfile?: UserProfile | null;
+  familyId?: string | null;
+  petmongCharacters?: PetmongCharacter[];
+  setPetmongCharacters?: React.Dispatch<React.SetStateAction<PetmongCharacter[]>> | ((chars: any) => void);
+  onAwardExp?: (userIdOrExp: any, amount?: number, reason?: string) => Promise<void> | void;
+  familyMembers?: FamilyMember[];
+  petVitals?: PetVitals;
+  onUpdateVitals?: (vitals: any) => void;
+  messages?: ChatMessage[];
+  smallTalkState?: SmallTalkState | any;
+  onNavigateScreen?: ((screenName: string, params?: any) => void) | null;
+}
+
+const getRandomDialogue = (personality?: string): string => {
   const currentHour = new Date().getHours();
   if (currentHour >= 6 && currentHour < 10) {
     const morningQuotes = [
@@ -155,16 +215,12 @@ const getRandomDialogue = (personality) => {
     }
   }
 
-  const list = PETMONG_DIALOGUES[personality] || PETMONG_DIALOGUES['default'];
+  const list = (personality && (PETMONG_DIALOGUES as Record<string, string[]>)[personality]) || PETMONG_DIALOGUES['default'];
   return list[Math.floor(Math.random() * list.length)];
 };
 
-
-
-
-
 export default function InteriorScreen({
-  points,
+  points = 0,
   onDeductPoints,
   onAwardPoints,
   currentUser,
@@ -179,40 +235,40 @@ export default function InteriorScreen({
   messages = [],
   smallTalkState = {},
   onNavigateScreen = null,
-}) {
+}: InteriorScreenProps) {
   const insets = useSafeAreaInsets();
   
   // Idle Game & Room Navigation States
-  const [selectedRoomUserId, setSelectedRoomUserId] = useState(currentUserProfile?.id);
+  const [selectedRoomUserId, setSelectedRoomUserId] = useState<string | undefined>(currentUserProfile?.id);
 
   // Petmong States (Linked with Supabase)
-  const [myCharacter, setMyCharacter] = useState(null);
+  const [myCharacter, setMyCharacter] = useState<PetmongCharacter | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [familyCharacters, setFamilyCharacters] = useState([]);
+  const [familyCharacters, setFamilyCharacters] = useState<PetmongCharacter[]>([]);
   
   // Unified Decorate Modal State (거실 테마 & 반려몽 외형 변경)
   const [decorModalVisible, setDecorModalVisible] = useState(false);
-  const [decorModalTab, setDecorModalTab] = useState('theme'); // 'theme' | 'appearance'
+  const [decorModalTab, setDecorModalTab] = useState<'theme' | 'appearance'>('theme');
   const [newName, setNewName] = useState('');
   const [newEmoji, setNewEmoji] = useState('🐶');
   const [newPersonality, setNewPersonality] = useState('다정한');
 
   // Compatibility helpers
-  const setCreateModalVisible = (val) => {
+  const setCreateModalVisible = (val: boolean) => {
     if (val) setDecorModalTab('appearance');
     setDecorModalVisible(val);
   };
-  const setThemeModalVisible = (val) => {
+  const setThemeModalVisible = (val: boolean) => {
     if (val) setDecorModalTab('theme');
     setDecorModalVisible(val);
   };
 
   // Secret Whisper States (반려몽 비밀 귓속말 & 편지 배달부)
-  const [whispers, setWhispers] = useState([]);
+  const [whispers, setWhispers] = useState<WhisperItem[]>([]);
   const [whisperWriteModalVisible, setWhisperWriteModalVisible] = useState(false);
   const [whisperReadModalVisible, setWhisperReadModalVisible] = useState(false);
-  const [activeWhisperToRead, setActiveWhisperToRead] = useState(null);
-  const [whisperTargetUser, setWhisperTargetUser] = useState(null);
+  const [activeWhisperToRead, setActiveWhisperToRead] = useState<WhisperItem | null>(null);
+  const [whisperTargetUser, setWhisperTargetUser] = useState<FamilyMember | UserProfile | null>(null);
   const [whisperMessage, setWhisperMessage] = useState('');
   const [isSendingWhisper, setIsSendingWhisper] = useState(false);
   const [dailyWhisperSendExpCount, setDailyWhisperSendExpCount] = useState(0);
@@ -258,7 +314,7 @@ export default function InteriorScreen({
 
   // 4-Stage Evolution Milestone Modal State
   const [evolutionModalVisible, setEvolutionModalVisible] = useState(false);
-  const [evolutionData, setEvolutionData] = useState(null);
+  const [evolutionData, setEvolutionData] = useState<EvolutionData | null>(null);
   const prevLevelRef = useRef(myCharacter?.level || 1);
   const hasInitializedLevelRef = useRef(false);
 
@@ -271,7 +327,7 @@ export default function InteriorScreen({
 
   // Family Petmong Book / Roster Modal State & Growth Tab State
   const [familyBookModalVisible, setFamilyBookModalVisible] = useState(false);
-  const [growthBookTargetChar, setGrowthBookTargetChar] = useState(null);
+  const [growthBookTargetChar, setGrowthBookTargetChar] = useState<PetmongCharacter | null>(null);
   const [growthBookInitialTab, setGrowthBookInitialTab] = useState('growth');
 
   // Sumone-Style Family Room Theme States (온 가족이 공유하는 거실 테마)
@@ -288,7 +344,7 @@ export default function InteriorScreen({
 
   // Current evolution stage based on level (1, 2, 3, 4)
   const currentCharStageNum = getEvolutionStage(displayedCharacter?.level || 1).stage;
-  const [activeStageImageUrl, setActiveStageImageUrl] = useState(null);
+  const [activeStageImageUrl, setActiveStageImageUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (displayedCharacter?.id) {
@@ -298,10 +354,10 @@ export default function InteriorScreen({
         } else if (stages && stages[1]) {
           setActiveStageImageUrl(stages[1]);
         } else {
-          setActiveStageImageUrl(displayedCharacter.image_url);
+          setActiveStageImageUrl(displayedCharacter.image_url || null);
         }
       }).catch(() => {
-        setActiveStageImageUrl(displayedCharacter.image_url);
+        setActiveStageImageUrl(displayedCharacter.image_url || null);
       });
     } else {
       setActiveStageImageUrl(null);
@@ -314,7 +370,7 @@ export default function InteriorScreen({
     if (targetChar?.id && targetChar?.image_url) {
       getPetmongStageImages(targetChar.id).then(stages => {
         if (!stages[1]) {
-          savePetmongStageImage(targetChar.id, 1, targetChar.image_url);
+          savePetmongStageImage(targetChar.id as string, 1, targetChar.image_url as string);
         }
         if (!stages[2] || !stages[3] || !stages[4]) {
           startBackgroundStagePreGeneration(targetChar, (stg, url) => {
@@ -335,7 +391,7 @@ export default function InteriorScreen({
   });
 
   const activeVitals = propPetVitals || localPetVitals;
-  const activeCharId = displayedCharacter?.id || currentUserProfile?.id || currentUser;
+  const activeCharId: string = displayedCharacter?.id || currentUserProfile?.id || (typeof currentUser === 'string' ? currentUser : '') || 'default-pet';
 
   useEffect(() => {
     if (!activeCharId || propPetVitals) return;
@@ -350,7 +406,7 @@ export default function InteriorScreen({
       .catch(() => {});
   }, [activeCharId, propPetVitals]);
 
-  const handleUpdateVitals = (updater) => {
+  const handleUpdateVitals = (updater: any) => {
     if (propOnUpdateVitals) {
       propOnUpdateVitals(updater);
     } else {
@@ -386,9 +442,9 @@ export default function InteriorScreen({
     }
   };
 
-  const handleGameCareAction = (actionType = 'CARE', detail = null) => {
+  const handleGameCareAction = (actionType = 'CARE', detail: any = null) => {
     if (familyId && familyPetmong?.id && currentUserProfile?.id) {
-      const actionLabels = {
+      const actionLabels: Record<string, string> = {
         FEED: `${currentUserProfile.name || '가족'}님이 몽이에게 맛있는 ${detail?.name || '밥'}을 챙겨주었습니다 🥫`,
         PLAY: `${currentUserProfile.name || '가족'}님이 몽이와 신나는 공놀이를 즐겼습니다 ⚽`,
         BATH: `${currentUserProfile.name || '가족'}님이 몽이에게 보글보글 거품 목욕을 시켜주었습니다 🧼`,
@@ -450,7 +506,7 @@ export default function InteriorScreen({
         setWhispers(data);
         AsyncStorage.setItem(cacheKey, JSON.stringify(data)).catch(() => {});
       }
-    } catch (e) {
+    } catch (e: any) {
       console.warn('fetchWhispers note (using local cache):', e?.message || e);
     }
   }, [familyId]);
@@ -458,7 +514,7 @@ export default function InteriorScreen({
   useEffect(() => {
     fetchWhispers();
     if (!familyId) return;
-    let channel = null;
+    let channel: any = null;
     try {
       channel = supabase
         .channel(`whispers_${familyId}`)
@@ -493,10 +549,10 @@ export default function InteriorScreen({
       setIsSendingWhisper(true);
       const cacheKey = `@famlink_petmong_whispers_${familyId}`;
       const tempId = 'whisper_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
-      const newWhisper = {
+      const newWhisper: WhisperItem = {
         id: tempId,
-        family_id: familyId,
-        from_user_id: currentUserProfile?.id,
+        family_id: familyId || undefined,
+        from_user_id: currentUserProfile?.id || '',
         to_user_id: whisperTargetUser.id,
         message: whisperMessage.trim(),
         is_read: false,
@@ -539,7 +595,7 @@ export default function InteriorScreen({
             return next;
           });
         }
-      } catch (dbErr) {
+      } catch (dbErr: any) {
         console.warn('Supabase petmong_whispers sync note (using local cache):', dbErr?.message || dbErr);
       }
 
@@ -593,7 +649,7 @@ export default function InteriorScreen({
     }
   };
 
-  const handleConfirmReadWhisper = async (whisper) => {
+  const handleConfirmReadWhisper = async (whisper: any) => {
     if (!whisper?.id) return;
     try {
       const cacheKey = `@famlink_petmong_whispers_${familyId}`;
@@ -661,7 +717,7 @@ export default function InteriorScreen({
     }
   };
 
-  const handleReplyWhisper = (whisper) => {
+  const handleReplyWhisper = (whisper: any) => {
     const sender = familyMembers.find(m => m.id === whisper.from_user_id);
     setWhisperReadModalVisible(false);
     setActiveWhisperToRead(null);
@@ -674,7 +730,7 @@ export default function InteriorScreen({
   const effectiveImageUrl = activeStageImageUrl || displayedCharacter?.image_url;
 
   // Method B: Image-to-Image AI Stage Evolution (Pre-generation Check & Instant Apply)
-  const triggerAiEvolution = async (char, stage) => {
+  const triggerAiEvolution = async (char: any, stage: any) => {
     try {
       let evolvedImageUrl = null;
 
@@ -704,8 +760,10 @@ export default function InteriorScreen({
           .update({ image_url: evolvedImageUrl, family_id: familyId })
           .eq('id', char.id);
 
-        setMyCharacter(prev => ({ ...prev, image_url: evolvedImageUrl }));
-        setPetmongCharacters(prev => prev.map(c => c.id === char.id ? { ...c, image_url: evolvedImageUrl } : c));
+        setMyCharacter(prev => prev ? ({ ...prev, image_url: evolvedImageUrl } as PetmongCharacter) : null);
+        if (setPetmongCharacters) {
+          setPetmongCharacters((prev: any[]) => prev.map(c => c.id === char.id ? { ...c, image_url: evolvedImageUrl } : c));
+        }
         setEvolutionData(prev => prev ? { ...prev, isAiEvolving: false, newImageUrl: evolvedImageUrl } : null);
       } else {
         setEvolutionData(prev => prev ? { ...prev, isAiEvolving: false } : null);
@@ -761,13 +819,15 @@ export default function InteriorScreen({
         } else if (myCharacter.emoji) {
           const newEmoji = getEvolvedEmoji(myCharacter.emoji, newLevel);
           if (newEmoji !== myCharacter.emoji) {
-            supabase
+            (supabase
               .from('petmong_characters')
               .update({ emoji: newEmoji, family_id: familyId })
-              .eq('id', myCharacter.id)
+              .eq('id', myCharacter.id) as any)
               .then(() => {
-                setMyCharacter(prev => ({ ...prev, emoji: newEmoji }));
-                setPetmongCharacters(prev => prev.map(c => c.id === myCharacter.id ? { ...c, emoji: newEmoji } : c));
+                setMyCharacter(prev => prev ? ({ ...prev, emoji: newEmoji } as PetmongCharacter) : null);
+                if (setPetmongCharacters) {
+                  setPetmongCharacters((prev: any[]) => prev.map(c => c.id === myCharacter.id ? { ...c, emoji: newEmoji } : c));
+                }
               })
               .catch(() => {});
           }
@@ -792,13 +852,13 @@ export default function InteriorScreen({
     // Fetch ground-truth room theme from Supabase petmong_activities for cross-device sync
     if (familyId) {
       // Query recent room theme updates for all members
-      supabase
+      (supabase
         .from('petmong_activities')
         .select('action_type, created_at')
         .eq('family_id', familyId)
         .ilike('action_type', 'ROOM_THEME_UPDATE:%')
-        .order('created_at', { ascending: true })
-        .then(({ data, error }) => {
+        .order('created_at', { ascending: true }) as any)
+        .then(({ data, error }: any) => {
           if (data && !error && data.length > 0) {
             const lastRow = data[data.length - 1];
             const parts = lastRow.action_type.split(':');
@@ -810,7 +870,7 @@ export default function InteriorScreen({
             }
           }
         })
-        .catch(err => console.log('Error fetching DB room themes:', err));
+        .catch((err: any) => console.log('Error fetching DB room themes:', err));
     }
   }, [currentUserProfile?.id, myCharacter?.id, familyId, familyMembers.length]);
 
@@ -827,7 +887,7 @@ export default function InteriorScreen({
           table: 'petmong_activities',
           filter: `family_id=eq.${familyId}`,
         },
-        (payload) => {
+        (payload: any) => {
           const actionType = payload.new?.action_type || '';
           if (actionType.startsWith('ROOM_THEME_UPDATE:')) {
             const parts = actionType.split(':');
@@ -849,7 +909,7 @@ export default function InteriorScreen({
   }, [familyId]);
 
 
-  const handleSelectTheme = (themeId) => {
+  const handleSelectTheme = (themeId: string) => {
     setFamilyRoomTheme(themeId);
     setThemeModalVisible(false);
 
@@ -861,14 +921,14 @@ export default function InteriorScreen({
     // 2. Realtime sync across all family devices via Supabase
     if (familyId) {
       const petId = familyPetmong?.id || '00000000-0000-0000-0000-000000000000';
-      supabase.from('petmong_activities').insert({
+      (supabase.from('petmong_activities').insert({
         family_id: familyId,
         actor_id: petId,
         target_id: petId,
         action_type: `ROOM_THEME_UPDATE:${familyId}:${themeId}`,
-      }).then(() => {
+      }) as any).then(() => {
         console.log('Successfully synced family room theme to Supabase');
-      }).catch(err => {
+      }).catch((err: any) => {
         console.log('Error syncing room theme to DB:', err);
       });
     }
@@ -940,7 +1000,7 @@ export default function InteriorScreen({
           console.warn('[InteriorScreen] Transparency processing failed:', transErr);
         }
         try {
-          const SPECIES_EMOJI_MAP = {
+          const SPECIES_EMOJI_MAP: Record<string, string> = {
             canine: '🐶',
             feline: '🐱',
             rabbit: '🐰',
@@ -952,7 +1012,7 @@ export default function InteriorScreen({
             dragon: '🐲',
             aquatic: '🦭',
           };
-          const matchedEmoji = SPECIES_EMOJI_MAP[detectedSpecies] || newEmoji || '🐶';
+          const matchedEmoji = (detectedSpecies && SPECIES_EMOJI_MAP[detectedSpecies]) || newEmoji || '🐶';
 
           if (isModifying && familyPetmong?.id) {
             // Re-incarnation / Appearance Modification: Deduct 500P, UPDATE existing character, preserve level & exp
@@ -979,23 +1039,27 @@ export default function InteriorScreen({
 
             if (updateError) throw updateError;
 
-            try {
-              await supabase.from('petmong_activities').insert({
-                character_id: familyPetmong.id,
-                user_id: currentUserProfile.id,
-                activity_type: 'REINCARNATION',
-                notes: `${currentUserProfile.name || '가족'}님이 500P로 우리 반려몽의 외형을 새로 꾸며주었습니다! 🪄`,
-                exp_earned: 0,
-              });
-            } catch (actErr) {
-              console.warn('Activity log error:', actErr);
+            if (currentUserProfile?.id) {
+              try {
+                await supabase.from('petmong_activities').insert({
+                  character_id: familyPetmong.id,
+                  user_id: currentUserProfile.id,
+                  activity_type: 'REINCARNATION',
+                  notes: `${currentUserProfile.name || '가족'}님이 500P로 우리 반려몽의 외형을 새로 꾸며주었습니다! 🪄`,
+                  exp_earned: 0,
+                });
+              } catch (actErr) {
+                console.warn('Activity log error:', actErr);
+              }
             }
 
             setIsGenerating(false);
             setMyCharacter(updatedChar);
             setActiveStageImageUrl(updatedChar.image_url);
             setCreateModalVisible(false);
-            setPetmongCharacters(prev => prev.map(c => c.id === updatedChar.id ? updatedChar : c));
+            if (setPetmongCharacters) {
+              setPetmongCharacters((prev: any[]) => prev.map(c => c.id === updatedChar.id ? updatedChar : c));
+            }
             Alert.alert('외형 환생 완료! ✨', `500 P를 사용하여 ${newName.trim()}(이)가 새로운 외형으로 환생했습니다! 1단계 아기몽부터 새로운 성장이 시작됩니다 🌱`);
 
             if (updatedChar.id && updatedChar.image_url) {
@@ -1008,6 +1072,7 @@ export default function InteriorScreen({
             return;
           } else {
             // Initial Creation: Free
+            if (!currentUserProfile?.id) return;
             const newCharData = {
               user_id: currentUserProfile.id,
               family_id: familyId,
@@ -1030,7 +1095,9 @@ export default function InteriorScreen({
             setIsGenerating(false);
             setMyCharacter(insertedChar);
             setCreateModalVisible(false);
-            setPetmongCharacters(prev => [...prev, insertedChar]);
+            if (setPetmongCharacters) {
+              setPetmongCharacters((prev: any[]) => [...prev, insertedChar]);
+            }
             Alert.alert('탄생 완료! 🎉', '나를 똑닮은 귀여운 우리 가족 수호 반려몽이 부화했어요!');
 
             if (insertedChar.id && insertedChar.image_url) {
@@ -1096,12 +1163,15 @@ export default function InteriorScreen({
                   setMyCharacter(updatedChar);
                   setActiveStageImageUrl(null);
                   setCreateModalVisible(false);
-                  setPetmongCharacters(prev => prev.map(c => c.id === updatedChar.id ? updatedChar : c));
+                  if (setPetmongCharacters) {
+                    setPetmongCharacters((prev: any[]) => prev.map(c => c.id === updatedChar.id ? updatedChar : c));
+                  }
                   Alert.alert('외형 환생 완료! ✨', '기본 꼬물이 몽이 외형으로 환생했습니다! 1단계 아기몽부터 새롭게 성장합니다 🌱');
                   return;
                 }
 
                 // Initial creation fallback
+                if (!currentUserProfile?.id) return;
                 const newCharData = {
                   user_id: currentUserProfile.id,
                   family_id: familyId,
@@ -1121,7 +1191,9 @@ export default function InteriorScreen({
                 setIsGenerating(false);
                 setMyCharacter(insertedChar);
                 setCreateModalVisible(false);
-                setPetmongCharacters(prev => [...prev, insertedChar]);
+                if (setPetmongCharacters) {
+                  setPetmongCharacters((prev: any[]) => [...prev, insertedChar]);
+                }
                 Alert.alert('탄생 완료! 🎉', '귀여운 아기 꼬물이 몽이가 부화했어요!');
               } catch (e) {
                 setIsGenerating(false);
@@ -1195,28 +1267,33 @@ export default function InteriorScreen({
 
           if (updateError) throw updateError;
 
-          try {
-            await supabase.from('petmong_activities').insert({
-              character_id: familyPetmong.id,
-              user_id: currentUserProfile.id,
-              activity_type: 'REINCARNATION',
-              notes: `${currentUserProfile.name || '가족'}님이 500P로 우리 반려몽의 모습을 ${newEmoji}로 변경했습니다!`,
-              exp_earned: 0,
-            });
-          } catch (actErr) {
-            console.warn('Activity log error:', actErr);
+          if (currentUserProfile?.id) {
+            try {
+              await supabase.from('petmong_activities').insert({
+                character_id: familyPetmong.id,
+                user_id: currentUserProfile.id,
+                activity_type: 'REINCARNATION',
+                notes: `${currentUserProfile.name || '가족'}님이 500P로 우리 반려몽의 모습을 ${newEmoji}로 변경했습니다!`,
+                exp_earned: 0,
+              });
+            } catch (actErr) {
+              console.warn('Activity log error:', actErr);
+            }
           }
 
           setIsGenerating(false);
           setMyCharacter(updatedChar);
           setActiveStageImageUrl(null);
           setCreateModalVisible(false);
-          setPetmongCharacters(prev => prev.map(c => c.id === updatedChar.id ? updatedChar : c));
+          if (setPetmongCharacters) {
+            setPetmongCharacters((prev: any[]) => prev.map(c => c.id === updatedChar.id ? updatedChar : c));
+          }
           Alert.alert('외형 환생 완료! ✨', `500 P를 사용하여 ${newName.trim()}(이)의 외형이 새롭게 환생했습니다! 1단계 아기몽부터 새롭게 성장합니다 🌱`);
           return;
         }
 
       // Initial Free Creation
+      if (!currentUserProfile?.id) return;
       const newCharData = {
         user_id: currentUserProfile.id,
         family_id: familyId,
@@ -1239,7 +1316,9 @@ export default function InteriorScreen({
       setIsGenerating(false);
       setMyCharacter(insertedChar);
       setCreateModalVisible(false);
-      setPetmongCharacters(prev => [...prev, insertedChar]);
+      if (setPetmongCharacters) {
+        setPetmongCharacters((prev: any[]) => [...prev, insertedChar]);
+      }
       Alert.alert('탄생 완료! 🎉', `${newName.trim()}(이)가 우리 집에 입주했습니다!`);
     } catch (err) {
       setIsGenerating(false);
@@ -1273,7 +1352,7 @@ export default function InteriorScreen({
     <View style={styles.fullscreenContainer}>
       {/* Fullscreen High-Resolution Room Background Image (Hardware Accelerated by expo-image) */}
       <ExpoImage
-        source={ROOM_BACKGROUNDS[activeRoomTheme] || ROOM_BACKGROUNDS.cottage}
+        source={(ROOM_BACKGROUNDS as Record<string, any>)[activeRoomTheme] || (ROOM_BACKGROUNDS as any).cottage}
         style={styles.fullscreenBg}
         contentFit="cover"
         transition={0}
@@ -1658,11 +1737,11 @@ export default function InteriorScreen({
             <Text style={styles.evolutionHeaderEmoji}>🎊✨🎉</Text>
             <Text style={styles.evolutionTitle}>반려몽 단계 진화!</Text>
             
-            {evolutionData && (
+            {evolutionData && evolutionData.character && (
               <>
-                <View style={[styles.evolutionStagePill, { backgroundColor: evolutionData.stage.badgeColor }]}>
+                <View style={[styles.evolutionStagePill, { backgroundColor: evolutionData.stage?.badgeColor || '#FF6B47' }]}>
                   <Text style={styles.evolutionStagePillText}>
-                    Stage {evolutionData.stage.stage} • {evolutionData.stage.stageTitle}
+                    Stage {evolutionData.stage?.stage} • {evolutionData.stage?.stageTitle}
                   </Text>
                 </View>
 
@@ -1681,7 +1760,7 @@ export default function InteriorScreen({
                       <Text style={styles.evolutionPreviewLabel}>Lv.{evolutionData.previousLevel} 이전</Text>
                       {evolutionData.previousImageUrl || evolutionData.character.image_url ? (
                         <Image
-                          source={{ uri: evolutionData.previousImageUrl || evolutionData.character.image_url }}
+                          source={{ uri: (evolutionData.previousImageUrl || evolutionData.character.image_url) as string }}
                           style={{ width: 55, height: 55, borderRadius: 28 }}
                           resizeMode="contain"
                         />
@@ -1700,7 +1779,7 @@ export default function InteriorScreen({
                       </Text>
                       {evolutionData.character.image_url ? (
                         <Image
-                          source={{ uri: evolutionData.newImageUrl || evolutionData.character.image_url }}
+                          source={{ uri: (evolutionData.newImageUrl || evolutionData.character.image_url) as string }}
                           style={{ width: 70, height: 70, borderRadius: 35 }}
                           resizeMode="contain"
                         />
@@ -1714,8 +1793,8 @@ export default function InteriorScreen({
                 )}
 
                 <Text style={styles.evolutionDesc}>
-                  {evolutionData.character.name}이(가) 가족의 깊은 애정과 사랑으로 {getStageNameWithPet(evolutionData.stage.stage, evolutionData.character.name)}(으)로 멋지게 성장했습니다!
-                  {'\n'}{evolutionData.stage.desc}
+                  {evolutionData.character.name}이(가) 가족의 깊은 애정과 사랑으로 {getStageNameWithPet(evolutionData.stage?.stage, evolutionData.character.name)}(으)로 멋지게 성장했습니다!
+                  {'\n'}{evolutionData.stage?.desc}
                 </Text>
 
                 <View style={styles.evolutionBonusBadge}>

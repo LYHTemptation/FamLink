@@ -15,6 +15,8 @@ export interface FamilyMember {
   statusMessage?: string;
   status_message?: string;
   push_token?: string | null;
+  profileId?: string;
+  answer?: string;
 }
 
 export interface UserProfile {
@@ -29,6 +31,11 @@ export interface UserProfile {
   color?: string;
   mood?: string;
   status_message?: string;
+  status_text?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  familyCode?: string;
   push_token?: string | null;
 }
 
@@ -49,7 +56,11 @@ export interface ChatMessage {
   image_url?: string | null;
   timestamp?: string;
   created_at?: string;
+  rawDate?: string;
+  readBy?: string[];
   is_deleted?: boolean;
+  isSending?: boolean;
+  senderName?: string | null;
 }
 
 export interface SmallTalkState {
@@ -75,6 +86,11 @@ export interface SmallTalkArchiveAnswer {
   avatar: string;
   text: string;
   created_at?: string;
+  user_id?: string;
+  userId?: string;
+  user_name?: string;
+  response_text?: string;
+  responseText?: string;
 }
 
 export interface SmallTalkArchiveItem {
@@ -98,9 +114,11 @@ export interface PetmongCharacter {
   id?: string;
   family_id?: string;
   owner_id?: string;
+  user_id?: string;
   name: string;
   level: number;
   exp: number;
+  max_exp?: number;
   emoji?: string;
   image_url?: string | null;
   stage_images?: Record<string, string>;
@@ -174,3 +192,90 @@ export interface PhotobookOrderRecord {
   book_snapshot: Record<string, any>;
   status: 'pending' | 'paid' | 'printing' | 'shipped' | string;
 }
+
+export interface ShoppingItem {
+  id: string;
+  family_id?: string;
+  title: string;
+  category?: 'shopping' | 'chore' | string;
+  assignee?: string | null;
+  assigned_to?: string | null;
+  avatar?: string;
+  is_completed?: boolean;
+  completed?: boolean;
+  completed_by?: string | null;
+  points?: number;
+  points_earned?: boolean;
+  completed_date?: string | null;
+  completed_at?: string | null;
+  completed_time?: string | null;
+  recurring_type?: 'none' | 'daily' | 'weekly' | string;
+  repeat_type?: 'none' | 'daily' | 'weekly' | string;
+  created_at?: string;
+  created_time?: string | null;
+}
+
+export interface CalendarEvent {
+  id: string;
+  family_id?: string;
+  title: string;
+  date: string;
+  endDate?: string;
+  end_date?: string;
+  time?: string;
+  category?: string;
+  color?: string;
+  emoji?: string;
+  created_by?: string;
+  creator?: string;
+  creatorObj?: any;
+  profile_id?: string;
+  created_at?: string;
+  description?: string;
+  is_all_day?: boolean;
+  diffDays?: number;
+  isOngoing?: boolean;
+  isHolidayChip?: boolean;
+}
+
+export interface PetmongVitals {
+  warmth: number;
+  hunger?: number;
+  cleanliness?: number;
+  happiness?: number;
+  energy?: number;
+  lastWarmthHarvest?: string | null;
+}
+
+export interface PetmongWhisper {
+  id: string;
+  family_id: string;
+  sender_id: string;
+  receiver_id?: string | null;
+  content: string;
+  is_read?: boolean;
+  created_at?: string;
+  sender?: {
+    id: string;
+    name: string;
+    avatar?: string;
+    role?: string;
+  };
+}
+
+export interface PetmongRoomState {
+  theme_id?: string;
+  furniture?: Record<string, any>;
+  wallpaper?: string;
+  flooring?: string;
+}
+
+export interface PointHistoryItem {
+  id?: string | number;
+  user?: string;
+  points?: number;
+  reason?: string;
+  date?: string;
+  created_at?: string;
+}
+

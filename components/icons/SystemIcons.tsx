@@ -1,11 +1,18 @@
 import React from 'react';
-import Svg, { Path, Circle, Rect } from 'react-native-svg';
+import Svg, { Path, Circle, Rect, SvgProps } from 'react-native-svg';
+
+export interface SystemIconProps extends SvgProps {
+  size?: number;
+  color?: string;
+  strokeWidth?: number;
+  filled?: boolean;
+}
 
 /**
  * 1. 전송 아이콘 (IconSend)
  * 부드러운 라운드 팁의 감성적인 종이비행기
  */
-export function IconSend({ size = 20, color = '#FFFFFF', strokeWidth = 2, ...props }) {
+export function IconSend({ size = 20, color = '#FFFFFF', strokeWidth = 2, ...props }: SystemIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Path
@@ -29,7 +36,7 @@ export function IconSend({ size = 20, color = '#FFFFFF', strokeWidth = 2, ...pro
 /**
  * 2. 뒤로가기 꺾쇠 (IconChevronLeft)
  */
-export function IconChevronLeft({ size = 20, color = '#1C1C1E', strokeWidth = 2.2, ...props }) {
+export function IconChevronLeft({ size = 20, color = '#1C1C1E', strokeWidth = 2.2, ...props }: SystemIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Path
@@ -46,7 +53,7 @@ export function IconChevronLeft({ size = 20, color = '#1C1C1E', strokeWidth = 2.
 /**
  * 3. 앞으로/상세 꺾쇠 (IconChevronRight)
  */
-export function IconChevronRight({ size = 20, color = '#AEAEB2', strokeWidth = 2.2, ...props }) {
+export function IconChevronRight({ size = 20, color = '#AEAEB2', strokeWidth = 2.2, ...props }: SystemIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Path
@@ -63,7 +70,7 @@ export function IconChevronRight({ size = 20, color = '#AEAEB2', strokeWidth = 2
 /**
  * 4. 닫기 아이콘 (IconClose / IconX)
  */
-export function IconClose({ size = 20, color = '#8E8E93', strokeWidth = 2, ...props }) {
+export function IconClose({ size = 20, color = '#8E8E93', strokeWidth = 2, ...props }: SystemIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Path
@@ -81,7 +88,7 @@ export const IconX = IconClose;
 /**
  * 5. 추가 아이콘 (IconPlus)
  */
-export function IconPlus({ size = 20, color = '#FFFFFF', strokeWidth = 2.2, ...props }) {
+export function IconPlus({ size = 20, color = '#FFFFFF', strokeWidth = 2.2, ...props }: SystemIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Path
@@ -98,7 +105,7 @@ export function IconPlus({ size = 20, color = '#FFFFFF', strokeWidth = 2.2, ...p
 /**
  * 6. 수정/편집 아이콘 (IconEdit)
  */
-export function IconEdit({ size = 20, color = '#4A90E2', strokeWidth = 2, ...props }) {
+export function IconEdit({ size = 20, color = '#4A90E2', strokeWidth = 2, ...props }: SystemIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Path
@@ -121,7 +128,7 @@ export function IconEdit({ size = 20, color = '#4A90E2', strokeWidth = 2, ...pro
 /**
  * 7. 삭제/휴지통 아이콘 (IconTrash)
  */
-export function IconTrash({ size = 20, color = '#FF3B30', strokeWidth = 2, ...props }) {
+export function IconTrash({ size = 20, color = '#FF3B30', strokeWidth = 2, ...props }: SystemIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Path
@@ -157,7 +164,7 @@ export function IconTrash({ size = 20, color = '#FF3B30', strokeWidth = 2, ...pr
 /**
  * 8. 검색/돋보기 아이콘 (IconSearch)
  */
-export function IconSearch({ size = 20, color = '#8E8E93', strokeWidth = 2, ...props }) {
+export function IconSearch({ size = 20, color = '#8E8E93', strokeWidth = 2, ...props }: SystemIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Circle
@@ -181,7 +188,7 @@ export function IconSearch({ size = 20, color = '#8E8E93', strokeWidth = 2, ...p
 /**
  * 9. 사진/갤러리 아이콘 (IconImage)
  */
-export function IconImage({ size = 20, color = '#8E8E93', strokeWidth = 2, ...props }) {
+export function IconImage({ size = 20, color = '#8E8E93', strokeWidth = 2, ...props }: SystemIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Rect
@@ -207,7 +214,7 @@ export function IconImage({ size = 20, color = '#8E8E93', strokeWidth = 2, ...pr
   );
 }
 
-export function IconSquare({ size = 20, color = '#8E8E93', strokeWidth = 2, ...props }) {
+export function IconSquare({ size = 20, color = '#8E8E93', strokeWidth = 2, ...props }: SystemIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Rect
@@ -228,7 +235,7 @@ export function IconSquare({ size = 20, color = '#8E8E93', strokeWidth = 2, ...p
 /**
  * 10. 체크 및 완료 서클 아이콘 (IconCheck, IconCheckCircle)
  */
-export function IconCheck({ size = 20, color = '#2ECC71', strokeWidth = 2.4, ...props }) {
+export function IconCheck({ size = 20, color = '#2ECC71', strokeWidth = 2.4, ...props }: SystemIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Path
@@ -242,7 +249,7 @@ export function IconCheck({ size = 20, color = '#2ECC71', strokeWidth = 2.4, ...
   );
 }
 
-export function IconCheckCircle({ size = 20, color = '#2ECC71', strokeWidth = 2, ...props }) {
+export function IconCheckCircle({ size = 20, color = '#2ECC71', strokeWidth = 2, ...props }: SystemIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Circle
@@ -267,7 +274,7 @@ export function IconCheckCircle({ size = 20, color = '#2ECC71', strokeWidth = 2,
 /**
  * 11. 하트/응원 아이콘 (IconHeart)
  */
-export function IconHeart({ size = 20, color = '#FF6B47', filled = false, strokeWidth = 2, ...props }) {
+export function IconHeart({ size = 20, color = '#FF6B47', filled = false, strokeWidth = 2, ...props }: SystemIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Path
@@ -285,7 +292,7 @@ export function IconHeart({ size = 20, color = '#FF6B47', filled = false, stroke
 /**
  * 12. 복사 아이콘 (IconCopy)
  */
-export function IconCopy({ size = 20, color = '#8E8E93', strokeWidth = 2, ...props }) {
+export function IconCopy({ size = 20, color = '#8E8E93', strokeWidth = 2, ...props }: SystemIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Rect
@@ -313,7 +320,7 @@ export function IconCopy({ size = 20, color = '#8E8E93', strokeWidth = 2, ...pro
 /**
  * 13. 공유 아이콘 (IconShare)
  */
-export function IconShare({ size = 20, color = '#8E8E93', strokeWidth = 2, ...props }) {
+export function IconShare({ size = 20, color = '#8E8E93', strokeWidth = 2, ...props }: SystemIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Circle cx="18" cy="5" r="2.5" stroke={color} strokeWidth={strokeWidth} />
@@ -333,7 +340,7 @@ export function IconShare({ size = 20, color = '#8E8E93', strokeWidth = 2, ...pr
  * 14. 반복 아이콘 (IconRepeat)
  * 매일/정기 반복 할 일을 나타내는 듀얼 순환 화살표 SVG
  */
-export function IconRepeat({ size = 20, color = '#FF6B47', strokeWidth = 2, ...props }) {
+export function IconRepeat({ size = 20, color = '#FF6B47', strokeWidth = 2, ...props }: SystemIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Path

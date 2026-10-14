@@ -16,10 +16,11 @@ const STAGE_SINGLE_PREFIX = '@famlink_petmong_stage_';
 const stageMemoryCache = new Map<string, Record<number, string>>();
 
 // Helper: Convert base64 data URI to Uint8Array for cross-platform upload
-function base64ToUint8Array(base64: string): Uint8Array | Buffer {
+function base64ToUint8Array(base64: string): Uint8Array {
   const clean = base64.replace(/^data:image\/[a-zA-Z0-9.+_-]+;base64,/, '');
-  if (typeof Buffer !== 'undefined') {
-    return Buffer.from(clean, 'base64');
+  if (typeof (globalThis as any).Buffer !== 'undefined') {
+    const buf = (globalThis as any).Buffer.from(clean, 'base64');
+    return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
   }
   const binary = atob(clean);
   const bytes = new Uint8Array(binary.length);
@@ -74,13 +75,13 @@ function getIndexedDB(): Promise<any> {
   return new Promise((resolve) => {
     try {
       const request = window.indexedDB.open(IDB_NAME, 1);
-      request.onupgradeneeded = (e) => {
+      request.onupgradeneeded = (e: any) => {
         const db = e.target.result;
         if (!db.objectStoreNames.contains(IDB_STORE)) {
           db.createObjectStore(IDB_STORE);
         }
       };
-      request.onsuccess = (e) => resolve(e.target.result);
+      request.onsuccess = (e: any) => resolve(e.target.result);
       request.onerror = () => resolve(null);
     } catch (_) {
       resolve(null);
@@ -140,7 +141,7 @@ async function removeIdbItem(key: string): Promise<boolean> {
 export async function getPetmongStageImages(characterId?: string | null, expectedBaseImageUrl: string | null = null): Promise<Record<number, string>> {
   if (!characterId) return {};
 
-  let stages = stageMemoryCache.get(characterId);
+  let stages: Record<number, string> = stageMemoryCache.get(characterId) || {};
   if (!stages || Object.keys(stages).length === 0) {
     // 1. Try Web IndexedDB (Unlimited quota, persists perfectly across page reloads)
     try {
@@ -253,14 +254,14 @@ export async function savePetmongStageImage(characterId: string, stageNum: numbe
 
     return current;
   } catch (err) {
-    console.warn('savePetmongStageImage warning:', err?.message || err);
+    console.warn('savePetmongStageImage warning:', (err as any)?.message || err);
     return {};
   }
 }
 
 // Reset/clear cached stage images for a character (e.g., upon appearance change/reincarnation)
 export async function resetPetmongStageImages(characterId?: string | null): Promise<boolean> {
-  if (!characterId) return;
+  if (!characterId) return false;
   stageMemoryCache.delete(characterId);
   try {
     await removeIdbItem(`${STAGE_IMAGES_PREFIX}${characterId}`);
@@ -281,6 +282,7 @@ export async function resetPetmongStageImages(characterId?: string | null): Prom
       await supabase.storage.from('family-photos').remove(pathsToDelete);
     }
   } catch (_) {}
+  return true;
 }
 
 // Helper: Detect species from emoji or string (10 distinct lineages)
@@ -667,7 +669,7 @@ export function createPetmongSvg(stage: number = 1, bodyColor: string = '#FFAAA6
 
   const base64 = typeof btoa !== 'undefined'
     ? btoa(unescape(encodeURIComponent(svg)))
-    : Buffer.from(svg).toString('base64');
+    : ((globalThis as any).Buffer ? (globalThis as any).Buffer.from(svg).toString('base64') : '');
 
   return `data:image/svg+xml;base64,${base64}`;
 }
@@ -704,9 +706,9 @@ export async function getImageBase64Data(imgSource?: string | null): Promise<{ m
           reader.onerror = () => resolve(null);
           reader.readAsDataURL(blob);
         });
-      } else if (typeof Buffer !== 'undefined') {
+      } else if (typeof (globalThis as any).Buffer !== 'undefined') {
         const buffer = await resp.arrayBuffer();
-        const data = Buffer.from(buffer).toString('base64');
+        const data = (globalThis as any).Buffer.from(buffer).toString('base64');
         return { mimeType, data };
       }
     } catch (e) {
@@ -748,8 +750,8 @@ export async function generateStageAiImage(character: any, targetStage: number):
         let rawSvg = '';
         if (typeof atob !== 'undefined') {
           rawSvg = atob(cleanB64);
-        } else if (typeof Buffer !== 'undefined') {
-          rawSvg = Buffer.from(cleanB64, 'base64').toString('utf8');
+        } else if (typeof (globalThis as any).Buffer !== 'undefined') {
+          rawSvg = (globalThis as any).Buffer.from(cleanB64, 'base64').toString('utf8');
         }
 
         if (rawSvg) {

@@ -89,6 +89,27 @@ export {
   TOTAL_PHOTOBOOK_SPREADS,
 };
 
+import {
+  FamilyMember,
+  ChatMessage,
+  UserProfile,
+  SmallTalkArchiveItem,
+  PetmongCharacter,
+} from '../types/domain';
+
+export interface PhotobookStudioScreenProps {
+  currentUser?: any;
+  familyMembers?: FamilyMember[];
+  messages?: ChatMessage[];
+  smallTalkState?: any;
+  currentUserProfile?: UserProfile | null;
+  points?: number;
+  smallTalkArchiveList?: SmallTalkArchiveItem[];
+  onDeductPoints?: (pts: number, reason: string) => Promise<boolean> | boolean | void;
+  onSendOrderNotice?: (orderInfo: any) => Promise<void> | void;
+  petCharacter?: PetmongCharacter | any | null;
+}
+
 export default function PhotobookStudioScreen({
   currentUser,
   familyMembers = [],
@@ -100,7 +121,7 @@ export default function PhotobookStudioScreen({
   onDeductPoints,
   onSendOrderNotice,
   petCharacter,
-}) {
+}: PhotobookStudioScreenProps) {
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const screenWidth = windowWidth || Dimensions.get('window').width;
   const isSmallScreen = screenWidth < 380;
@@ -139,9 +160,9 @@ export default function PhotobookStudioScreen({
   }, [bookFontSize]);
 
   // 3대 포맷 체계 상태: { [`${sIdx}_${side}`]: 'photo' | 'smalltalk' | 'hybrid' }
-  const [pageFormats, setPageFormats] = useState({});
+  const [pageFormats, setPageFormats] = useState<Record<string, string>>({});
 
-  const getPageFormat = (sIdx, side) => {
+  const getPageFormat = (sIdx: number, side: string) => {
     const key = `${sIdx}_${side}`;
     if (pageFormats[key]) return pageFormats[key];
     const sDef = SPREAD_DEFINITIONS[sIdx] || SPREAD_DEFINITIONS[0];
@@ -164,7 +185,7 @@ export default function PhotobookStudioScreen({
   const [bookTitle, setBookTitle] = useState('우리 가족의 첫 번째 이야기 (Vol. 1)');
   const [bookSubtitle, setBookSubtitle] = useState('사소한 일상이 모여 만든 가장 눈부신 기적');
   const [coverSignature, setCoverSignature] = useState('우리 가족의 따뜻한 이야기');
-  const [coverPhoto, setCoverPhoto] = useState(null); // 커스텀 겉표지 대표 사진
+  const [coverPhoto, setCoverPhoto] = useState<string | null>(null); // 커스텀 겉표지 대표 사진
   const [coverStyle, setCoverStyle] = useState('classic'); // 'classic' (액자형) | 'full' (화보형) | 'minimal' (감성 타이포)
   const [editTitleModalVisible, setEditTitleModalVisible] = useState(false);
   const [tempTitle, setTempTitle] = useState(bookTitle);
@@ -185,9 +206,9 @@ export default function PhotobookStudioScreen({
   const activeSingleSide = currentPageNum > 0 ? (currentPageNum % 2 === 1 ? 'left' : 'right') : 'left';
 
   // 레이아웃 모드 가로 페이징 스크롤 레퍼런스 및 낱장 이동 핸들러
-  const pageScrollRef = useRef(null);
+  const pageScrollRef = useRef<any>(null);
   const isProgrammaticScrollRef = useRef(false);
-  const programmaticScrollTimerRef = useRef(null);
+  const programmaticScrollTimerRef = useRef<any>(null);
 
   useEffect(() => {
     return () => {
@@ -199,7 +220,7 @@ export default function PhotobookStudioScreen({
 
   // 겉표지(0) + P.1 ~ P.16 총 17페이지 명세 리스트
   const PAGES_LIST = useMemo(() => {
-    const list = [{ pageNum: 0, isCover: true, label: '겉표지' }];
+    const list: any[] = [{ pageNum: 0, isCover: true, label: '겉표지' }];
     for (let i = 1; i <= TOTAL_PHOTOBOOK_PAGES; i++) {
       const sIdx = Math.floor((i - 1) / 2);
       const side = i % 2 === 1 ? 'left' : 'right';
@@ -216,7 +237,7 @@ export default function PhotobookStudioScreen({
     return list;
   }, []);
 
-  const handlePageScroll = useCallback((e) => {
+  const handlePageScroll = useCallback((e: any) => {
     // 버튼 탭 이동 애니메이션 중에는 onScroll의 중간 좌표 계산을 무시하여 글자 및 UI 깜빡임 방지
     if (isProgrammaticScrollRef.current) return;
 
@@ -230,7 +251,7 @@ export default function PhotobookStudioScreen({
     }
   }, [windowWidth]);
 
-  const handleMomentumScrollEnd = useCallback((e) => {
+  const handleMomentumScrollEnd = useCallback((e: any) => {
     isProgrammaticScrollRef.current = false;
     if (programmaticScrollTimerRef.current) {
       clearTimeout(programmaticScrollTimerRef.current);
@@ -245,7 +266,7 @@ export default function PhotobookStudioScreen({
     }
   }, [windowWidth]);
 
-  const handleGoToPage = (pNum) => {
+  const handleGoToPage = (pNum: number) => {
     const target = Math.max(0, Math.min(TOTAL_PHOTOBOOK_PAGES, pNum));
     setCurrentPageNum(target);
 
@@ -262,7 +283,7 @@ export default function PhotobookStudioScreen({
     pageScrollRef.current?.scrollTo({ x: target * winW, animated: true });
   };
 
-  const handleGoToSpread = (sIdx) => {
+  const handleGoToSpread = (sIdx: number) => {
     const targetPage = sIdx * 2 + 1;
     handleGoToPage(targetPage);
   };
@@ -277,9 +298,9 @@ export default function PhotobookStudioScreen({
   // 6. 실물 책 1:1 전체화면 감상 뷰어 (Full-screen Book Reader) 상태
   const [fullViewerVisible, setFullViewerVisible] = useState(false);
   const [viewerPageNum, setViewerPageNum] = useState(0); // 0 = 겉표지, 1..16 = 내지
-  const viewerScrollRef = useRef(null);
+  const viewerScrollRef = useRef<any>(null);
 
-  const handleOpenFullViewer = (pNum = currentPageNum) => {
+  const handleOpenFullViewer = (pNum: number = currentPageNum) => {
     const target = Math.max(0, Math.min(TOTAL_PHOTOBOOK_PAGES, pNum));
     setViewerPageNum(target);
     setCurrentPageNum(target);
@@ -290,7 +311,7 @@ export default function PhotobookStudioScreen({
     }, 60);
   };
 
-  const handleGoToViewerPage = (pNum) => {
+  const handleGoToViewerPage = (pNum: number) => {
     const target = Math.max(0, Math.min(TOTAL_PHOTOBOOK_PAGES, pNum));
     setViewerPageNum(target);
     setCurrentPageNum(target);
@@ -319,7 +340,7 @@ export default function PhotobookStudioScreen({
   // 4. 단톡방 사진 목록 추출 (image_url 및 image, Base64 data 모두 완벽 지원)
   const chatPhotos = useMemo(() => {
     if (!messages || !Array.isArray(messages)) return [];
-    return messages
+    return (messages as any[])
       .filter(m => m && (m.image || m.image_url || (m.text && m.text.startsWith('data:image'))))
       .map((m, idx) => ({
         id: m.id || `photo-${idx}`,
@@ -330,25 +351,25 @@ export default function PhotobookStudioScreen({
   }, [messages]);
 
   // 4-1. 본인 기기 사진첩(갤러리)에서 직접 불러온 사진 목록
-  const [customGalleryPhotos, setCustomGalleryPhotos] = useState([]);
+  const [customGalleryPhotos, setCustomGalleryPhotos] = useState<string[]>([]);
 
   // 스프레드별 커스텀 사진 매핑 { [spreadIndex]: [photoUri1, photoUri2, ...] }
-  const [spreadPhotos, setSpreadPhotos] = useState({});
+  const [spreadPhotos, setSpreadPhotos] = useState<Record<string | number, string[]>>({});
   // 스프레드별 사진 레이아웃 셔플 모드: 'single' | 'wide' | 'split' | 'grid'
-  const [spreadLayouts, setSpreadLayouts] = useState({});
+  const [spreadLayouts, setSpreadLayouts] = useState<Record<string | number, string>>({});
   // 스프레드별 AI 감성 한 줄 글귀
-  const [spreadCaptions, setSpreadCaptions] = useState({});
+  const [spreadCaptions, setSpreadCaptions] = useState<Record<string | number, string>>({});
 
   // 5. 모달 제어 상태
   const [photoPickerVisible, setPhotoPickerVisible] = useState(false);
-  const [activePhotoSlotIndex, setActivePhotoSlotIndex] = useState(0);
+  const [activePhotoSlotIndex, setActivePhotoSlotIndex] = useState<number | 'cover'>(0);
   const [orderModalVisible, setOrderModalVisible] = useState(false);
   const [topicPickerModalVisible, setTopicPickerModalVisible] = useState(false);
   const [selectedTopicSlot, setSelectedTopicSlot] = useState(0);
   const [topicModalTab, setTopicModalTab] = useState('recommended'); // 'recommended' | 'archive'
   const [topicSearchQuery, setTopicSearchQuery] = useState('');
   const [appendixModalVisible, setAppendixModalVisible] = useState(false);
-  const [customSpreadTopics, setCustomSpreadTopics] = useState({});
+  const [customSpreadTopics, setCustomSpreadTopics] = useState<Record<string | number, any>>({});
 
   // AI 프롤로그(P.1) & 에필로그(P.32) 문학 에세이 상태
   const [prologueEssay, setPrologueEssay] = useState(
@@ -358,7 +379,7 @@ export default function PhotobookStudioScreen({
     '계절은 바뀌어도 우리가 함께 나눈 사랑의 온도는 변하지 않습니다. 함께여서 눈부셨던 180일간의 발자취는 이제 우리 마음속 가장 깊은 보물이 되었습니다.\n\n다음 6개월 뒤에도 더 풍성하고 다정한 추억으로 이 자리를 채워나가길 소망하며, 서로의 든든한 버팀목이 되어준 온 가족에게 이 책을 바칩니다.'
   );
   const [aiEssayModalVisible, setAiEssayModalVisible] = useState(false);
-  const [targetEssayType, setTargetEssayType] = useState('prologue'); // 'prologue' | 'epilogue'
+  const [targetEssayType, setTargetEssayType] = useState<'prologue' | 'epilogue'>('prologue');
   const [customEssayInput, setCustomEssayInput] = useState('');
   const [isGeneratingAiEssay, setIsGeneratingAiEssay] = useState(false);
 
@@ -386,13 +407,13 @@ export default function PhotobookStudioScreen({
   // =========================================================
   const effectiveFamilyId = currentUserProfile?.family_id || currentUserProfile?.familyCode || 'default-family';
   const currentUserName = currentUserProfile?.name || currentUser || '가족';
-  const photobookChannelRef = useRef(null);
+  const photobookChannelRef = useRef<any>(null);
   const isApplyingRemoteRef = useRef(false);
-  const [lastSyncNotice, setLastSyncNotice] = useState(null); // 다른 가족 변경 시 토스트 알림
+  const [lastSyncNotice, setLastSyncNotice] = useState<string | null>(null); // 다른 가족 변경 시 토스트 알림
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
 
   // 원격(다른 가족)의 변경 사항을 내 화면 상태에 실시간 주입
-  const applyRemotePhotobookUpdate = useCallback((payload, targetVolumeId) => {
+  const applyRemotePhotobookUpdate = useCallback((payload: any, targetVolumeId?: string) => {
     if (!payload) return;
     const currentVol = targetVolumeId || selectedVolume;
     // 내가 작업 중인 권차와 다른 권차의 실시간 수정 사항은 현재 화면에 주입하지 않음 (권차 간 화면 오염 방지)
@@ -424,7 +445,7 @@ export default function PhotobookStudioScreen({
       if (payload.epilogueEssay !== undefined) setEpilogueEssay(payload.epilogueEssay);
       if (payload.customGalleryPhotos && Array.isArray(payload.customGalleryPhotos)) {
         setCustomGalleryPhotos(prev => {
-          const validOnly = payload.customGalleryPhotos.filter(u => u && (Platform.OS !== 'web' || !u.startsWith('file://')));
+          const validOnly = (payload.customGalleryPhotos as string[]).filter((u: string) => u && (Platform.OS !== 'web' || !u.startsWith('file://')));
           const combined = [...validOnly, ...prev];
           return Array.from(new Set(combined));
         });
@@ -442,7 +463,7 @@ export default function PhotobookStudioScreen({
   }, [currentUserName, selectedVolume]);
 
   // 내 화면 변경 사항을 가족 채널로 실시간 브로드캐스트 + AsyncStorage 백업
-  const broadcastPhotobookChange = useCallback((updatedPartial) => {
+  const broadcastPhotobookChange = useCallback((updatedPartial?: any) => {
     if (isApplyingRemoteRef.current) return;
     const fullPayload = {
       selectedVolume,
@@ -513,7 +534,7 @@ export default function PhotobookStudioScreen({
   ]);
 
   // 특정 권차의 기본 상태 리셋
-  const resetVolumeToDefaults = useCallback((volId, volObj) => {
+  const resetVolumeToDefaults = useCallback((volId: string, volObj?: any) => {
     const vObj = volObj || volumeList.find(v => v.id === volId) || VOLUME_OPTIONS.find(v => v.id === volId);
     const volNumMatch = (volId || '').match(/\d+/);
     const volNum = volNumMatch ? volNumMatch[0] : '1';
@@ -535,7 +556,7 @@ export default function PhotobookStudioScreen({
   }, [volumeList]);
 
   // 권차(이야기책) 전환 핸들러
-  const handleSwitchVolume = useCallback((volId, volObj) => {
+  const handleSwitchVolume = useCallback((volId: string, volObj?: any) => {
     if (volId === selectedVolume) {
       setVolumePickerModalVisible(false);
       return;
@@ -598,8 +619,8 @@ export default function PhotobookStudioScreen({
         if (rows.length > 0) {
           setVolumeList(prev => {
             const existingIds = new Set(prev.map(v => v.id));
-            const additions = [];
-            rows.forEach(row => {
+            const additions: any[] = [];
+            rows.forEach((row: any) => {
               if (row.volume_id && !existingIds.has(row.volume_id)) {
                 const numMatch = row.volume_id.match(/\d+/);
                 const num = numMatch ? numMatch[0] : (prev.length + additions.length + 1);
@@ -659,7 +680,7 @@ export default function PhotobookStudioScreen({
           filter: `family_id=eq.${effectiveFamilyId}`,
         },
         (payload) => {
-          const row = payload.new;
+          const row = payload.new as any;
           if (row && row.volume_id === selectedVolume) {
             applyRemotePhotobookUpdate(mapPhotobookRowToState(row), selectedVolume);
           }
@@ -684,7 +705,7 @@ export default function PhotobookStudioScreen({
   }, [effectiveFamilyId, selectedVolume, applyRemotePhotobookUpdate]);
 
   // 단일 1:1 페이지 포맷 지정 핸들러 (실시간 브로드캐스트 연동)
-  const handleSetPageFormat = (newFormat, targetPage = currentPageNum) => {
+  const handleSetPageFormat = (newFormat: string, targetPage: number = currentPageNum) => {
     if (targetPage <= 0) return;
     const sIdx = Math.floor((targetPage - 1) / 2);
     const side = targetPage % 2 === 1 ? 'left' : 'right';
@@ -695,7 +716,7 @@ export default function PhotobookStudioScreen({
   };
 
   // 임의의 스프레드 번호에 할당된 사진 목록 반환 헬퍼
-  const getSpreadPhotos = (sIdx) => {
+  const getSpreadPhotos = (sIdx: number) => {
     const custom = spreadPhotos[sIdx];
     if (custom && custom.length > 0) return custom;
     if (chatPhotos.length > 0) {
@@ -747,7 +768,7 @@ export default function PhotobookStudioScreen({
   const MONTHLY_INTERVIEW_TOPICS = MONTHLY_INTERVIEW_TOPICS_PRESET;
 
   // 임의의 스프레드 번호에 할당된 3개 인터뷰 질문 및 실제 가족 답변 매칭 헬퍼
-  const getSpreadInterviewTopics = (sIdx) => {
+  const getSpreadInterviewTopics = (sIdx: number) => {
     const custom = customSpreadTopics[sIdx];
     if (custom && custom.length > 0) return custom;
     const sDef = SPREAD_DEFINITIONS[sIdx] || SPREAD_DEFINITIONS[0];
@@ -757,10 +778,10 @@ export default function PhotobookStudioScreen({
     // smallTalkArchiveList에서 일치하는 실제 가족 답변 바인딩
     const enrichedMonthSet = monthSet.map(item => {
       const cleanTopic = stripEmojis(item.topic);
-      const matchedArchive = (smallTalkArchiveList || []).find(a => stripEmojis(a.topic) === cleanTopic);
+      const matchedArchive = (smallTalkArchiveList || []).find((a: any) => stripEmojis(a.topic) === cleanTopic);
       if (matchedArchive && matchedArchive.answers && matchedArchive.answers.length > 0) {
-        const ansMap = {};
-        matchedArchive.answers.forEach(a => {
+        const ansMap: Record<string, string> = {};
+        matchedArchive.answers.forEach((a: any) => {
           if (a.profileId) ansMap[a.profileId] = a.text;
           if (a.name) ansMap[a.name] = a.text;
           if (a.id) ansMap[a.id] = a.text;
@@ -789,7 +810,7 @@ export default function PhotobookStudioScreen({
   // 180일 온기 발자취 실제 통계 데이터 계산
   const answeredSmallTalkCount = useMemo(() => {
     if (!smallTalkArchiveList || smallTalkArchiveList.length === 0) return 0;
-    return smallTalkArchiveList.filter(item => item.isAnswered).length;
+    return (smallTalkArchiveList as any[]).filter((item: any) => item.isAnswered).length;
   }, [smallTalkArchiveList]);
 
   const realMessageCount = useMemo(() => {
@@ -810,11 +831,11 @@ export default function PhotobookStudioScreen({
   // 권말 부록(P.15)에 수록될 베스트 문답 하이라이트 (답변이 있는 질문 우선 2~3개)
   const bestSmallTalkList = useMemo(() => {
     if (!smallTalkArchiveList || smallTalkArchiveList.length === 0) return [];
-    const answered = smallTalkArchiveList.filter(item => item.isAnswered && Array.isArray(item.answers) && item.answers.length > 0);
+    const answered = (smallTalkArchiveList as any[]).filter((item: any) => item.isAnswered && Array.isArray(item.answers) && item.answers.length > 0);
     if (answered.length > 0) {
       return answered.slice(0, 2);
     }
-    return smallTalkArchiveList.slice(0, 2);
+    return (smallTalkArchiveList as any[]).slice(0, 2);
   }, [smallTalkArchiveList]);
 
   // 7. 레이아웃 셔플 핸들러 (15×15 스퀘어 4대 조판 템플릿)
@@ -828,10 +849,10 @@ export default function PhotobookStudioScreen({
   const CAPTION_PRESETS = CAPTION_PRESETS_POOL;
 
   // AI 프롤로그(P.1) & 에필로그(P.16) 문학 에세이 실시간 집필 (geminiService 위임)
-  const handleGenerateAiEssay = async (type = targetEssayType) => {
+  const handleGenerateAiEssay = async (type: 'prologue' | 'epilogue' = targetEssayType) => {
     setIsGeneratingAiEssay(true);
 
-    const topicSnippets = [];
+    const topicSnippets: string[] = [];
     if (Array.isArray(smallTalkArchiveList) && smallTalkArchiveList.length > 0) {
       smallTalkArchiveList.slice(0, 6).forEach(item => {
         let ansStr = '';
@@ -859,7 +880,7 @@ export default function PhotobookStudioScreen({
     setIsGeneratingAiEssay(false);
   };
 
-  const handleOpenAiEssayModal = (type) => {
+  const handleOpenAiEssayModal = (type: 'prologue' | 'epilogue') => {
     setTargetEssayType(type);
     if (type === 'prologue') {
       setCustomEssayInput(prologueEssay);
@@ -869,7 +890,7 @@ export default function PhotobookStudioScreen({
     setAiEssayModalVisible(true);
   };
 
-  const handleApplyAiEssay = (textToApply) => {
+  const handleApplyAiEssay = (textToApply?: string) => {
     const finalTxt = textToApply !== undefined ? textToApply : customEssayInput;
     if (targetEssayType === 'prologue') {
       setPrologueEssay(finalTxt);
@@ -886,12 +907,12 @@ export default function PhotobookStudioScreen({
   };
 
   // 9. 사진 선택 슬롯 열기
-  const handleOpenPhotoPicker = (slotIdx) => {
+  const handleOpenPhotoPicker = (slotIdx: number | 'cover') => {
     setActivePhotoSlotIndex(slotIdx);
     setPhotoPickerVisible(true);
   };
 
-  const handleSelectPhoto = (photoUri) => {
+  const handleSelectPhoto = (photoUri: string) => {
     if (activePhotoSlotIndex === 'cover') {
       setCoverPhoto(photoUri);
       setPhotoPickerVisible(false);
@@ -1016,7 +1037,7 @@ export default function PhotobookStudioScreen({
   };
 
   // 9-2. 사진첩에서 가져온 사진 목록에서 삭제하기
-  const handleDeleteCustomPhoto = (targetUri) => {
+  const handleDeleteCustomPhoto = (targetUri: string) => {
     Alert.alert(
       '사진 삭제',
       '사진첩 등록 목록에서 이 사진을 삭제하시겠습니까?\n(이미 포토북 페이지에 수록된 사진은 유지됩니다)',
@@ -1094,7 +1115,7 @@ export default function PhotobookStudioScreen({
       setOrderModalVisible(false);
 
       if (onDeductPoints && appliedPoints > 0) {
-        onDeductPoints(appliedPoints);
+        onDeductPoints(appliedPoints, '포토북 인쇄 주문 포인트 사용');
       }
 
       if (onSendOrderNotice) {
@@ -1310,7 +1331,7 @@ export default function PhotobookStudioScreen({
   // =========================================================
   // 📖 통합 페이지 렌더러 (3대 포맷 & 폰트/크기 완벽 반영)
   // =========================================================
-  const renderPage = (sIdx, side, isFull = false, isViewer = false) => {
+  const renderPage = (sIdx: number, side: 'left' | 'right', isFull = false, isViewer = false) => {
     // 0. 겉표지 단면 렌더링
     if (sIdx === -1) {
       return renderCoverPage(isFull, isViewer);
@@ -1577,7 +1598,7 @@ export default function PhotobookStudioScreen({
             contentContainerStyle={{ flexGrow: 1, justifyContent: 'space-between' }}
             showsVerticalScrollIndicator={false}
           >
-            {displayTopics.map((item, qIdx) => (
+            {displayTopics.map((item: any, qIdx: number) => (
               <TouchableOpacity
                 key={item.id || qIdx}
                 style={[
@@ -1630,7 +1651,7 @@ export default function PhotobookStudioScreen({
                     </Text>
                   ) : (
                     activeFamilyList.slice(0, maxMembersPerQuestion).map(m => {
-                      const ansText = item.answers?.[m.id] || item.answers?.[m.profileId] || item.answers?.[m.name] || m.answer || '';
+                      const ansText = (m.id && item.answers?.[m.id]) || (m.profileId && item.answers?.[m.profileId]) || (m.name && item.answers?.[m.name]) || m.answer || '';
                       return (
                         <View key={m.id || m.profileId || m.name} style={[styles.bookAnswerParagraph, isViewer && { marginVertical: isCompactViewer ? 1 : 2.5 }]}>
                           <Text style={[styles.bookSpeakerLabel, { color: currentTheme.accent, ...fontStyle, fontSize: isCompactViewer ? 9.5 : (isViewer ? 11 : 9.5) }]}>
@@ -1716,7 +1737,7 @@ export default function PhotobookStudioScreen({
               <Text style={{ fontSize: 9, color: '#A8A29E', fontStyle: 'italic', paddingVertical: 2 }}>가족 구성원 답변 대기 중</Text>
             ) : (
               activeFamilyList.slice(0, 2).map(m => {
-                const ans = coreTopic.answers?.[m.id] || coreTopic.answers?.[m.profileId] || coreTopic.answers?.[m.name] || m.answer || '';
+                const ans = (m.id && coreTopic.answers?.[m.id]) || (m.profileId && coreTopic.answers?.[m.profileId]) || (m.name && coreTopic.answers?.[m.name]) || m.answer || '';
                 return (
                   <View key={m.id || m.profileId || m.name} style={styles.hybridAnsRow}>
                     <Text style={[styles.hybridAnsAuthor, { ...fontStyle, fontSize: Math.round((isViewer ? 10.5 : 9) * fontScale), color: currentTheme.accent }]}>
@@ -2441,7 +2462,7 @@ export default function PhotobookStudioScreen({
                     .filter(item => !topicSearchQuery || (item.topic && item.topic.includes(topicSearchQuery)))
                     .map((item, aIdx) => {
                       // 실제 가족 답변들 매핑
-                      const answersMap = {};
+                      const answersMap: Record<string, string> = {};
                       if (Array.isArray(item.answers)) {
                         item.answers.forEach(ans => {
                           const authorId = ans.user_id || ans.userId || ans.id;

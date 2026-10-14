@@ -1,11 +1,18 @@
 import React from 'react';
-import Svg, { Path, Circle, Rect } from 'react-native-svg';
+import Svg, { Path, Circle, Rect, SvgProps } from 'react-native-svg';
+
+export interface TabBarIconProps extends SvgProps {
+  size?: number;
+  color?: string;
+  focused?: boolean;
+  strokeWidth?: number;
+}
 
 /**
  * 1. 메신저 탭 아이콘 (TabChatIcon)
  * 부드러운 둥근 말풍선과 3점 메시지 펄스
  */
-export function TabChatIcon({ size = 20, color = '#8E8E93', focused = false, strokeWidth = 2, ...props }) {
+export function TabChatIcon({ size = 20, color = '#8E8E93', focused = false, strokeWidth = 2, ...props }: TabBarIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Path
@@ -27,7 +34,7 @@ export function TabChatIcon({ size = 20, color = '#8E8E93', focused = false, str
  * 2. 캘린더 탭 아이콘 (TabCalendarIcon)
  * 상단 바인딩 링과 패밀리 하트 체크가 새겨진 캘린더 시트
  */
-export function TabCalendarIcon({ size = 20, color = '#8E8E93', focused = false, strokeWidth = 2, ...props }) {
+export function TabCalendarIcon({ size = 20, color = '#8E8E93', focused = false, strokeWidth = 2, ...props }: TabBarIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Rect
@@ -77,7 +84,7 @@ export function TabCalendarIcon({ size = 20, color = '#8E8E93', focused = false,
  * 3. 스몰톡 탭 아이콘 (TabSmallTalkIcon)
  * 대화와 아이디어가 반짝이는 패밀리 스몰톡 말풍선
  */
-export function TabSmallTalkIcon({ size = 20, color = '#8E8E93', focused = false, strokeWidth = 2, ...props }) {
+export function TabSmallTalkIcon({ size = 20, color = '#8E8E93', focused = false, strokeWidth = 2, ...props }: TabBarIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Path
@@ -106,7 +113,7 @@ export function TabSmallTalkIcon({ size = 20, color = '#8E8E93', focused = false
  * 4. 장보기 탭 아이콘 (TabShoppingIcon)
  * 손잡이와 휠이 달린 둥근 패밀리 장바구니 카트
  */
-export function TabShoppingIcon({ size = 20, color = '#8E8E93', focused = false, strokeWidth = 2, ...props }) {
+export function TabShoppingIcon({ size = 20, color = '#8E8E93', focused = false, strokeWidth = 2, ...props }: TabBarIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Path
@@ -146,7 +153,7 @@ export function TabShoppingIcon({ size = 20, color = '#8E8E93', focused = false,
  * 5. 앨범 탭 아이콘 (TabAlbumIcon)
  * 폴라로이드 사진 프레임과 자연 언덕&햇살
  */
-export function TabAlbumIcon({ size = 20, color = '#8E8E93', focused = false, strokeWidth = 2, ...props }) {
+export function TabAlbumIcon({ size = 20, color = '#8E8E93', focused = false, strokeWidth = 2, ...props }: TabBarIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Rect
@@ -190,7 +197,7 @@ export function TabAlbumIcon({ size = 20, color = '#8E8E93', focused = false, st
  * 6. 반려몽/펫 탭 아이콘 (TabPetIcon)
  * 하트 패드와 4개 발가락이 어우러진 사랑스러운 반려동물 발자국
  */
-export function TabPetIcon({ size = 20, color = '#8E8E93', focused = false, strokeWidth = 2, ...props }) {
+export function TabPetIcon({ size = 20, color = '#8E8E93', focused = false, strokeWidth = 2, ...props }: TabBarIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       {/* 중심 하트 발바닥 패드 */}
@@ -215,7 +222,7 @@ export function TabPetIcon({ size = 20, color = '#8E8E93', focused = false, stro
  * 7. 가족 탭 아이콘 (TabFamilyIcon)
  * 따뜻한 지붕과 중심에 하트가 깃든 패밀리 하우스
  */
-export function TabFamilyIcon({ size = 20, color = '#8E8E93', focused = false, strokeWidth = 2, ...props }) {
+export function TabFamilyIcon({ size = 20, color = '#8E8E93', focused = false, strokeWidth = 2, ...props }: TabBarIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Path
@@ -250,7 +257,7 @@ export function TabFamilyIcon({ size = 20, color = '#8E8E93', focused = false, s
  * 8. 홈 대시보드 탭 아이콘 (TabHomeIcon)
  * 둥근 지붕과 출입문이 있는 모던 홈 아이콘
  */
-export function TabHomeIcon({ size = 20, color = '#8E8E93', focused = false, strokeWidth = 2, ...props }) {
+export function TabHomeIcon({ size = 20, color = '#8E8E93', focused = false, strokeWidth = 2, ...props }: TabBarIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Path
@@ -276,7 +283,7 @@ export function TabHomeIcon({ size = 20, color = '#8E8E93', focused = false, str
  * 9. 퀘스트 탭 아이콘 (TabQuestIcon)
  * 둥근 배지 속 체크마크 (Figma Quests ✅)
  */
-export function TabQuestIcon({ size = 20, color = '#8E8E93', focused = false, strokeWidth = 2, ...props }) {
+export function TabQuestIcon({ size = 20, color = '#8E8E93', focused = false, strokeWidth = 2, ...props }: TabBarIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Circle
@@ -302,7 +309,7 @@ export function TabQuestIcon({ size = 20, color = '#8E8E93', focused = false, st
  * 10. 이야기책/앨범 탭 아이콘 (TabBookIcon)
  * 펼쳐진 책과 기억의 책갈피 (Figma Book 📖)
  */
-export function TabBookIcon({ size = 20, color = '#8E8E93', focused = false, strokeWidth = 2, ...props }) {
+export function TabBookIcon({ size = 20, color = '#8E8E93', focused = false, strokeWidth = 2, ...props }: TabBarIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Path

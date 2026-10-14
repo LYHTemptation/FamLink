@@ -17,6 +17,7 @@ export interface ParsedPhotobookOrderData {
   pointsUsed: number;
   recipient: string;
   address: string;
+  orderNumber?: string;
 }
 
 /**

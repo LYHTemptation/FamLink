@@ -82,41 +82,84 @@ export {
   parseKoreanTimeToMs,
 };
 
+import {
+  ChatMessage,
+  UserProfile,
+  FamilyMember,
+  SmallTalkState,
+} from '../types/domain';
+
+export interface ChatScreenProps {
+  messages?: ChatMessage[];
+  currentUser?: any;
+  currentUserProfile?: UserProfile | null;
+  onSendMessage?: (msg: any) => Promise<void> | void;
+  onMarkAsRead?: (roomId?: string) => void;
+  memberCount?: number;
+  familyMembers?: FamilyMember[];
+  smallTalk?: SmallTalkState | any;
+  onNavigateScreen?: ((screenName: string, params?: any) => void) | null;
+  customRooms?: any[];
+  onCreateCustomRoom?: (room: any) => void;
+  onAddEvent?: (event: any) => void;
+  onAddShoppingItem?: (item: any) => void;
+  onAddChore?: (chore: any) => void;
+  onUpdateMessageVote?: (msgId: any, voteData: any) => void;
+  onDeleteMessage?: (msgId: any, deleteType?: any) => void;
+}
+
+export interface ChatRoomItem {
+  id: string;
+  title: string;
+  subtitle: string;
+  lastMessage: string;
+  lastMessageObj?: any;
+  time?: string;
+  lastMessageTimestamp?: number;
+  avatar?: string;
+  color?: string;
+  badge?: string | null;
+  isGroup: boolean;
+  otherMemberId?: string;
+  members?: any[];
+  [key: string]: any;
+}
+
 export default function ChatScreen({
-  messages,
+  messages = [],
   currentUser,
   currentUserProfile,
   onSendMessage,
   onMarkAsRead,
-  memberCount,
-  familyMembers,
+  memberCount = 0,
+  familyMembers = [],
   smallTalk,
   onNavigateScreen,
-  customRooms,
+  customRooms = [],
   onCreateCustomRoom,
   onAddEvent,
   onAddShoppingItem,
   onAddChore,
   onUpdateMessageVote,
   onDeleteMessage,
-}) {
+}: ChatScreenProps) {
   const insets = useSafeAreaInsets();
-  const [selectedRoomId, setSelectedRoomId] = useState(null); // null = Chat Room List View, 'family-group' = Group Chat
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null); // null = Chat Room List View, 'family-group' = Group Chat
   const [inputText, setInputText] = useState('');
-  const [selectedPhoto, setSelectedPhoto] = useState(null);
-  const flatListRef = useRef();
-  const inputRef = useRef();
+  const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
+  const flatListRef = useRef<FlatList<any>>(null);
+  const inputRef = useRef<TextInput>(null);
   const isSendingRef = useRef(false);
 
   // 💬 특정 메시지 인용 답장(Quote Reply) State
-  const [replyingTo, setReplyingTo] = useState(null); // { id, senderName, text, image }
+  const [replyingTo, setReplyingTo] = useState<{ id: any; senderName?: string; text?: string; image?: string | null } | null>(null);
 
   // 📋 말풍선 롱프레스 퀵 액션 컨텍스트 메뉴 State
   const [contextMenuVisible, setContextMenuVisible] = useState(false);
-  const [selectedMsgForMenu, setSelectedMsgForMenu] = useState(null); // { item, senderInfo, isMe, bubbleText }
+  const [selectedMsgForMenu, setSelectedMsgForMenu] = useState<{ item: any; senderInfo: any; isMe: boolean; bubbleText: string } | null>(null);
 
   // 📌 상단 고정 공지사항 State
-  const [pinnedNotice, setPinnedNotice] = useState(null); // { id, text, author, pinnedAt }
+  const [pinnedNotice, setPinnedNotice] = useState<any>(null); // { id, text, author, pinnedAt }
 
   // Load pinned notice for active room (Cloud Truth from messages + AsyncStorage fallback)
   useEffect(() => {
@@ -127,10 +170,11 @@ export default function ChatScreen({
 
     // 1. Scan message stream for the latest pinned notice event in this room
     const currentRoomMsgs = (messages || []).filter(m => isMessageInRoom(m, selectedRoomId));
-    let latestNoticeEvent = null;
+    let latestNoticeEvent: string | null = null;
     for (let i = currentRoomMsgs.length - 1; i >= 0; i--) {
-      const txt = typeof currentRoomMsgs[i].text === 'string' ? currentRoomMsgs[i].text : '';
-      if (txt.startsWith('[공지설정]') || txt.startsWith('[공지해제]')) {
+      const msgObj = currentRoomMsgs[i];
+      const txt = typeof msgObj?.text === 'string' ? msgObj.text : '';
+      if (txt && (txt.startsWith('[공지설정]') || txt.startsWith('[공지해제]'))) {
         latestNoticeEvent = txt;
         break;
       }
@@ -183,8 +227,8 @@ export default function ChatScreen({
   const [voiceModalVisible, setVoiceModalVisible] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
-  const recordingTimerRef = useRef(null);
-  const [audioPlayingId, setAudioPlayingId] = useState(null);
+  const recordingTimerRef = useRef<any>(null);
+  const [audioPlayingId, setAudioPlayingId] = useState<string | number | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
 
   const [isScrolledToBottom, setIsScrolledToBottom] = useState(false);
@@ -218,7 +262,7 @@ export default function ChatScreen({
   const [newRoomTitle, setNewRoomTitle] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState('💬');
   const [selectedColor, setSelectedColor] = useState('#FF6B47');
-  const [selectedMembers, setSelectedMembers] = useState([]);
+  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
 
   const EMOJI_OPTIONS = ['💬', '⛺', '⚽', '🍕', '🎁', '🏖️', '☕', '🎵', '🚗', '🐱', '🎮', '❤️'];
   const COLOR_OPTIONS = ['#FF6B47', '#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'];
@@ -230,7 +274,7 @@ export default function ChatScreen({
     daughter: { name: '딸', avatar: '👧', color: '#F59E0B' },
   };
 
-  const getSenderInfo = (profileIdOrRole, senderRole, senderObj) => {
+  const getSenderInfo = (profileIdOrRole?: any, senderRole?: any, senderObj?: any) => {
     let pId = null;
     let sRole = senderRole;
     let sObj = senderObj;
@@ -271,17 +315,17 @@ export default function ChatScreen({
     }
 
     const roleKey = sRole || pId;
-    return DEFAULT_MEMBERS[roleKey] || { name: (sObj && sObj.name) || roleKey || '가족', avatar: '👦', color: '#78716C' };
+    return (DEFAULT_MEMBERS as Record<string, any>)[roleKey] || { name: (sObj && sObj.name) || roleKey || '가족', avatar: '👦', color: '#78716C' };
   };
 
-  const getMemberName = (keyOrId) => {
+  const getMemberName = (keyOrId: any) => {
     if (familyMembers && Array.isArray(familyMembers)) {
       const matchById = familyMembers.find(m => m && typeof m === 'object' && m.id === keyOrId);
       if (matchById) return matchById.name;
       const matchByRole = familyMembers.find(m => m && typeof m === 'object' && m.role === keyOrId);
       if (matchByRole) return matchByRole.name;
     }
-    const DEFAULT_NAMES = { mom: '엄마', dad: '아빠', son: '아들', daughter: '딸' };
+    const DEFAULT_NAMES: Record<string, string> = { mom: '엄마', dad: '아빠', son: '아들', daughter: '딸' };
     return DEFAULT_NAMES[keyOrId] || keyOrId;
   };
 
@@ -309,11 +353,13 @@ export default function ChatScreen({
       setReplyingTo(null);
     }
 
-    onSendMessage({
-      text: finalPayloadText,
-      image: selectedPhoto,
-      roomId: selectedRoomId || 'family-group',
-    });
+    if (onSendMessage) {
+      onSendMessage({
+        text: finalPayloadText,
+        image: selectedPhoto,
+        roomId: selectedRoomId || 'family-group',
+      });
+    }
 
     setInputText('');
     setSelectedPhoto(null);
@@ -324,7 +370,7 @@ export default function ChatScreen({
   };
 
   // Open Context Menu on Message Long Press
-  const handleOpenContextMenu = (item, senderInfo, isMe, bubbleText) => {
+  const handleOpenContextMenu = (item: any, senderInfo: any, isMe: boolean, bubbleText: string) => {
     if (!item) return;
     const isDeleted = bubbleText === '[삭제된 메시지입니다]' || item.is_deleted;
     if (isDeleted) return;
@@ -469,7 +515,7 @@ export default function ChatScreen({
   };
 
   // Scroll to Message ID
-  const scrollToMessage = (targetId) => {
+  const scrollToMessage = (targetId: any) => {
     if (!targetId || !roomMessages) return;
     const idx = roomMessages.findIndex(m => m.id === targetId);
     if (idx >= 0 && flatListRef.current) {
@@ -478,10 +524,10 @@ export default function ChatScreen({
   };
 
   // High-efficiency client-side image compression for chat (downscale to max 1280px, 0.75 quality)
-  const compressImageForChat = async (uri) => {
+  const compressImageForChat = async (uri: string): Promise<string> => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       return new Promise((resolve) => {
-        const img = new window.Image();
+        const img = new (window as any).Image();
         img.crossOrigin = 'anonymous';
         img.onload = () => {
           const maxDim = 1280;
@@ -499,8 +545,12 @@ export default function ChatScreen({
           canvas.width = width;
           canvas.height = height;
           const ctx = canvas.getContext('2d');
-          ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.75));
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', 0.75));
+          } else {
+            resolve(uri);
+          }
         };
         img.onerror = () => resolve(uri);
         img.src = uri;
@@ -548,10 +598,12 @@ export default function ChatScreen({
           uri: file.uri,
         };
 
-        onSendMessage({
-          text: `[파일] ${JSON.stringify(filePayload)}`,
-          roomId: selectedRoomId || 'family-group',
-        });
+        if (onSendMessage) {
+          onSendMessage({
+            text: `[파일] ${JSON.stringify(filePayload)}`,
+            roomId: selectedRoomId || 'family-group',
+          });
+        }
       }
     } catch (err) {
       console.warn('Document pick error:', err);
@@ -583,10 +635,12 @@ export default function ChatScreen({
           name: videoAsset.fileName || '가족 동영상',
         };
 
-        onSendMessage({
-          text: `[동영상] ${JSON.stringify(videoPayload)}`,
-          roomId: selectedRoomId || 'family-group',
-        });
+        if (onSendMessage) {
+          onSendMessage({
+            text: `[동영상] ${JSON.stringify(videoPayload)}`,
+            roomId: selectedRoomId || 'family-group',
+          });
+        }
       }
     } catch (err) {
       console.warn('Video pick error:', err);
@@ -625,10 +679,12 @@ export default function ChatScreen({
       timestamp: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
     };
 
-    onSendMessage({
-      text: `[음성메모] ${JSON.stringify(voicePayload)}`,
-      roomId: selectedRoomId || 'family-group',
-    });
+    if (onSendMessage) {
+      onSendMessage({
+        text: `[음성메모] ${JSON.stringify(voicePayload)}`,
+        roomId: selectedRoomId || 'family-group',
+      });
+    }
   };
 
   const handleCancelVoice = () => {
@@ -668,10 +724,12 @@ export default function ChatScreen({
       createdAt: new Date().toISOString(),
     };
 
-    onSendMessage({
-      text: `[가족투표] ${JSON.stringify(pollPayload)}`,
-      roomId: selectedRoomId || 'family-group',
-    });
+    if (onSendMessage) {
+      onSendMessage({
+        text: `[가족투표] ${JSON.stringify(pollPayload)}`,
+        roomId: selectedRoomId || 'family-group',
+      });
+    }
 
     setPollModalVisible(false);
     setPollTitle('');
@@ -688,7 +746,7 @@ export default function ChatScreen({
   };
 
   // 날짜 입력 숫자 전용 & 자동 하이픈 (YYYY-MM-DD) 포매터
-  const handleEventDateChange = (text) => {
+  const handleEventDateChange = (text: string) => {
     // 숫자만 추출
     const digits = text.replace(/[^0-9]/g, '').slice(0, 8);
     let formatted = digits;
@@ -701,7 +759,7 @@ export default function ChatScreen({
   };
 
   // 시간 입력 숫자 전용 & 자동 콜론 (HH:MM) 포매터
-  const handleEventTimeChange = (text) => {
+  const handleEventTimeChange = (text: string) => {
     // 숫자만 추출
     const digits = text.replace(/[^0-9]/g, '').slice(0, 4);
     let formatted = digits;
@@ -739,10 +797,12 @@ export default function ChatScreen({
     };
 
     // 1. 메시지 전송 (대화방에 일정 카드 공유)
-    onSendMessage({
-      text: `[일정공유] ${JSON.stringify(eventPayload)}`,
-      roomId: selectedRoomId || 'family-group',
-    });
+    if (onSendMessage) {
+      onSendMessage({
+        text: `[일정공유] ${JSON.stringify(eventPayload)}`,
+        roomId: selectedRoomId || 'family-group',
+      });
+    }
 
     // 2. 캘린더에도 즉시 실시간 등록
     if (onAddEvent) {
@@ -779,10 +839,12 @@ export default function ChatScreen({
       author: currentUserProfile?.name || getMemberName(currentUser),
     };
 
-    onSendMessage({
-      text: `[집안일카드] ${JSON.stringify(chorePayload)}`,
-      roomId: selectedRoomId || 'family-group',
-    });
+    if (onSendMessage) {
+      onSendMessage({
+        text: `[집안일카드] ${JSON.stringify(chorePayload)}`,
+        roomId: selectedRoomId || 'family-group',
+      });
+    }
 
     setChoreModalVisible(false);
     setChoreTitle('');
@@ -816,10 +878,12 @@ export default function ChatScreen({
         senderName: currentUserProfile?.name || getMemberName(currentUser),
       };
 
-      onSendMessage({
-        text: `[위치공유] ${JSON.stringify(locationPayload)}`,
-        roomId: selectedRoomId || 'family-group',
-      });
+      if (onSendMessage) {
+        onSendMessage({
+          text: `[위치공유] ${JSON.stringify(locationPayload)}`,
+          roomId: selectedRoomId || 'family-group',
+        });
+      }
 
       setLocationLoading(false);
       setLocationModalVisible(false);
@@ -834,17 +898,19 @@ export default function ChatScreen({
         lng: 126.9780,
         senderName: currentUserProfile?.name || getMemberName(currentUser),
       };
-      onSendMessage({
-        text: `[위치공유] ${JSON.stringify(fallbackPayload)}`,
-        roomId: selectedRoomId || 'family-group',
-      });
+      if (onSendMessage) {
+        onSendMessage({
+          text: `[위치공유] ${JSON.stringify(fallbackPayload)}`,
+          roomId: selectedRoomId || 'family-group',
+        });
+      }
       setLocationModalVisible(false);
       setLocationTitle('');
     }
   };
 
   // Symmetrical Room ID generator for 1:1 direct chats
-  const getDirectRoomId = (myIdOrRole, otherIdOrRole) => {
+  const getDirectRoomId = (myIdOrRole: any, otherIdOrRole: any) => {
     const id1 = String(myIdOrRole || 'me');
     const id2 = String(otherIdOrRole || 'other');
     const sorted = [id1, id2].sort();
@@ -852,7 +918,7 @@ export default function ChatScreen({
   };
 
   // Check if a message belongs to a specific room
-  const isMessageInRoom = (msg, targetRoomId, otherMemberId = null) => {
+  const isMessageInRoom = (msg: any, targetRoomId: string, otherMemberId: any = null) => {
     const mRoom = msg.room_id || 'family-group';
     if (targetRoomId === 'family-group') {
       return mRoom === 'family-group';
@@ -872,7 +938,7 @@ export default function ChatScreen({
   };
 
   // Format message text for chat room preview (convert JSON cards to friendly summary and vector icon)
-  const getMessagePreviewData = (msg) => {
+  const getMessagePreviewData = (msg: any) => {
     if (!msg) return { text: '', cardType: null };
     if (msg.is_deleted || msg.text === '[삭제된 메시지입니다]') {
       return { text: '삭제된 메시지입니다.', cardType: 'deleted' };
@@ -1026,7 +1092,7 @@ export default function ChatScreen({
   };
 
   // Get last message info for each specific room
-  const getRoomLastMessageInfo = (roomId, otherMemberId = null) => {
+  const getRoomLastMessageInfo = (roomId: string, otherMemberId: any = null) => {
     const roomMsgs = (messages || []).filter(m => isMessageInRoom(m, roomId, otherMemberId));
     if (roomMsgs.length === 0) return null;
     const last = roomMsgs[roomMsgs.length - 1];
@@ -1067,7 +1133,7 @@ export default function ChatScreen({
   const answeredCount = Math.min(
     totalFamilyCount,
     (familyMembers && familyMembers.length > 0)
-      ? familyMembers.filter(m => (m?.id ? responses[m.id] : responses[m?.role])).length
+      ? familyMembers.filter(m => (m?.id && responses[m.id]) || (m?.role && responses[m.role])).length
       : responseCount
   );
 
@@ -1141,7 +1207,7 @@ export default function ChatScreen({
   };
 
   // Calculate unread messages count for a specific room and current user
-  const getRoomUnreadCount = (roomId, otherMemberId = null) => {
+  const getRoomUnreadCount = (roomId: string, otherMemberId: any = null): number => {
     return (messages || []).filter((msg) => {
       if (!isMessageInRoom(msg, roomId, otherMemberId)) return false;
       const isMe = (currentUserProfile && msg.profile_id)
@@ -1169,7 +1235,7 @@ export default function ChatScreen({
   const familyGroupUnread = getRoomUnreadCount('family-group');
 
   // Define chat rooms list (Pure conversation rooms)
-  const CHAT_ROOMS = [
+  const CHAT_ROOMS: ChatRoomItem[] = [
     {
       id: 'family-group',
       title: '우리 가족 수다방',
@@ -1246,7 +1312,7 @@ export default function ChatScreen({
     return 0;
   });
 
-  const handleToggleMemberSelect = (roleKey) => {
+  const handleToggleMemberSelect = (roleKey: string) => {
     if (selectedMembers.includes(roleKey)) {
       setSelectedMembers(selectedMembers.filter(r => r !== roleKey));
     } else {
@@ -1283,7 +1349,7 @@ export default function ChatScreen({
     setSelectedRoomId(createdRoom.id);
   };
 
-  const renderMessageItem = ({ item }) => {
+  const renderMessageItem = ({ item }: { item: any }) => {
     const senderInfo = getSenderInfo(item.profile_id, item.sender, item.senderObj);
     
     // Accurately determine if the message was sent by the current logged-in user
@@ -1304,7 +1370,7 @@ export default function ChatScreen({
     if (isDirectRoom) {
       // 1:1 대화방: 상대방 1명의 읽음 여부만 검사 (미독: 1, 완독: 0)
       const otherId = activeRoom?.otherMemberId;
-      const isReadByOther = (readByList || []).some(id => {
+      const isReadByOther = (readByList || []).some((id: any) => {
         if (!id || !otherId) return false;
         if (id === otherId) return true;
         if (familyMembers && Array.isArray(familyMembers)) {
@@ -1319,7 +1385,7 @@ export default function ChatScreen({
     } else {
       // 단체 대화방 또는 커스텀 대화방
       const whoRead = readByList
-        .filter(id => {
+        .filter((id: any) => {
           if (item.profile_id && id === item.profile_id) return false;
           if (!item.profile_id && id === item.sender) return false;
           if (familyMembers && Array.isArray(familyMembers)) {
@@ -1331,7 +1397,7 @@ export default function ChatScreen({
           }
           return true;
         })
-        .map(id => getMemberName(id));
+        .map((id: string) => getMemberName(id));
 
       uniqueWhoRead = Array.from(new Set(whoRead));
 
@@ -1377,7 +1443,7 @@ export default function ChatScreen({
     // 📌 System Pinned Notice Event Message (KakaoTalk centered style)
     if (displayBubbleText.startsWith('[공지설정]') || displayBubbleText.startsWith('[공지해제]')) {
       const isSet = displayBubbleText.startsWith('[공지설정]');
-      let noticeData = {};
+      let noticeData: any = {};
       try {
         noticeData = JSON.parse(displayBubbleText.replace(isSet ? /^\[공지설정\]\s*/ : /^\[공지해제\]\s*/, ''));
       } catch (_) {}
@@ -1562,7 +1628,7 @@ export default function ChatScreen({
               </View>
             ) : bubbleText && bubbleText.startsWith('[파일] ') ? (
               (() => {
-                let fileData = {};
+                let fileData: any = {};
                 try {
                   fileData = JSON.parse(bubbleText.replace('[파일] ', ''));
                 } catch (e) {
@@ -1597,7 +1663,7 @@ export default function ChatScreen({
               })()
             ) : bubbleText.startsWith('[동영상] ') ? (
               (() => {
-                let videoData = {};
+                let videoData: any = {};
                 try {
                   videoData = JSON.parse(bubbleText.replace('[동영상] ', ''));
                 } catch (e) {
@@ -1636,7 +1702,7 @@ export default function ChatScreen({
               })()
             ) : bubbleText.startsWith('[음성메모] ') ? (
               (() => {
-                let voiceData = {};
+                let voiceData: any = {};
                 try {
                   voiceData = JSON.parse(bubbleText.replace('[음성메모] ', ''));
                 } catch (e) {
@@ -1683,23 +1749,23 @@ export default function ChatScreen({
               })()
             ) : bubbleText.startsWith('[가족투표] ') ? (
               (() => {
-                let pollData = {};
+                let pollData: any = {};
                 try {
                   pollData = JSON.parse(bubbleText.replace('[가족투표] ', ''));
                 } catch (e) {
                   pollData = { title: '가족 투표', options: [] };
                 }
                 const myId = currentUserProfile?.id || currentUser;
-                const totalVotes = (pollData.options || []).reduce((acc, opt) => acc + (opt.votes?.length || 0), 0);
+                const totalVotes = (pollData.options || []).reduce((acc: number, opt: any) => acc + (opt.votes?.length || 0), 0);
 
-                const handleVoteOption = (optIndex) => {
+                const handleVoteOption = (optIndex: number) => {
                   if (!onUpdateMessageVote || !item.id) {
                     Alert.alert('투표 참여', '투표 기능이 정상 연결되었습니다.');
                     return;
                   }
-                  const updatedOptions = (pollData.options || []).map((opt, idx) => {
+                  const updatedOptions = (pollData.options || []).map((opt: any, idx: number) => {
                     const currentVotes = Array.isArray(opt.votes) ? opt.votes : [];
-                    const filteredVotes = currentVotes.filter(v => v !== myId);
+                    const filteredVotes = currentVotes.filter((v: string) => v !== myId);
                     if (idx === optIndex) {
                       return { ...opt, votes: [...filteredVotes, myId] };
                     }
@@ -1722,7 +1788,7 @@ export default function ChatScreen({
                     </View>
 
                     <View style={styles.pollOptionsList}>
-                      {(pollData.options || []).map((opt, idx) => {
+                      {(pollData.options || []).map((opt: any, idx: number) => {
                         const optVotes = opt.votes || [];
                         const isVoted = optVotes.includes(myId);
                         const percent = totalVotes > 0 ? Math.round((optVotes.length / totalVotes) * 100) : 0;
@@ -1759,7 +1825,7 @@ export default function ChatScreen({
               })()
             ) : bubbleText.startsWith('[일정공유] ') ? (
               (() => {
-                let eventData = {};
+                let eventData: any = {};
                 try {
                   eventData = JSON.parse(bubbleText.replace('[일정공유] ', ''));
                 } catch (e) {
@@ -1808,7 +1874,7 @@ export default function ChatScreen({
             ) : (bubbleText.startsWith('[집안일카드] ') || bubbleText.startsWith('[장보기카드] ')) ? (
               (() => {
                 const isLegacyShopping = bubbleText.startsWith('[장보기카드] ');
-                let choreData = {};
+                let choreData: any = {};
                 try {
                   choreData = JSON.parse(bubbleText.replace(isLegacyShopping ? '[장보기카드] ' : '[집안일카드] ', ''));
                 } catch (e) {
@@ -1861,7 +1927,7 @@ export default function ChatScreen({
               })()
             ) : bubbleText.startsWith('[위치공유] ') ? (
               (() => {
-                let locData = {};
+                let locData: any = {};
                 try {
                   locData = JSON.parse(bubbleText.replace('[위치공유] ', ''));
                 } catch (e) {
@@ -2144,8 +2210,9 @@ export default function ChatScreen({
                     { role: 'dad', name: '아빠', avatar: '👨‍💼' },
                     { role: 'son', name: '아들', avatar: '👦' },
                     { role: 'daughter', name: '딸', avatar: '👧' },
-                  ]).map((m) => {
-                    const memberKey = typeof m === 'object' ? (m.id || m.role) : m;
+                  ]).map((m: any) => {
+                    const memberKey = String(typeof m === 'object' ? (m.id || m.role || '') : m);
+                    if (!memberKey) return null;
                     const isMyself = (currentUserProfile && typeof m === 'object' && m.id)
                       ? m.id === currentUserProfile.id
                       : (memberKey === currentUser);
@@ -2361,17 +2428,18 @@ export default function ChatScreen({
           value={inputText}
           onChangeText={setInputText}
           multiline
-          onKeyPress={(e) => {
+          onKeyPress={(e: any) => {
             if (Platform.OS === 'web') {
+              const nativeEvent = e?.nativeEvent || {};
               if (
-                e.nativeEvent.isComposing ||
-                e.isComposing ||
-                e.nativeEvent.keyCode === 229
+                nativeEvent.isComposing ||
+                e?.isComposing ||
+                nativeEvent.keyCode === 229
               ) {
                 return;
               }
-              if (e.nativeEvent.key === 'Enter' && !e.nativeEvent.shiftKey) {
-                e.preventDefault();
+              if (nativeEvent.key === 'Enter' && !nativeEvent.shiftKey) {
+                e?.preventDefault?.();
                 handleSend();
               }
             }

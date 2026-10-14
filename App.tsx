@@ -72,38 +72,54 @@ import {
   formatSupabaseMessageRow,
   calculateDecayedPetVitals,
 } from './services/familyDataService';
+import type { Session } from '@supabase/supabase-js';
+import type {
+  FamilyMember,
+  UserProfile,
+  ChatMessage,
+  CalendarEvent,
+  ShoppingItem,
+  PetmongCharacter,
+  PetmongVitals,
+  PointHistoryItem,
+} from './types/domain';
 
 export default function App() {
-  const [session, setSession] = useState(null);
-  const [profile, setProfile] = useState(null);
-  const [appLoading, setAppLoading] = useState(true);
-  const [familyMembersList, setFamilyMembersList] = useState([]);
+  const [session, setSession] = useState<Session | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [appLoading, setAppLoading] = useState<boolean>(true);
+  const [familyMembersList, setFamilyMembersList] = useState<FamilyMember[]>([]);
 
   // App Core State
-  const [currentUser, setCurrentUser] = useState('mom');
-  const [points, setPoints] = useState(120);
-  const [messages, setMessages] = useState([]);
-  const [events, setEvents] = useState([]);
-  const [shoppingItems, setShoppingItems] = useState(INITIAL_MOCK_SHOPPING);
-  const [pointHistory, setPointHistory] = useState(INITIAL_MOCK_POINT_HISTORY);
-  const [customRooms, setCustomRooms] = useState([]);
-  const [petmongCharacters, setPetmongCharacters] = useState([]);
-  const [petVitals, setPetVitals] = useState({
+  const [currentUser, setCurrentUser] = useState<string>('mom');
+  const [points, setPoints] = useState<number>(120);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [shoppingItems, setShoppingItems] = useState<ShoppingItem[]>(INITIAL_MOCK_SHOPPING);
+  const [pointHistory, setPointHistory] = useState<PointHistoryItem[]>(INITIAL_MOCK_POINT_HISTORY);
+  const [customRooms, setCustomRooms] = useState<any[]>([]);
+  const [petmongCharacters, setPetmongCharacters] = useState<PetmongCharacter[]>([]);
+  const [petVitals, setPetVitals] = useState<PetmongVitals>({
+    warmth: 80,
     hunger: 80,
     happiness: 85,
     cleanliness: 90,
     energy: 95,
   });
-  const vitalsSyncTimerRef = useRef(null);
+  const vitalsSyncTimerRef = useRef<any>(null);
 
-  const [smallTalk, setSmallTalk] = useState({
+  const [smallTalk, setSmallTalk] = useState<{
+    topic: string;
+    responses: Record<string, string>;
+    pointsAwarded?: boolean;
+  }>({
     topic: getTopicForToday(),
     responses: {},
     pointsAwarded: false,
   });
 
-  const [currentScreen, setCurrentScreen] = useState('home'); // home, chat, interior, smalltalk, calendar, album, family
-  const [visitedScreens, setVisitedScreens] = useState(new Set(['home', 'chat', 'interior']));
+  const [currentScreen, setCurrentScreen] = useState<string>('home'); // home, chat, interior, smalltalk, calendar, album, family
+  const [visitedScreens, setVisitedScreens] = useState<Set<string>>(new Set(['home', 'chat', 'interior']));
 
   useEffect(() => {
     if (currentScreen) {
@@ -115,9 +131,9 @@ export default function App() {
       });
     }
   }, [currentScreen]);
-  const [userModalVisible, setUserModalVisible] = useState(false);
-  const [celebrationVisible, setCelebrationVisible] = useState(false);
-  const [onlineUsers, setOnlineUsers] = useState([]);
+  const [userModalVisible, setUserModalVisible] = useState<boolean>(false);
+  const [celebrationVisible, setCelebrationVisible] = useState<boolean>(false);
+  const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
 
   // 1. Authentication State Listener & Initialization
   useEffect(() => {
@@ -259,13 +275,13 @@ export default function App() {
     const petmongChannel = supabase
       .channel(`realtime-petmong-${familyId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'petmong_characters' }, (payload) => {
-        const row = payload.new || payload.old;
+        const row = (payload.new || payload.old) as any;
         if (!row || !row.family_id || row.family_id === familyId) {
           fetchRealPetmongCharacters(familyId);
         }
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'petmong_activities' }, (payload) => {
-        const row = payload.new;
+        const row = payload.new as any;
         if (!row || !row.family_id || row.family_id === familyId) {
           const actionType = row?.action_type || '';
           if (actionType.startsWith('VITALS_UPDATE:')) {
@@ -327,10 +343,10 @@ export default function App() {
       registerForPushNotificationsAsync().then(async (token) => {
         if (token) {
           try {
-            await supabase
+            await (supabase
               .from('profiles')
               .update({ push_token: token })
-              .eq('id', session.user.id);
+              .eq('id', session.user.id) as any);
           } catch (e) {
             console.log('Push token update error:', e);
           }
@@ -342,14 +358,14 @@ export default function App() {
   useEffect(() => {
     const subscription = Notifications.addNotificationResponseReceivedListener(response => {
       const targetScreen = response?.notification?.request?.content?.data?.screen;
-      if (targetScreen) {
+      if (typeof targetScreen === 'string') {
         setCurrentScreen(targetScreen);
       }
     });
     return () => subscription.remove();
   }, []);
 
-  const notifyFamilyMembers = async (title, body, targetScreen = 'chat') => {
+  const notifyFamilyMembers = async (title: string, body: string, targetScreen: string = 'chat') => {
     if (!isSupabaseReady || !profile?.family_id || !session?.user?.id) return;
     try {
       const { data: members } = await supabase
@@ -371,7 +387,7 @@ export default function App() {
   };
 
   // Load Real Supabase Profile on Login
-  const handleRealUserLogin = async (currentSession) => {
+  const handleRealUserLogin = async (currentSession: Session) => {
     try {
       const { data: userProfile, error } = await supabase
         .from('profiles')
@@ -381,7 +397,7 @@ export default function App() {
 
       if (error) throw error;
 
-      const formatted = {
+      const formatted: UserProfile = {
         ...userProfile,
         family_code: userProfile.families?.family_code || 'FAM-NONE',
         family_created_at: userProfile.families?.created_at || userProfile.created_at || new Date().toISOString(),
@@ -394,7 +410,7 @@ export default function App() {
   };
 
   // Real Database Query Functions
-  const fetchRealDatabaseData = async (familyId) => {
+  const fetchRealDatabaseData = async (familyId: string) => {
     setAppLoading(true);
     await Promise.all([
       fetchRealPoints(familyId),
@@ -409,7 +425,7 @@ export default function App() {
     setAppLoading(false);
   };
 
-  const fetchRealPetmongCharacters = async (familyId, userId = profile?.id) => {
+  const fetchRealPetmongCharacters = async (familyId: string, userId: string = profile?.id || '') => {
     try {
       const { data, error } = await supabase
         .from('petmong_characters')
@@ -463,7 +479,7 @@ export default function App() {
     }
   };
 
-  const fetchRealPetVitals = async (familyId) => {
+  const fetchRealPetVitals = async (familyId: string) => {
     try {
       // 1. 빠른 렌더링을 위해 로컬 캐시 우선 적용
       const cached = await AsyncStorage.getItem(`@famlink_game_vitals_${familyId}`);
@@ -489,7 +505,7 @@ export default function App() {
         if (serverVitals && typeof serverVitals === 'object') {
           const calculatedVitals = calculateDecayedPetVitals(serverVitals, data[0].created_at);
 
-          setPetVitals(calculatedVitals);
+          setPetVitals(calculatedVitals as any);
           AsyncStorage.setItem(`@famlink_game_vitals_${familyId}`, JSON.stringify(calculatedVitals)).catch(() => {});
         }
       }
@@ -506,7 +522,7 @@ export default function App() {
     const decayInterval = setInterval(() => {
       // 1. 자정 전환 감지 시 집안일 루틴 자동 갱신 및 만료 1회성 항목 자동 정리
       const currentDate = getTodayString();
-      if (currentDate !== lastCheckedDate) {
+      if (currentDate !== lastCheckedDate && profile?.family_id) {
         lastCheckedDate = currentDate;
         fetchRealShoppingItems(profile.family_id);
       }
@@ -529,7 +545,7 @@ export default function App() {
     return () => clearInterval(decayInterval);
   }, [profile?.family_id]);
 
-  const handleUpdatePetVitals = (updater) => {
+  const handleUpdatePetVitals = (updater: any) => {
     setPetVitals(prev => {
       const next = typeof updater === 'function' ? updater(prev) : { ...prev, ...updater };
       const familyId = profile?.family_id;
@@ -564,7 +580,7 @@ export default function App() {
     }
   }, [currentScreen, profile?.family_id]);
 
-  const fetchRealProfiles = async (familyId) => {
+  const fetchRealProfiles = async (familyId: string) => {
     const { data } = await supabase
       .from('profiles')
       .select('*')
@@ -572,7 +588,7 @@ export default function App() {
     if (data) setFamilyMembersList(data);
   };
 
-  const fetchRealPoints = async (familyId) => {
+  const fetchRealPoints = async (familyId: string) => {
     const { data } = await supabase
       .from('family_points')
       .select('points')
@@ -581,7 +597,7 @@ export default function App() {
     if (data) setPoints(data.points);
   };
 
-  const fetchRealMessages = async (familyId) => {
+  const fetchRealMessages = async (familyId: string) => {
     const { data } = await supabase
       .from('messages')
       .select('*, profiles(name, avatar, color, role)')
@@ -602,14 +618,14 @@ export default function App() {
     }
   };
 
-  const fetchRealEvents = async (familyId) => {
+  const fetchRealEvents = async (familyId: string) => {
     const { data } = await supabase
       .from('events')
       .select('*, profiles(id, name, avatar, color, role)')
       .eq('family_id', familyId);
 
     if (data) {
-      const formatted = data.map(e => ({
+      const formatted = data.map((e: any) => ({
         id: e.id,
         profile_id: e.profile_id,
         creatorObj: e.profiles,
@@ -626,7 +642,7 @@ export default function App() {
 
   const normalizeRecurringItems = normalizeRecurringShoppingItems;
 
-  const fetchRealShoppingItems = async (familyId) => {
+  const fetchRealShoppingItems = async (familyId: string) => {
     const { data } = await supabase
       .from('shopping_items')
       .select('*')
@@ -638,8 +654,8 @@ export default function App() {
     }
   };
 
-  const fetchRealSmallTalk = async (familyId) => {
-    let dbTopics = [];
+  const fetchRealSmallTalk = async (familyId: string) => {
+    let dbTopics: any[] = [];
     try {
       dbTopics = await fetchSmallTalkTopicsFromDB(familyId);
     } catch (e) {
@@ -659,9 +675,9 @@ export default function App() {
         .eq('family_id', familyId),
     ]);
 
-    const responsesMap = {};
+    const responsesMap: Record<string, string> = {};
     if (respData) {
-      respData.forEach(resp => {
+      respData.forEach((resp: any) => {
         if (resp.profile_id && (resp.topic === todayTopic || stripEmojis(resp.topic) === todayTopic)) {
           responsesMap[resp.profile_id] = resp.text;
         }
@@ -688,7 +704,7 @@ export default function App() {
         const parsed = JSON.parse(savedData);
         setPoints(parsed.points ?? INITIAL_MOCK_DATA.points);
         const rawLoadedMessages = parsed.messages ?? INITIAL_MOCK_DATA.messages;
-        const sanitizedLoadedMessages = rawLoadedMessages.map(m => ({
+        const sanitizedLoadedMessages = rawLoadedMessages.map((m: any) => ({
           ...m,
           text: typeof m.text === 'string'
             ? m.text
@@ -699,7 +715,7 @@ export default function App() {
                 : String(m.text || '')),
         }));
         setMessages(sanitizedLoadedMessages);
-        const filteredEvents = (parsed.events ?? []).filter(e => e && e.id !== 'e1' && e.id !== 'e2' && !e.title?.includes('가족 저녁 외식') && !e.title?.includes('엄마 생신'));
+        const filteredEvents = (parsed.events ?? []).filter((e: any) => e && e.id !== 'e1' && e.id !== 'e2' && !e.title?.includes('가족 저녁 외식') && !e.title?.includes('엄마 생신'));
         setEvents(filteredEvents);
         setShoppingItems(normalizeRecurringItems(parsed.shoppingItems ?? INITIAL_MOCK_SHOPPING));
         setPointHistory(parsed.pointHistory ?? INITIAL_MOCK_POINT_HISTORY);
@@ -759,10 +775,10 @@ export default function App() {
   };
 
   // Auth Completed trigger from AuthScreen
-  const handleAuthComplete = async (newSession, newProfile) => {
+  const handleAuthComplete = async (newSession: any, newProfile: any) => {
     setSession(newSession);
     setProfile(newProfile);
-    setCurrentUser(newProfile.role || 'mom');
+    setCurrentUser(newProfile?.role || 'mom');
 
     // 🍎 Apple Reviewer Account (FAM-APPLE01): 10 스몰톡 문답 및 5장 앨범 사진 사전 장전
     if (newProfile?.family_code === 'FAM-APPLE01') {
@@ -852,12 +868,12 @@ export default function App() {
   };
 
   const saveLocalState = async (
-    updatedPoints,
-    updatedMessages,
-    updatedEvents,
-    updatedSmallTalk,
-    updatedShopping = shoppingItems,
-    updatedHistory = pointHistory
+    updatedPoints: number,
+    updatedMessages: ChatMessage[],
+    updatedEvents: CalendarEvent[],
+    updatedSmallTalk: any,
+    updatedShopping: ShoppingItem[] = shoppingItems,
+    updatedHistory: PointHistoryItem[] = pointHistory
   ) => {
     try {
       const dataToSave = {
@@ -874,7 +890,7 @@ export default function App() {
     }
   };
 
-  const logPointTransaction = async (type, amount, title, newBalance, category = 'etc') => {
+  const logPointTransaction = async (type: string, amount: number, title: string, newBalance: number, category: string = 'etc') => {
     const now = new Date();
     const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
     const actorName = profile?.name || (familyMembersList.find(m => m.id === currentUser)?.name) || '가족';
@@ -898,7 +914,7 @@ export default function App() {
   };
 
   // Feature Action Handlers
-  const handleUpdateMood = async (moodEmoji, statusTextStr) => {
+  const handleUpdateMood = async (moodEmoji: string, statusTextStr: string = '') => {
     if (isSupabaseReady && profile) {
       try {
         const { error } = await supabase
@@ -912,7 +928,7 @@ export default function App() {
         showError(e, '기분 업데이트에 실패했습니다.');
       }
     } else {
-      const updatedProfile = { ...profile, mood: moodEmoji, status_text: statusTextStr };
+      const updatedProfile = { ...profile, mood: moodEmoji, status_text: statusTextStr } as any;
       setProfile(updatedProfile);
       const myIdentifier = profile?.id || currentUser;
       const updatedMembers = familyMembersList.map(m =>
@@ -922,7 +938,7 @@ export default function App() {
     }
   };
 
-  const handleUpdateProfile = async (updates) => {
+  const handleUpdateProfile = async (updates: any) => {
     if (isSupabaseReady && profile) {
       try {
         const { error } = await supabase
@@ -938,7 +954,7 @@ export default function App() {
         showError(e, '프로필 업데이트에 실패했습니다.');
       }
     } else {
-      const updatedProfile = { ...profile, ...updates };
+      const updatedProfile = { ...profile, ...updates } as any;
       setProfile(updatedProfile);
       const myIdentifier = profile?.id || currentUser;
       const updatedMembers = familyMembersList.map(m =>
@@ -949,7 +965,7 @@ export default function App() {
     }
   };
 
-  const handleAddItem = async (itemData) => {
+  const handleAddItem = async (itemData: any) => {
     const nowIso = new Date().toISOString();
     const repType = itemData.repeat_type || 'none';
     const tempId = `chore-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
@@ -1018,8 +1034,8 @@ export default function App() {
             )
           );
         }
-      } catch (e) {
-        console.warn('Supabase chore insert notice:', e.message);
+      } catch (e: any) {
+        console.warn('Supabase chore insert notice:', e?.message || e);
         // Persist locally if network/db issue occurs so user's chore is never lost
         saveLocalState(points, messages, events, smallTalk, updated, pointHistory);
       }
@@ -1028,7 +1044,7 @@ export default function App() {
     }
   };
 
-  const handleAwardPetmongExp = async (targetUserId, expGain, reason = '') => {
+  const handleAwardPetmongExp = async (targetUserId: any, expGain: number = 20, reason: string = '') => {
     // 1가족 1반려몽: 온 가족이 함께 키우는 대표 반려몽에 경험치 합산
     const targetChar = petmongCharacters.length > 0 ? petmongCharacters[0] : null;
 
@@ -1090,7 +1106,7 @@ export default function App() {
     }
   };
 
-  const handleToggleItem = async (item, isCompleted) => {
+  const handleToggleItem = async (item: any, isCompleted?: boolean) => {
     if (!item) return;
     const targetCompleted = typeof isCompleted === 'boolean' ? isCompleted : !item.is_completed;
     const completedByStr = targetCompleted ? (profile ? profile.name : currentUser) : null;
@@ -1172,7 +1188,7 @@ export default function App() {
 
         if (error) throw error;
 
-        if (willEarnPoints) {
+        if (willEarnPoints && profile?.family_id) {
           await supabase
             .from('family_points')
             .update({ points: newPoints })
@@ -1190,11 +1206,11 @@ export default function App() {
     }
   };
 
-  const handleDeleteItem = async (id) => {
+  const handleDeleteItem = async (id: string | number) => {
     const updated = shoppingItems.filter(i => i.id !== id);
     setShoppingItems(updated);
 
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    const isUuid = typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
     if (isSupabaseReady && isUuid) {
       try {
@@ -1244,7 +1260,7 @@ export default function App() {
     }
   };
 
-  const handleToggleRepeat = async (item) => {
+  const handleToggleRepeat = async (item: any) => {
     const nextType = item.repeat_type === 'daily' ? 'none' : 'daily';
     const updated = shoppingItems.map(i => i.id === item.id ? { ...i, repeat_type: nextType } : i);
     setShoppingItems(updated);
@@ -1271,7 +1287,7 @@ export default function App() {
     }
   };
 
-  const handleSendOrderNotice = async (noticePayload) => {
+  const handleSendOrderNotice = async (noticePayload: any) => {
     let orderData = {};
     if (typeof noticePayload === 'object' && noticePayload !== null) {
       orderData = noticePayload;
@@ -1290,7 +1306,7 @@ export default function App() {
     });
   };
 
-  const handleDeductPoints = async (cost, reason = '포인트 사용') => {
+  const handleDeductPoints = async (cost: number, reason: string = '포인트 사용'): Promise<boolean> => {
     const newPoints = Math.max(0, points - cost);
     setPoints(newPoints);
     logPointTransaction('spend', cost, reason, newPoints, 'general');
@@ -1301,10 +1317,11 @@ export default function App() {
         .update({ points: newPoints })
         .eq('family_id', profile.family_id);
     }
+    return true;
   };
 
-  const handleAwardFamilyPoints = async (earnedAmount, reason = '반려몽 행복 수확') => {
-    if (earnedAmount <= 0) return;
+  const handleAwardFamilyPoints = async (earnedAmount: number, reason: string = '반려몽 행복 수확'): Promise<boolean> => {
+    if (earnedAmount <= 0) return false;
     const newPoints = points + earnedAmount;
     setPoints(newPoints);
     logPointTransaction('earn', earnedAmount, reason, newPoints, 'petmong');
@@ -1321,10 +1338,11 @@ export default function App() {
     } else {
       saveLocalState(newPoints, messages, events, smallTalk, shoppingItems, pointHistory);
     }
+    return true;
   };
 
   // Messaging Action (Optimistic 0ms UI Rendering + Background Sync)
-  const handleSendMessage = async (messageData) => {
+  const handleSendMessage = async (messageData: any) => {
     const now = new Date();
     const isPm = now.getHours() >= 12;
     const hours = now.getHours() % 12 || 12;
@@ -1332,11 +1350,16 @@ export default function App() {
     const timestamp = `${isPm ? '오후' : '오전'} ${hours}:${minutes}`;
 
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-    const optimisticMsg = {
+    const optimisticMsg: ChatMessage = {
       id: tempId,
       sender: profile?.role || currentUser,
-      profile_id: session?.user?.id || profile?.id || null,
-      senderObj: profile || null,
+      profile_id: session?.user?.id || profile?.id || undefined,
+      senderObj: profile ? {
+        id: profile.id,
+        name: profile.name,
+        avatar: profile.avatar,
+        color: profile.color,
+      } : undefined,
       senderName: profile?.name || null,
       text: typeof messageData.text === 'string'
         ? messageData.text
@@ -1355,7 +1378,7 @@ export default function App() {
     // 🚀 Optimistic Instant Render: message appears in UI immediately (0ms delay)
     setMessages(prev => [...prev, optimisticMsg]);
 
-    if (isSupabaseReady) {
+    if (isSupabaseReady && profile?.family_id && session?.user?.id) {
       try {
         let imageUrl = null;
 
@@ -1445,17 +1468,17 @@ export default function App() {
     }
   };
 
-  const handleMarkMessagesAsRead = async (roomId) => {
+  const handleMarkMessagesAsRead = async (roomId?: string) => {
     const targetRoomId = roomId || 'family-group';
     const myId = profile?.id || currentUser;
 
-    const checkRoomMatch = (msgRoom) => {
+    const checkRoomMatch = (msgRoom?: string) => {
       const mRoom = msgRoom || 'family-group';
       if (mRoom === targetRoomId) return true;
       if (targetRoomId.startsWith('direct-') && mRoom.startsWith('direct-')) {
         const targetParts = targetRoomId.replace('direct-', '').split('-');
         const msgParts = mRoom.replace('direct-', '').split('-');
-        return msgParts.every(p => targetParts.includes(p));
+        return msgParts.every((p: string) => targetParts.includes(p));
       }
       return false;
     };
@@ -1501,7 +1524,7 @@ export default function App() {
     }
   };
 
-  const handleCreateCustomRoom = async (newRoom) => {
+  const handleCreateCustomRoom = async (newRoom: any) => {
     const updated = [newRoom, ...customRooms];
     setCustomRooms(updated);
     try {
@@ -1512,7 +1535,7 @@ export default function App() {
   };
 
   // Calendar Actions
-  const handleAddEvent = async (eventData) => {
+  const handleAddEvent = async (eventData: any) => {
     const tempId = `evt-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
     const newEvent = {
       id: tempId,
@@ -1532,7 +1555,7 @@ export default function App() {
 
     if (isSupabaseReady && profile?.family_id && session?.user?.id) {
       try {
-        const payload = {
+        const payload: any = {
           family_id: profile.family_id,
           profile_id: session.user.id,
           title: eventData.title,
@@ -1582,8 +1605,8 @@ export default function App() {
             )
           );
         }
-      } catch (e) {
-        console.warn('일정 Supabase 저장 경고 (로컬 유지):', e.message);
+      } catch (e: any) {
+        console.warn('일정 Supabase 저장 경고 (로컬 유지):', e?.message || e);
         saveLocalState(points, messages, updated, smallTalk);
       }
     } else {
@@ -1591,7 +1614,7 @@ export default function App() {
     }
   };
 
-  const handleDeleteEvent = async (id) => {
+  const handleDeleteEvent = async (id: string | number) => {
     if (isSupabaseReady) {
       try {
         const { error } = await supabase
@@ -1609,10 +1632,10 @@ export default function App() {
     }
   };
 
-  const handleUpdateEvent = async (id, eventData) => {
+  const handleUpdateEvent = async (id: string | number, eventData: any) => {
     if (isSupabaseReady) {
       try {
-        const payload = {
+        const payload: any = {
           title: eventData.title,
           date: eventData.date,
           end_date: eventData.endDate || eventData.date,
@@ -1648,8 +1671,8 @@ export default function App() {
   };
 
   // Small Talk Actions
-  const handleAddResponse = async (user, answerText) => {
-    if (isSupabaseReady) {
+  const handleAddResponse = async (user: any, answerText: string = ''): Promise<boolean> => {
+    if (isSupabaseReady && profile?.family_id) {
       try {
         const myId = session?.user?.id || profile?.id;
         const isFirstAnswer = !smallTalk.responses?.[myId || user];
@@ -1754,6 +1777,7 @@ export default function App() {
       setSmallTalk(updatedSmallTalk);
       saveLocalState(newPoints, messages, events, updatedSmallTalk);
     }
+    return true;
   };
 
   const handleResetData = () => {
@@ -1780,7 +1804,7 @@ export default function App() {
     );
   };
 
-  const switchUser = (memberOrKey) => {
+  const switchUser = (memberOrKey: any) => {
     if (typeof memberOrKey === 'object' && memberOrKey !== null) {
       setCurrentUser(memberOrKey.id || memberOrKey.role || 'mom');
       if (memberOrKey.name) {
@@ -2054,11 +2078,7 @@ export default function App() {
     );
   }
 
-  const activeMember = profile
-    || (profile?.id && familyMembersList.find(m => m.id === profile.id))
-    || familyMembersList.find(m => m.id === currentUser)
-    || familyMembersList.find(m => m.role === currentUser) 
-    || { name: currentUser, avatar: '👦', color: '#8E8E93' };
+  const activeMember = profile || { name: currentUser, avatar: '👦', color: '#8E8E93' };
 
   return (
     <SafeAreaProvider>

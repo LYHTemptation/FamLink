@@ -30,9 +30,23 @@ const FAMILY_MEMBERS_STATIC = {
   daughter: { name: '딸', avatar: '👧', color: '#F39C12' },
 };
 
+import { FamilyMember, UserProfile } from '../types/domain';
+
+export interface FamilyScreenProps {
+  familyCode?: string | null;
+  familyMembersList: FamilyMember[];
+  currentUserProfile?: UserProfile | null;
+  onUpdateMood?: (mood: string, statusText?: string) => void;
+  onUpdateProfile?: (updated: any) => void;
+  onlineUsers?: any;
+  onLogout?: () => void;
+  onDeleteAccount?: () => void;
+  onNavigateScreen?: (screen: string) => void;
+}
+
 export default function FamilyScreen({
   familyCode,
-  familyMembersList,
+  familyMembersList = [],
   currentUserProfile,
   onUpdateMood,
   onUpdateProfile,
@@ -40,7 +54,7 @@ export default function FamilyScreen({
   onLogout,
   onDeleteAccount,
   onNavigateScreen,
-}) {
+}: FamilyScreenProps) {
   const [modalVisible, setModalVisible] = useState(false);
   const [policyModalVisible, setPolicyModalVisible] = useState(false);
   const [activePolicyTab, setActivePolicyTab] = useState('terms'); // 'terms' | 'privacy'
@@ -129,7 +143,7 @@ export default function FamilyScreen({
       Alert.alert('정원 마감 안내', '우리 가족의 최대 정원(10명)이 모두 찼습니다. 추가 가입이 제한됩니다.');
       return;
     }
-    await Clipboard.setStringAsync(familyCode);
+    await Clipboard.setStringAsync(familyCode || '');
     Alert.alert('복사 완료', '가족 코드가 클립보드에 복사되었습니다. 다른 가족에게 보내 가입하도록 하세요!');
   };
 
@@ -250,10 +264,10 @@ export default function FamilyScreen({
           </Text>
         </View>
 
-        {familyMembersList.map((member, index) => {
+        {familyMembersList.map((member: FamilyMember | any, index: number) => {
           const isDbProfile = member && typeof member === 'object' && 'name' in member;
           const roleKey = isDbProfile ? (member.role || 'son') : member;
-          const staticInfo = FAMILY_MEMBERS_STATIC[roleKey] || { name: '가족', avatar: '👦', color: '#8E8E93' };
+          const staticInfo = (FAMILY_MEMBERS_STATIC as Record<string, { name: string; avatar: string; color: string }>)[roleKey] || { name: '가족', avatar: '👦', color: '#8E8E93' };
           
           const memberName = isDbProfile ? member.name : staticInfo.name;
           const memberAvatar = isDbProfile ? member.avatar : staticInfo.avatar;

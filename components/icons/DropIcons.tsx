@@ -1,11 +1,16 @@
 import React from 'react';
-import Svg, { Path, Circle } from 'react-native-svg';
+import Svg, { Path, Circle, SvgProps } from 'react-native-svg';
+
+export interface DropIconProps extends SvgProps {
+  size?: number;
+  color?: string;
+}
 
 /**
  * 1. 행복 하트 방울 아이콘 (DropHeartIcon)
  * 사랑스럽고 생동감 넘치는 하트 + 하이라이트 광택
  */
-export function DropHeartIcon({ size = 26, color = '#FF4D6D', ...props }) {
+export function DropHeartIcon({ size = 26, color = '#FF4D6D', ...props }: DropIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 32 32" fill="none" {...props}>
       {/* 본체 하트 */}
@@ -30,7 +35,7 @@ export function DropHeartIcon({ size = 26, color = '#FF4D6D', ...props }) {
  * 2. 행운 클로버 방울 아이콘 (DropCloverIcon)
  * 4잎 행운의 클로버 + 자연스러운 줄기 & 잎맥
  */
-export function DropCloverIcon({ size = 26, color = '#10B981', ...props }) {
+export function DropCloverIcon({ size = 26, color = '#10B981', ...props }: DropIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 32 32" fill="none" {...props}>
       {/* 4잎 본체 */}
@@ -73,7 +78,7 @@ export function DropCloverIcon({ size = 26, color = '#10B981', ...props }) {
  * 3. 별빛 방울 아이콘 (DropStarIcon)
  * 앙증맞고 반짝이는 5각 별 + 광택
  */
-export function DropStarIcon({ size = 26, color = '#F59E0B', ...props }) {
+export function DropStarIcon({ size = 26, color = '#F59E0B', ...props }: DropIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 32 32" fill="none" {...props}>
       {/* 5각 별 본체 */}

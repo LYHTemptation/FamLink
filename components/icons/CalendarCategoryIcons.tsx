@@ -1,11 +1,17 @@
 import React from 'react';
-import Svg, { Path, Circle } from 'react-native-svg';
+import Svg, { Path, Circle, SvgProps } from 'react-native-svg';
+
+export interface CalendarCategoryIconProps extends SvgProps {
+  size?: number;
+  color?: string;
+  strokeWidth?: number;
+}
 
 /**
  * 1. 식사/외식 아이콘 (CategoryMealIcon)
  * 따뜻한 김이 피어오르는 정갈한 밥공기와 온기, 받침대 디자인
  */
-export function CategoryMealIcon({ size = 20, color = '#E74C3C', strokeWidth = 2, ...props }) {
+export function CategoryMealIcon({ size = 20, color = '#E74C3C', strokeWidth = 2, ...props }: CalendarCategoryIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       {/* 밥공기 본체 (부드러운 곡선) */}
@@ -58,7 +64,7 @@ export function CategoryMealIcon({ size = 20, color = '#E74C3C', strokeWidth = 2
  * 2. 기념일/생일 아이콘 (CategoryAnniversaryIcon)
  * 촛불 불꽃과 크림 데코가 얹어진 축하 2단 케이크 디자인
  */
-export function CategoryAnniversaryIcon({ size = 20, color = '#9B59B6', strokeWidth = 2, ...props }) {
+export function CategoryAnniversaryIcon({ size = 20, color = '#9B59B6', strokeWidth = 2, ...props }: CalendarCategoryIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       {/* 촛불 불꽃 */}
@@ -121,7 +127,7 @@ export function CategoryAnniversaryIcon({ size = 20, color = '#9B59B6', strokeWi
  * 3. 여행/나들이 아이콘 (CategoryTripIcon)
  * 아늑한 가족 캠핑 텐트와 햇살, 지면 디자인
  */
-export function CategoryTripIcon({ size = 20, color = '#2ECC71', strokeWidth = 2, ...props }) {
+export function CategoryTripIcon({ size = 20, color = '#2ECC71', strokeWidth = 2, ...props }: CalendarCategoryIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       {/* 지면 라인 */}
@@ -181,7 +187,7 @@ export function CategoryTripIcon({ size = 20, color = '#2ECC71', strokeWidth = 2
  * 4. 집안일/청소 아이콘 (CategoryHouseworkIcon)
  * 깨끗하고 산뜻한 친환경 분무기 스프레이와 반짝이는 매직 스파클 디자인
  */
-export function CategoryHouseworkIcon({ size = 20, color = '#F39C12', strokeWidth = 2, ...props }) {
+export function CategoryHouseworkIcon({ size = 20, color = '#F39C12', strokeWidth = 2, ...props }: CalendarCategoryIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       {/* 분무기 용기 몸통 */}
@@ -244,7 +250,7 @@ export function CategoryHouseworkIcon({ size = 20, color = '#F39C12', strokeWidt
  * 5. 기타/메모 아이콘 (CategoryOtherIcon)
  * 가족 메모 및 책갈피 리본 태그와 별 각인 디자인
  */
-export function CategoryOtherIcon({ size = 20, color = '#95A5A6', strokeWidth = 2, ...props }) {
+export function CategoryOtherIcon({ size = 20, color = '#95A5A6', strokeWidth = 2, ...props }: CalendarCategoryIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       {/* 북마크 리본 몸체 */}
@@ -278,7 +284,7 @@ export function CategoryOtherIcon({ size = 20, color = '#95A5A6', strokeWidth = 
  * 6. 직접 입력/커스텀 카테고리 아이콘 (CategoryCustomIcon)
  * 직접 입력 카테고리를 나타내는 네임태그와 플러스 디자인
  */
-export function CategoryCustomIcon({ size = 20, color = '#3498DB', strokeWidth = 2, ...props }) {
+export function CategoryCustomIcon({ size = 20, color = '#3498DB', strokeWidth = 2, ...props }: CalendarCategoryIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Path

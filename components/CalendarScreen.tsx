@@ -44,9 +44,17 @@ const FAMILY_MEMBERS = {
   daughter: { name: '딸', avatar: '👧', color: '#F39C12' },
 };
 
+import { CalendarEvent, UserProfile, FamilyMember } from '../types/domain';
+
+export interface CategoryInfoItem {
+  label: string;
+  icon: any;
+  color: string;
+}
+
 const PRESET_CATEGORIES = ['dinner', 'anniversary', 'trip', 'housework', 'etc'];
 
-const CATEGORIES = {
+const CATEGORIES: Record<string, CategoryInfoItem> = {
   dinner: { label: '가족 식사', icon: CategoryMealIcon, color: '#E74C3C' },
   meal: { label: '가족 식사', icon: CategoryMealIcon, color: '#E74C3C' },
   anniversary: { label: '기념일/생일', icon: CategoryAnniversaryIcon, color: '#9B59B6' },
@@ -56,7 +64,7 @@ const CATEGORIES = {
   etc: { label: '기타', icon: CategoryOtherIcon, color: '#95A5A6' },
 };
 
-const getCategoryInfo = (catKeyOrName) => {
+const getCategoryInfo = (catKeyOrName?: string | null): CategoryInfoItem => {
   if (!catKeyOrName) return CATEGORIES.etc;
   if (CATEGORIES[catKeyOrName]) {
     return CATEGORIES[catKeyOrName];
@@ -68,16 +76,26 @@ const getCategoryInfo = (catKeyOrName) => {
   };
 };
 
+export interface CalendarScreenProps {
+  events: CalendarEvent[];
+  currentUser?: any;
+  currentUserProfile?: UserProfile | null;
+  familyMembers: FamilyMember[];
+  onAddEvent: (event: any) => void;
+  onUpdateEvent?: (idOrEvent: any, maybeEvent?: any) => void;
+  onDeleteEvent: (id: string) => void;
+}
+
 export default function CalendarScreen({
-  events,
+  events = [],
   currentUser,
   currentUserProfile,
-  familyMembers,
+  familyMembers = [],
   onAddEvent,
   onUpdateEvent,
   onDeleteEvent,
-}) {
-  const getCreatorInfo = (item) => {
+}: CalendarScreenProps) {
+  const getCreatorInfo = (item: any) => {
     if (item?.creatorObj && typeof item.creatorObj === 'object') {
       return {
         name: item.creatorObj.name || item.creatorObj.role || '가족',
@@ -97,10 +115,10 @@ export default function CalendarScreen({
         return { name: matchByName.name, avatar: matchByName.avatar || '👦', color: matchByName.color || '#4A90E2' };
       }
     }
-    return FAMILY_MEMBERS[item?.creator] || { name: item?.creator || '가족', avatar: '👦', color: '#8E8E93' };
+    return (FAMILY_MEMBERS as Record<string, any>)[item?.creator] || { name: item?.creator || '가족', avatar: '👦', color: '#8E8E93' };
   };
 
-  const isEventOwner = (item) => {
+  const isEventOwner = (item: any) => {
     if (!item) return false;
     // 1. Check profile_id matching
     if (currentUserProfile?.id && item.profile_id && item.profile_id === currentUserProfile.id) {
@@ -126,7 +144,7 @@ export default function CalendarScreen({
     return `${y}-${m}-${d}`;
   };
 
-  const mainScrollRef = useRef(null);
+  const mainScrollRef = useRef<ScrollView>(null);
   const [currentDate, setCurrentDate] = useState(new Date());
 
   const todayFormattedKorean = useMemo(() => {
@@ -172,9 +190,9 @@ export default function CalendarScreen({
     }, 100);
   };
 
-  const handleSelectDate = (dateStr) => {
+  const handleSelectDate = (dateStr: any) => {
     setSelectedDate(dateStr);
-    if (dateStr && dateStr.includes('-')) {
+    if (dateStr && typeof dateStr === 'string' && dateStr.includes('-')) {
       const [tY, tM] = dateStr.split('-').map(Number);
       if (tY && tM && (tY !== year || tM !== month)) {
         setCurrentDate(new Date(tY, tM - 1, 1));
@@ -197,7 +215,7 @@ export default function CalendarScreen({
     setModalVisible(true);
   };
 
-  const handleOpenEditModal = (eventItem) => {
+  const handleOpenEditModal = (eventItem: any) => {
     if (!isEventOwner(eventItem)) {
       Alert.alert('권한 없음 ⚠️', '일정을 등록한 본인만 수정할 수 있습니다.');
       return;
@@ -220,7 +238,7 @@ export default function CalendarScreen({
     setModalVisible(true);
   };
 
-  const addDaysToDateStr = (dateStr, days) => {
+  const addDaysToDateStr = (dateStr: any, days: number) => {
     if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
     const [y, m, d] = dateStr.split('-').map(Number);
     const dt = new Date(y, m - 1, d);
@@ -284,7 +302,7 @@ export default function CalendarScreen({
     setModalVisible(false);
   };
 
-  const handleDeleteClick = (eventItem) => {
+  const handleDeleteClick = (eventItem: any) => {
     if (!isEventOwner(eventItem)) {
       Alert.alert('권한 없음 ⚠️', '일정을 등록한 본인만 삭제할 수 있습니다.');
       return;
@@ -313,7 +331,7 @@ export default function CalendarScreen({
     calendarCells.push(dateStr);
   }
 
-  const getEventsForDate = (dateStr) => {
+  const getEventsForDate = (dateStr: any) => {
     return events ? events.filter((e) => {
       const start = e.date;
       const end = e.endDate || e.end_date || e.date;
@@ -341,7 +359,7 @@ export default function CalendarScreen({
         const eventEndDate = new Date(endY, endM - 1, endD);
         eventEndDate.setHours(23, 59, 59, 999);
 
-        const diffTime = eventStartDate - today;
+        const diffTime = eventStartDate.getTime() - today.getTime();
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         const isOngoing = today >= eventStartDate && today <= eventEndDate;
 
@@ -990,6 +1008,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#DDA0DD',
     opacity: 0.18,
     borderRadius: 18,
+  },
+  blobLavender: {
+    backgroundColor: '#DDA0DD',
+    opacity: 0.18,
   },
   headerTopRow: {
     flexDirection: 'row',

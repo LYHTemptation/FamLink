@@ -51,6 +51,26 @@ export const commonStyles = StyleSheet.create({
     marginTop: 4,
     fontWeight: typography.weight.medium,
   },
+  subHeaderBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
+  },
+  subHeaderTitle: {
+    fontSize: 22,
+    fontWeight: '800' as const,
+    color: colors.text.primary,
+    letterSpacing: -0.4,
+  },
+  subHeaderSub: {
+    fontSize: 13,
+    color: colors.text.secondary,
+    marginTop: 2,
+    fontWeight: '500' as const,
+  },
 
   // 3. Standard Cozy Cards (곡률 20, 웜 보더 #F5F0E8)
   card: {

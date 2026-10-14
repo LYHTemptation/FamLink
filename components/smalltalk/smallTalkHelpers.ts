@@ -10,7 +10,7 @@ export interface ChoreIconMeta {
 }
 
 export const getChoreIconMeta = (
-  category?: string,
+  category?: string | null,
   title: string = ''
 ): ChoreIconMeta => {
   const safe = (title || '').toLowerCase();

@@ -38,6 +38,45 @@ import {
 } from './petmong/petmongConstants';
 import PetmongWarmthModal from './petmong/PetmongWarmthModal';
 import styles from './petmong/PetmongStyles';
+import { PetmongCharacter, PetmongVitals, PetmongWhisper, ChatMessage, UserProfile } from '../types/domain';
+
+export interface FloorRipple {
+  id: string;
+  x: number;
+  y: number;
+}
+
+export interface FloatingHeart {
+  id: string;
+  x: number;
+  text: string;
+}
+
+export interface DragPos {
+  x: number;
+  y: number;
+}
+
+export interface PetmongGameEngineProps {
+  character?: PetmongCharacter | any;
+  owner?: UserProfile | any;
+  isVisiting?: boolean;
+  visitorCharacter?: PetmongCharacter | any | null;
+  theme?: string;
+  insets?: { top: number; bottom: number };
+  vitals?: PetmongVitals | any;
+  onUpdateVitals?: (newVitals: any) => void;
+  onGainExp?: (amount: number, reason?: string) => void;
+  onAwardPoints?: (amount: number, reason?: string) => void;
+  onCareAction?: (action: string, bonusExp?: number) => void;
+  onOpenGrowthBook?: (() => void) | null;
+  unreadWhispers?: PetmongWhisper[] | any[];
+  onOpenWhisper?: ((whisper: any) => void) | null;
+  onOpenWriteWhisper?: (() => void) | null;
+  messages?: ChatMessage[] | any[];
+  smallTalkState?: any;
+  onNavigateScreen?: ((screenName: string) => void) | null;
+}
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
@@ -61,7 +100,7 @@ export default function PetmongGameEngine({
   messages = [],
   smallTalkState = {},
   onNavigateScreen = null,
-}) {
+}: PetmongGameEngineProps) {
   const transparentCharImageUrl = useTransparentImage(character?.image_url);
 
   // -------------------------------------------------------------
@@ -135,10 +174,10 @@ export default function PetmongGameEngine({
 
   // 쓰다듬기 콤보 & 바닥 탭 물결 리플 상태
   const [pettingCombo, setPettingCombo] = useState(0);
-  const [floorRipples, setFloorRipples] = useState([]);
-  const [floatingHearts, setFloatingHearts] = useState([]);
-  const comboResetTimerRef = useRef(null);
-  const particleTimersRef = useRef(new Set());
+  const [floorRipples, setFloorRipples] = useState<FloorRipple[]>([]);
+  const [floatingHearts, setFloatingHearts] = useState<FloatingHeart[]>([]);
+  const comboResetTimerRef = useRef<any>(null);
+  const particleTimersRef = useRef<Set<any>>(new Set());
 
   useEffect(() => {
     return () => {
@@ -156,7 +195,7 @@ export default function PetmongGameEngine({
     GUARDIAN_CONSTELLATIONS[constellationIndex] || GUARDIAN_CONSTELLATIONS[0];
 
   const [connectedStarIds, setConnectedStarIds] = useState([1]);
-  const [dragCurrentPos, setDragCurrentPos] = useState(null);
+  const [dragCurrentPos, setDragCurrentPos] = useState<DragPos | null>(null);
   const [isConstCompleted, setIsConstCompleted] = useState(false);
   const [canvasLayout, setCanvasLayout] = useState({
     width: SCREEN_WIDTH,
@@ -396,7 +435,7 @@ export default function PetmongGameEngine({
 
   // 총총걸음 + 좌우 갸우뚱(Waddle Tilt) + 착지 탄성 물리 보행 엔진
   const walkToPosition = useCallback(
-    (targetX, onFinish, speedMultiplier = 1) => {
+    (targetX: number, onFinish?: () => void, speedMultiplier = 1) => {
       const clampedTargetX = Math.max(
         16,
         Math.min(SCREEN_WIDTH - 150, targetX)
@@ -544,7 +583,7 @@ export default function PetmongGameEngine({
     particleTimersRef.current.add(timer);
   }, []);
 
-  const spawnFloorRipple = useCallback((x, y) => {
+  const spawnFloorRipple = useCallback((x: number, y: number) => {
     const id = `ripple_${Date.now()}_${Math.random()}`;
     setFloorRipples((prev) => [...prev.slice(-4), { id, x, y }]);
     const timer = setTimeout(() => {
@@ -579,7 +618,7 @@ export default function PetmongGameEngine({
     if (onGainExp) onGainExp(expGain);
     if (onAwardPoints) onAwardPoints(30, '반려몽 대화 온기 열매 수확');
     if (onUpdateVitals) {
-      onUpdateVitals((prev) => ({
+      onUpdateVitals((prev: any) => ({
         ...prev,
         happiness: 100,
         energy: 100,
@@ -633,7 +672,7 @@ export default function PetmongGameEngine({
   };
 
   // 거실 바닥을 탭하면 해당 위치로 반려몽이 총총걸음으로 달려오는 인터랙션
-  const handleRoomFloorTap = (e) => {
+  const handleRoomFloorTap = (e: any) => {
     const now = Date.now();
     if (now - lastActionTimeRef.current < 420) return;
     lastActionTimeRef.current = now;
@@ -734,7 +773,7 @@ export default function PetmongGameEngine({
   ]);
 
   useEffect(() => {
-    let anim;
+    let anim: Animated.CompositeAnimation | null = null;
     if (isNightMode) {
       anim = Animated.loop(
         Animated.sequence([
@@ -762,7 +801,7 @@ export default function PetmongGameEngine({
   // -------------------------------------------------------------
   // 9. 인룸 수호 별자리 잇기 (In-Room Constellation Tracing)
   // -------------------------------------------------------------
-  const processConstellationPoint = (x, y) => {
+  const processConstellationPoint = (x: number, y: number) => {
     if (isConstCompleted) return;
     setDragCurrentPos({ x, y });
 
@@ -830,7 +869,7 @@ export default function PetmongGameEngine({
     const awardedExp = 35;
     if (onGainExp) onGainExp(awardedExp);
     if (onUpdateVitals) {
-      onUpdateVitals((prev) => ({
+      onUpdateVitals((prev: any) => ({
         ...prev,
         energy: 100,
         happiness: 100,
@@ -877,7 +916,7 @@ export default function PetmongGameEngine({
     );
   };
 
-  const handleConstellationTouch = (e) => {
+  const handleConstellationTouch = (e: any) => {
     if (isConstCompleted) return;
     const t = e.nativeEvent?.touches?.[0] || e.nativeEvent;
     const x = t.locationX != null ? t.locationX : t.pageX || 0;
@@ -885,7 +924,7 @@ export default function PetmongGameEngine({
     processConstellationPoint(x, y);
   };
 
-  const handleConstellationWebMouse = (e) => {
+  const handleConstellationWebMouse = (e: any) => {
     if (isConstCompleted) return;
     const x =
       e.nativeEvent?.offsetX ?? (e.nativeEvent?.locationX ?? (e.clientX || 0));
@@ -946,7 +985,7 @@ export default function PetmongGameEngine({
   // 10. 반려몽 2D 젤리 스쿼시 & 쓰다듬기 콤보 물리 (Petting Combo Engine)
   // -------------------------------------------------------------
   const handlePetPress = () => {
-    if (unreadWhispers && unreadWhispers.length > 0 && onOpenWhisper) {
+    if (unreadWhispers && unreadWhispers.length > 0 && typeof onOpenWhisper === 'function') {
       onOpenWhisper(unreadWhispers[0]);
       return;
     }
@@ -1060,15 +1099,17 @@ export default function PetmongGameEngine({
           onTouchStart={handleConstellationTouch}
           onTouchMove={handleConstellationTouch}
           onTouchEnd={handleConstellationTouchEnd}
-          onMouseDown={(e) => {
-            isMouseActiveRef.current = true;
-            handleConstellationWebMouse(e);
-          }}
-          onMouseMove={(e) => {
-            if (isMouseActiveRef.current) handleConstellationWebMouse(e);
-          }}
-          onMouseUp={handleConstellationTouchEnd}
-          onMouseLeave={handleConstellationTouchEnd}
+          {...({
+            onMouseDown: (e: any) => {
+              isMouseActiveRef.current = true;
+              handleConstellationWebMouse(e);
+            },
+            onMouseMove: (e: any) => {
+              if (isMouseActiveRef.current) handleConstellationWebMouse(e);
+            },
+            onMouseUp: handleConstellationTouchEnd,
+            onMouseLeave: handleConstellationTouchEnd,
+          } as any)}
         >
           <View style={styles.constellationHeaderRow} pointerEvents="box-none">
             {!isConstCompleted ? (
@@ -1219,7 +1260,7 @@ export default function PetmongGameEngine({
             {unreadWhispers && unreadWhispers.length > 0 && (
               <TouchableOpacity
                 style={styles.whisperDeliveryBadge}
-                onPress={() => onOpenWhisper && onOpenWhisper(unreadWhispers[0])}
+                onPress={() => onOpenWhisper?.(unreadWhispers[0])}
                 activeOpacity={0.85}
               >
                 <Animated.View
@@ -1297,7 +1338,7 @@ export default function PetmongGameEngine({
                   },
                 ]}
                 onPress={() => {
-                  if (onOpenGrowthBook) onOpenGrowthBook();
+                  onOpenGrowthBook?.();
                 }}
                 activeOpacity={0.8}
               >
@@ -1361,7 +1402,7 @@ export default function PetmongGameEngine({
                       styles.routinePill,
                       { backgroundColor: '#EDE9FE', borderColor: '#C4B5FD' },
                     ]}
-                    onPress={() => onNavigateScreen && onNavigateScreen('smalltalk')}
+                    onPress={() => onNavigateScreen?.('smalltalk')}
                     activeOpacity={0.75}
                   >
                     <Text style={styles.routineEmoji}>📖</Text>
@@ -1377,7 +1418,7 @@ export default function PetmongGameEngine({
                       styles.routinePill,
                       { backgroundColor: '#FCE7F3', borderColor: '#FBCFE8' },
                     ]}
-                    onPress={() => onNavigateScreen && onNavigateScreen('album')}
+                    onPress={() => onNavigateScreen?.('album')}
                     activeOpacity={0.75}
                   >
                     <Text style={styles.routineEmoji}>🖼️</Text>
@@ -1393,7 +1434,7 @@ export default function PetmongGameEngine({
                       styles.routinePill,
                       { backgroundColor: '#FEF3C7', borderColor: '#FDE68A' },
                     ]}
-                    onPress={() => onNavigateScreen && onNavigateScreen('calendar')}
+                    onPress={() => onNavigateScreen?.('calendar')}
                     activeOpacity={0.75}
                   >
                     <Text style={styles.routineEmoji}>🪟</Text>
@@ -1409,7 +1450,7 @@ export default function PetmongGameEngine({
                       styles.routinePill,
                       { backgroundColor: '#E0E7FF', borderColor: '#C7D2FE' },
                     ]}
-                    onPress={() => onNavigateScreen && onNavigateScreen('family')}
+                    onPress={() => onNavigateScreen?.('family')}
                     activeOpacity={0.75}
                   >
                     <Text style={styles.routineEmoji}>💤</Text>

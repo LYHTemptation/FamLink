@@ -37,7 +37,7 @@ export async function makeBackgroundTransparentOnDevice(imageSource: string, thr
   if (imageSource.startsWith('data:image/svg+xml')) return imageSource;
 
   if (transparentCache.has(imageSource)) {
-    return transparentCache.get(imageSource);
+    return transparentCache.get(imageSource)!;
   }
 
   try {

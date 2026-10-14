@@ -28,7 +28,7 @@ function getFiles(dir, exts = ['.js', '.jsx', '.ts', '.tsx']) {
         results = results.concat(getFiles(fullPath, exts));
       }
     } else {
-      if (exts.includes(path.extname(file))) {
+      if (exts.includes(path.extname(file)) && !file.endsWith('.d.ts')) {
         results.push(fullPath);
       }
     }

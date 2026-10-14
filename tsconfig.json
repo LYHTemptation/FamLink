@@ -11,8 +11,10 @@
   },
   "include": [
     "App.js",
+    "App.tsx",
     "index.js",
     "types/**/*.ts",
+    "types/**/*.d.ts",
     "theme/**/*.ts",
     "utils/**/*.ts",
     "lib/**/*.js",

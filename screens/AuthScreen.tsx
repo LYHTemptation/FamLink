@@ -26,7 +26,11 @@ const ROLE_PRESETS = [
   { label: '직접 입력', avatar: '🧑', color: '#FF6B47' },
 ];
 
-export default function AuthScreen({ onAuthComplete }) {
+export interface AuthScreenProps {
+  onAuthComplete: (session: any, profile?: any) => void;
+}
+
+export default function AuthScreen({ onAuthComplete }: AuthScreenProps) {
   const insets = useSafeAreaInsets();
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -223,7 +227,7 @@ export default function AuthScreen({ onAuthComplete }) {
         setIsLogin(true);
       }
     } catch (err) {
-      Alert.alert('실패', err.message || '인증 처리에 실패했습니다.');
+      Alert.alert('실패', (err as any)?.message || '인증 처리에 실패했습니다.');
     } finally {
       setLoading(false);
     }

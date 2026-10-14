@@ -84,10 +84,12 @@ export function normalizeRecurringShoppingItems(items: any[]): any[] {
 
     const targetDeleteUuids = expiredOneTimeIds.filter(isUuid);
     if (targetDeleteUuids.length > 0) {
-      supabase
-        .from('shopping_items')
-        .delete()
-        .in('id', targetDeleteUuids)
+      Promise.resolve(
+        supabase
+          .from('shopping_items')
+          .delete()
+          .in('id', targetDeleteUuids)
+      )
         .then(({ error }) => {
           if (error) {
             console.log('Auto-cleanup expired one-time chores error:', error);
@@ -98,16 +100,18 @@ export function normalizeRecurringShoppingItems(items: any[]): any[] {
 
     const targetResetUuids = resetRecurringIds.filter(isUuid);
     if (targetResetUuids.length > 0) {
-      supabase
-        .from('shopping_items')
-        .update({
-          is_completed: false,
-          completed_by: null,
-          points_earned: false,
-          completed_date: null,
-          completed_at: null,
-        })
-        .in('id', targetResetUuids)
+      Promise.resolve(
+        supabase
+          .from('shopping_items')
+          .update({
+            is_completed: false,
+            completed_by: null,
+            points_earned: false,
+            completed_date: null,
+            completed_at: null,
+          })
+          .in('id', targetResetUuids)
+      )
         .then(({ error }) => {
           if (error) {
             console.log('Auto-reset recurring chores in DB error:', error);

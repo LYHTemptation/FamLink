@@ -35,7 +35,38 @@ const { width: INITIAL_WIDTH, height: INITIAL_HEIGHT } = Dimensions.get('window'
 // -----------------------------------------------------------------
 // 9-Tier Bubble Evolution Hierarchy (Suika / Watermelon Style)
 // -----------------------------------------------------------------
-export const BUBBLE_TIERS = [
+export interface BubbleTier {
+  level: number;
+  name: string;
+  radius: number;
+  color: string;
+  stroke: string;
+  points: number;
+  emoji: string;
+}
+
+export interface BubbleItem {
+  id: string;
+  level: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  radius: number;
+  tier: BubbleTier;
+}
+
+export interface BubblePopGameProps {
+  visible: boolean;
+  character?: any;
+  transparentUrl?: string | null;
+  onClose: () => void;
+  onGameComplete?: (result: any) => void;
+  canEarnReward?: boolean;
+  remainingRewards?: number;
+}
+
+export const BUBBLE_TIERS: BubbleTier[] = [
   { level: 1, name: '미니 방울', radius: 18, color: '#38BDF8', stroke: '#0284C7', points: 4, emoji: '💧' },
   { level: 2, name: '아기 거품', radius: 24, color: '#A7F3D0', stroke: '#059669', points: 8, emoji: '🫧' },
   { level: 3, name: '향기 비누', radius: 30, color: '#FDE047', stroke: '#D97706', points: 16, emoji: '🧼' },
@@ -47,7 +78,7 @@ export const BUBBLE_TIERS = [
   { level: 9, name: '대왕 무지개', radius: 88, color: '#EC4899', stroke: '#BE185D', points: 1000, emoji: '🌈' },
 ];
 
-function BubbleSphere({ tier, radius, scaleAnim = null }) {
+function BubbleSphere({ tier, radius, scaleAnim = null }: { tier: BubbleTier; radius?: number; scaleAnim?: any }) {
   const r = radius || tier.radius;
   const size = r * 2;
 
@@ -95,7 +126,7 @@ function BubbleSphere({ tier, radius, scaleAnim = null }) {
       </Svg>
 
       {/* Center Fruit / Emoji Icon */}
-      <View style={[StyleSheet.absoluteFillObject, { alignItems: 'center', justifyContent: 'center' }]} pointerEvents="none">
+      <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]} pointerEvents="none">
         <Text style={{ fontSize: Math.max(13, r * 0.68) }}>{tier.emoji}</Text>
       </View>
     </Animated.View>
@@ -118,7 +149,7 @@ export default function BubblePopGame({
   onGameComplete,
   canEarnReward = true,
   remainingRewards = 1,
-}) {
+}: BubblePopGameProps) {
   const [dimensions, setDimensions] = useState(Dimensions.get('window'));
   const screenWidth = dimensions.width;
   const screenHeight = dimensions.height;
@@ -147,9 +178,9 @@ export default function BubblePopGame({
   const [canDrop, setCanDrop] = useState(true);
 
   // Active Bubbles in Tub
-  const [bubbles, setBubbles] = useState([]);
-  const [particles, setParticles] = useState([]);
-  const [toasts, setToasts] = useState([]);
+  const [bubbles, setBubbles] = useState<BubbleItem[]>([]);
+  const [particles, setParticles] = useState<any[]>([]);
+  const [toasts, setToasts] = useState<any[]>([]);
 
   // Bathtub Container Dimensions
   const tubPadding = 24;
@@ -167,7 +198,7 @@ export default function BubblePopGame({
   const gameStateRef = useRef(gameState);
   gameStateRef.current = gameState;
 
-  const bubblesRef = useRef([]);
+  const bubblesRef = useRef<BubbleItem[]>([]);
   const canDropRef = useRef(true);
   canDropRef.current = canDrop;
 
@@ -178,11 +209,11 @@ export default function BubblePopGame({
   currentTierIndexRef.current = currentTierIndex;
 
   const dangerTimerRef = useRef(0);
-  const animFrameRef = useRef(null);
-  const gameTimerRef = useRef(null);
+  const animFrameRef = useRef<number | null>(null);
+  const gameTimerRef = useRef<any>(null);
 
   // Trigger Score / Message Toast
-  const triggerToast = useCallback((text, color = '#38BDF8', x = null, y = null) => {
+  const triggerToast = useCallback((text: string, color: string = '#38BDF8', x: number | null = null, y: number | null = null) => {
     const id = `toast_${Date.now()}_${Math.random()}`;
     const toastX = x !== null ? Math.max(20, Math.min(screenWidth - 140, x - 50)) : screenWidth / 2 - 60;
     const toastY = y !== null ? Math.max(90, Math.min(screenHeight - 180, y - 30)) : screenHeight / 2;
@@ -284,7 +315,7 @@ export default function BubblePopGame({
   // -----------------------------------------------------------------
   // Merge Animation & Score Award
   // -----------------------------------------------------------------
-  const handleMerge = useCallback((b1, b2, newLevel) => {
+  const handleMerge = useCallback((b1: BubbleItem, b2: BubbleItem, newLevel: number) => {
     const midX = (b1.x + b2.x) / 2;
     const midY = (b1.y + b2.y) / 2;
     const nextTier = BUBBLE_TIERS[newLevel - 1];
@@ -524,7 +555,7 @@ export default function BubblePopGame({
   }, [gameState, finishGame]);
 
   // Handle Touch/Mouse Drag to aim dropper
-  const handleAimMove = (pageX) => {
+  const handleAimMove = (pageX: number) => {
     if (gameStateRef.current !== 'playing') return;
     const currentTier = BUBBLE_TIERS[currentTierIndex];
     const clamped = Math.max(tubLeft + currentTier.radius, Math.min(tubRight - currentTier.radius, pageX));
@@ -532,7 +563,7 @@ export default function BubblePopGame({
   };
 
   // Evaluation Grade
-  const getGameGrade = (finalScore, finalCleanliness) => {
+  const getGameGrade = (finalScore: number, finalCleanliness: number) => {
     if (finalCleanliness >= 80 || finalScore >= 800) {
       return { grade: 'S', color: '#FAAD14', title: '무지개 버블 마스터! 👑' };
     }
@@ -578,13 +609,15 @@ export default function BubblePopGame({
     >
       <View
         style={[styles.gameContainer, { width: screenWidth, height: screenHeight }]}
-        onTouchMove={(e) => handleAimMove(e.nativeEvent.pageX)}
+        onTouchMove={(e: any) => handleAimMove(e.nativeEvent.pageX)}
         onTouchEnd={() => dropBubble()}
-        onMouseMove={(e) => {
-          const x = e.nativeEvent.pageX || e.clientX || 0;
-          handleAimMove(x);
-        }}
-        onMouseUp={() => dropBubble()}
+        {...({
+          onMouseMove: (e: any) => {
+            const x = e.nativeEvent?.pageX || e.clientX || 0;
+            handleAimMove(x);
+          },
+          onMouseUp: () => dropBubble(),
+        } as any)}
       >
         {/* Soft Cozy Bathroom Atmosphere Background */}
         <View style={styles.bathBackgroundLayer} pointerEvents="none">

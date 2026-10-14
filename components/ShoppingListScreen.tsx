@@ -22,18 +22,37 @@ import {
 } from './icons';
 import { colors, typography, commonStyles } from '../theme';
 import UserAvatar from './UserAvatar';
+import { ShoppingItem, UserProfile, FamilyMember } from '../types/domain';
+
+export interface NewShoppingItemPayload {
+  title: string;
+  assignee: string;
+  repeat_type: 'none' | 'daily' | 'weekly' | string;
+}
+
+export interface ShoppingListScreenProps {
+  shoppingItems: ShoppingItem[];
+  currentUserProfile?: UserProfile | null;
+  familyMembers: FamilyMember[];
+  onAddItem: (item: NewShoppingItemPayload) => void;
+  onToggleItem: (itemOrId: any, completed?: boolean) => void;
+  onDeleteItem: (id: string) => void;
+  onClearCompleted?: () => void;
+  onToggleRepeat?: (itemOrId: any, currentRepeatType?: string) => void;
+  embedded?: boolean;
+}
 
 export default function ShoppingListScreen({
-  shoppingItems,
+  shoppingItems = [],
   currentUserProfile,
-  familyMembers,
+  familyMembers = [],
   onAddItem,
   onToggleItem,
   onDeleteItem,
   onClearCompleted,
   onToggleRepeat,
   embedded = false,
-}) {
+}: ShoppingListScreenProps) {
   const [modalVisible, setModalVisible] = useState(false);
   const [itemTitle, setItemTitle] = useState('');
   const [selectedAssignee, setSelectedAssignee] = useState('가족 전체');
@@ -59,7 +78,7 @@ export default function ShoppingListScreen({
     setModalVisible(false);
   };
 
-  const handleDeleteConfirm = (item) => {
+  const handleDeleteConfirm = (item: ShoppingItem) => {
     const isRepeating = item.repeat_type && item.repeat_type !== 'none';
     Alert.alert(
       '항목 삭제',
@@ -106,7 +125,7 @@ export default function ShoppingListScreen({
     );
   };
 
-  const formatItemDateTime = (dateVal) => {
+  const formatItemDateTime = (dateVal: any) => {
     if (!dateVal) return '';
     try {
       const d = new Date(dateVal);
@@ -140,7 +159,7 @@ export default function ShoppingListScreen({
 
   const todayStr = getTodayString();
 
-  const isDateToday = (dateVal) => {
+  const isDateToday = (dateVal: any) => {
     if (!dateVal) return false;
     try {
       const d = new Date(dateVal);
@@ -409,7 +428,7 @@ export default function ShoppingListScreen({
                   <TouchableOpacity
                     key={item.key}
                     style={[styles.assigneeChip, isSelected && styles.assigneeChipActive]}
-                    onPress={() => setSelectedAssignee(item.name)}
+                    onPress={() => setSelectedAssignee(item.name || '')}
                   >
                     <UserAvatar avatar={item.avatar} size={18} style={{ marginRight: 6 }} />
                     <Text style={[styles.assigneeChipText, isSelected && styles.assigneeChipTextActive]}>
@@ -477,9 +496,22 @@ export default function ShoppingListScreen({
 const styles = StyleSheet.create({
   container: commonStyles.screenContainer,
   scrollContent: commonStyles.scrollContent,
-  subHeaderBar: commonStyles.subHeaderBar,
-  subHeaderTitle: commonStyles.subHeaderTitle,
-  subHeaderSub: commonStyles.subHeaderSub,
+  subHeaderBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  subHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text.primary,
+  },
+  subHeaderSub: {
+    fontSize: 13,
+    color: colors.text.secondary,
+    marginTop: 2,
+  },
   addBtn: {
     flexDirection: 'row',
     backgroundColor: '#FF6B47',

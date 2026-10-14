@@ -32,7 +32,7 @@
 
 ```text
 FamLink/
-├── App.js                                  # 루트 상태 컨테이너 및 화면 라우팅
+├── App.tsx                                 # 루트 상태 컨테이너 및 화면 라우팅
 ├── types/
 │   └── domain.ts                           # 전역 도메인 인터페이스 (FamilyMember, UserProfile, ChatMessage 등)
 ├── theme/                                  # 디자인 시스템 단일 진실 공급원 (SSOT)
@@ -62,19 +62,19 @@ FamLink/
     ├── photobook/                          # photobookConstants.ts, PhotobookHudModals.tsx, PhotobookStyles.ts
     ├── chat/                               # chatHelpers.ts, ChatAttachmentModals.tsx, ChatStyles.ts
     ├── smalltalk/                          # smallTalkHelpers.ts, SmallTalkModals.tsx, SmallTalkStyles.ts
-    ├── minigames/                          # SnackCatchGame.js, CardMatchGame.js, BubblePopGame.js, DreamConstellationGame.js
-    ├── icons/                              # 커스텀 SVG 아이콘 팩 (MoodIcons.tsx 등)
-    ├── HomeScreen.js                       # 통합 홈 대시보드
-    ├── ChatScreen.js                       # 실시간 가족 메신저 메인 뷰
-    ├── SmallTalkScreen.js                  # 오늘 함께(스몰톡·집안일·미니게임) 메인 뷰
-    ├── InteriorScreen.js & InteriorStyles.ts # 반려몽 감성 거실 룸 & 외형/테마 관리
-    ├── PetmongGameEngine.js                # 가족 대화 온기 흡수 자율 성장 엔진 & 비밀 귓속말
-    ├── PetmongGrowthBookModal.js           # 반려몽 4단계 성장 앨범 모달
+    ├── minigames/                          # SnackCatchGame.tsx, CardMatchGame.tsx, BubblePopGame.tsx, DreamConstellationGame.tsx
+    ├── icons/                              # 커스텀 SVG 아이콘 팩 (MoodIcons.tsx, TabBarIcons.tsx 등)
+    ├── HomeScreen.tsx                      # 통합 홈 대시보드
+    ├── ChatScreen.tsx                      # 실시간 가족 메신저 메인 뷰
+    ├── SmallTalkScreen.tsx                 # 오늘 함께(스몰톡·집안일·미니게임) 메인 뷰
+    ├── InteriorScreen.tsx & InteriorStyles.ts # 반려몽 감성 거실 룸 & 외형/테마 관리
+    ├── PetmongGameEngine.tsx               # 가족 대화 온기 흡수 자율 성장 엔진 & 비밀 귓속말
+    ├── PetmongGrowthBookModal.tsx          # 반려몽 4단계 성장 앨범 모달
     ├── PhotoAlbumScreen.tsx                # 포토북 스튜디오 & 스몰톡 아카이브 탭 컨테이너
-    ├── PhotobookStudioScreen.js            # 150×210mm A5 16P 포토북 조판 캔버스
-    ├── CalendarScreen.js                   # 공유 캘린더 & 공휴일/D-Day
-    ├── ShoppingListScreen.js               # 장보기 & 집안일 체크리스트
-    ├── FamilyScreen.js                     # 가족 구성원(최대 10인) & 프로필/기분 관리
+    ├── PhotobookStudioScreen.tsx           # 150×210mm A5 16P 포토북 조판 캔버스
+    ├── CalendarScreen.tsx                  # 공유 캘린더 & 공휴일/D-Day
+    ├── ShoppingListScreen.tsx              # 장보기 & 집안일 체크리스트
+    ├── FamilyScreen.tsx                    # 가족 구성원(최대 10인) & 프로필/기분 관리
     └── UserAvatar.tsx                      # 다중 포맷(URL/Base64/이모지) 원형 아바타
 ```
 

@@ -800,10 +800,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   // Touch & Dialogue Interaction Styles (Sumone Style)
-  charTouchArea: {
-    alignItems: 'center',
-    position: 'relative',
-  },
   speechBubbleContainer: {
     position: 'absolute',
     bottom: '100%',

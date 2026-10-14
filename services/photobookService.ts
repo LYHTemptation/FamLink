@@ -58,14 +58,16 @@ export async function saveFamilyPhotobookToDB(params: {
   const { familyId, volumeId, payload, updatedBy } = params;
   if (!familyId || familyId === 'default-family') return;
 
-  supabase
-    .from('petmong_activities')
-    .insert({
-      family_id: familyId,
-      action_type: 'PHOTOBOOK_SYNC_UPDATE',
-      exp_gained: 0,
-      points_awarded: 0,
-    })
+  Promise.resolve(
+    supabase
+      .from('petmong_activities')
+      .insert({
+        family_id: familyId,
+        action_type: 'PHOTOBOOK_SYNC_UPDATE',
+        exp_gained: 0,
+        points_awarded: 0,
+      })
+  )
     .then(() => {})
     .catch(() => {});
 
