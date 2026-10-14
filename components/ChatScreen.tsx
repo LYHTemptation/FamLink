@@ -2250,16 +2250,24 @@ export default function ChatScreen({
     );
   }
 
+  // 키보드가 올라올 때 최신 메시지가 가려지지 않도록 하단으로 부드럽게 스크롤
+  useEffect(() => {
+    if (!selectedRoomId || Platform.OS === 'web') return undefined;
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const sub = Keyboard.addListener(showEvent, () => {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 60);
+    });
+    return () => sub.remove();
+  }, [selectedRoomId]);
+
   // 2. RENDER CHAT CONVERSATION VIEW (When a chat room is opened)
   const currentRoom = CHAT_ROOMS.find(r => r.id === selectedRoomId) || CHAT_ROOMS[0];
   const roomMessages = (messages || []).filter(m => isMessageInRoom(m, selectedRoomId || 'family-group', currentRoom?.otherMemberId));
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-    >
+    <View style={styles.container}>
       {/* Detail Chat Header with Back Button */}
       <View style={styles.chatHeader}>
         <TouchableOpacity
@@ -2341,6 +2349,7 @@ export default function ChatScreen({
           ref={flatListRef}
           data={roomMessages}
           keyExtractor={(item) => item.id}
+          keyboardShouldPersistTaps="handled" 
           renderItem={renderMessageItem}
           style={[styles.flatListStyle, !isScrolledToBottom && { opacity: 0 }]}
           contentContainerStyle={styles.listContent}
@@ -2411,7 +2420,7 @@ export default function ChatScreen({
       )}
 
       {/* Message Input Box */}
-      <View style={[styles.inputArea, { paddingBottom: Math.max(10, insets.bottom) }]}>
+      <View style={styles.inputArea}>
         <TouchableOpacity 
           style={styles.attachButton} 
           onPress={() => setAttachMenuVisible(true)} 
@@ -2517,7 +2526,7 @@ export default function ChatScreen({
         handlePinNotice={handlePinNotice}
         handleTriggerDelete={handleTriggerDelete}
       />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

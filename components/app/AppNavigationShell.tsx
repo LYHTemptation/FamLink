@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   Modal,
+  Keyboard,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Trophy, RotateCcw } from 'lucide-react-native';
@@ -92,12 +94,32 @@ export function AppTopNavbar({
 export interface AppBottomTabbarProps {
   currentScreen: string;
   onSelectScreen: (screen: string) => void;
+  hidden?: boolean;
 }
 
 export function AppBottomTabbar({
   currentScreen,
   onSelectScreen,
-}: AppBottomTabbarProps): React.ReactElement {
+  hidden = false,
+}: AppBottomTabbarProps): React.ReactElement | null {
+  const [keyboardOpen, setKeyboardOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return undefined;
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, () => setKeyboardOpen(true));
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardOpen(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  if (hidden || keyboardOpen) {
+    return null;
+  }
+
   return (
     <SafeAreaView edges={['bottom']} style={styles.tabbarContainer}>
       <View style={styles.tabbar}>

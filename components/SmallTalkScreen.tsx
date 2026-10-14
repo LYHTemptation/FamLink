@@ -523,6 +523,7 @@ export default function SmallTalkScreen({
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {/* ========================================================= */}
         {/* 1. 오늘의 대화 주제 카드 (Figma 14:1689)                  */}

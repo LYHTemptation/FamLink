@@ -10,6 +10,7 @@ import {
   Platform,
   ActivityIndicator,
   KeyboardAvoidingView,
+  Keyboard,
 } from 'react-native';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -119,6 +120,19 @@ export default function App() {
   });
 
   const [currentScreen, setCurrentScreen] = useState<string>('home'); // home, chat, interior, smalltalk, calendar, album, family
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return undefined;
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, () => setIsKeyboardVisible(true));
+    const hideSub = Keyboard.addListener(hideEvent, () => setIsKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
   const [visitedScreens, setVisitedScreens] = useState<Set<string>>(new Set(['home', 'chat', 'interior']));
 
   useEffect(() => {
@@ -2094,20 +2108,23 @@ export default function App() {
           onPressProfile={() => setCurrentScreen('family')}
         />
 
-        {/* Screen Area and Tabbar wrapped in KeyboardAvoidingView */}
+        {/* 본문 영역만 KeyboardAvoidingView로 감싸고 하단 탭바(Footer)는 외부로 분리 */}
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={0}
           style={styles.flexOne}
         >
           <View style={styles.screenArea}>
             {renderActiveScreen()}
           </View>
+        </KeyboardAvoidingView>
 
+        {!isKeyboardVisible && (
           <AppBottomTabbar
             currentScreen={currentScreen}
             onSelectScreen={setCurrentScreen}
           />
-        </KeyboardAvoidingView>
+        )}
 
         {/* Global Simulator User Switcher & Mission Complete Celebration Modals */}
         <AppGlobalModals

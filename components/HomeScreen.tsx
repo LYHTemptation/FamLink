@@ -362,6 +362,7 @@ export default function HomeScreen({
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {/* ========================================================= */}
         {/* 1. 상단 헤더 & 지오메트릭 액센트 (Figma 11:1439)          */}
