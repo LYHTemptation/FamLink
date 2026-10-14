@@ -325,47 +325,55 @@ export default function BubblePopGame({
   }, [triggerToast]);
 
   // -----------------------------------------------------------------
-  // 60FPS Physics Simulation Loop (Circle-Circle Collision & Gravity)
+  // 60/120FPS Delta-Time Normalized Physics Engine (Area-Mass & Jitter-Free Solver)
   // -----------------------------------------------------------------
   useEffect(() => {
     if (gameState !== 'playing') return;
 
     let isRunning = true;
+    let lastFrameTime = Date.now();
 
     const updatePhysics = () => {
       if (!isRunning || gameStateRef.current !== 'playing') return;
 
+      const now = Date.now();
+      const dtScale = Math.min(2.0, Math.max(0.5, (now - lastFrameTime) / 16.667));
+      lastFrameTime = now;
+
       const active = bubblesRef.current;
       const len = active.length;
 
-      // 1. Apply Gravity & Velocity
+      // 1. Apply Gravity & Velocity with frame-rate independent dtScale
       for (let i = 0; i < len; i++) {
         const b = active[i];
-        b.vy += GRAVITY;
-        b.vx *= DAMPING;
-        b.vy *= DAMPING;
-        b.x += b.vx;
-        b.y += b.vy;
+        b.vy += GRAVITY * dtScale;
+        const frameDamping = Math.pow(DAMPING, dtScale);
+        b.vx *= frameDamping;
+        b.vy *= frameDamping;
+        b.x += b.vx * dtScale;
+        b.y += b.vy * dtScale;
 
         // Tub Left & Right Wall Boundaries
         if (b.x - b.radius < tubLeft) {
           b.x = tubLeft + b.radius;
-          b.vx = -b.vx * RESTITUTION;
+          b.vx = Math.abs(b.vx) * RESTITUTION;
         } else if (b.x + b.radius > tubRight) {
           b.x = tubRight - b.radius;
-          b.vx = -b.vx * RESTITUTION;
+          b.vx = -Math.abs(b.vx) * RESTITUTION;
         }
 
         // Tub Bottom Boundary
         if (b.y + b.radius > tubBottom) {
           b.y = tubBottom - b.radius;
-          b.vy = -b.vy * RESTITUTION;
-          // Apply friction on tub floor
+          if (b.vy > 0) {
+            b.vy = -b.vy * RESTITUTION;
+            if (Math.abs(b.vy) < 0.35) b.vy = 0;
+          }
           b.vx *= 0.88;
         }
       }
 
-      // 2. Circle-Circle Collision & Merge Check (Multiple iterations for stability)
+      // 2. Circle-Circle Collision & Merge Check (Area-weighted mass + single-pass impulse)
       const toRemove = new Set();
       const toAdd = [];
 
@@ -383,7 +391,7 @@ export default function BubblePopGame({
             const dist = Math.hypot(dx, dy);
             const minDist = b1.radius + b2.radius;
 
-            if (dist < minDist && dist > 0) {
+            if (dist < minDist && dist > 0.0001) {
               // Check Same Level Merge (If not already at max level 9)
               if (b1.level === b2.level && b1.level < 9 && iter === 0) {
                 toRemove.add(b1.id);
@@ -393,25 +401,36 @@ export default function BubblePopGame({
                 break;
               }
 
-              // Normal Elastic Collision Push-Apart
-              const overlap = (minDist - dist) * 0.5;
+              // Area-proportional mass (m = r^2) so large bubbles feel heavy and stable
+              const m1 = b1.radius * b1.radius;
+              const m2 = b2.radius * b2.radius;
+              const totalMass = m1 + m2;
+              const ratio1 = m2 / totalMass;
+              const ratio2 = m1 / totalMass;
+
+              const overlap = (minDist - dist) * 0.82;
               const nx = dx / dist;
               const ny = dy / dist;
 
-              b1.x -= nx * overlap;
-              b1.y -= ny * overlap;
-              b2.x += nx * overlap;
-              b2.y += ny * overlap;
+              b1.x -= nx * overlap * ratio1;
+              b1.y -= ny * overlap * ratio1;
+              b2.x += nx * overlap * ratio2;
+              b2.y += ny * overlap * ratio2;
 
-              // Exchange impulse
-              const kx = b1.vx - b2.vx;
-              const ky = b1.vy - b2.vy;
-              const p = 2 * (nx * kx + ny * ky) / (b1.radius + b2.radius);
+              // Apply velocity impulse only on iter === 0 when approaching (prevents stack jitter)
+              if (iter === 0) {
+                const rvx = b2.vx - b1.vx;
+                const rvy = b2.vy - b1.vy;
+                const velAlongNormal = rvx * nx + rvy * ny;
 
-              b1.vx -= p * b2.radius * nx * RESTITUTION;
-              b1.vy -= p * b2.radius * ny * RESTITUTION;
-              b2.vx += p * b1.radius * nx * RESTITUTION;
-              b2.vy += p * b1.radius * ny * RESTITUTION;
+                if (velAlongNormal < 0) {
+                  const jImpulse = -(1 + RESTITUTION) * velAlongNormal;
+                  b1.vx -= jImpulse * ratio1 * nx;
+                  b1.vy -= jImpulse * ratio1 * ny;
+                  b2.vx += jImpulse * ratio2 * nx;
+                  b2.vy += jImpulse * ratio2 * ny;
+                }
+              }
             }
           }
         }

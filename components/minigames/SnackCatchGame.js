@@ -598,8 +598,15 @@ export default function SnackCatchGame({
       setCombo(nextCombo);
       setMaxCombo(mc => Math.max(mc, nextCombo));
 
-      // Multi-Slice Feedback
-      if (sliced.length >= 3) {
+      // 8-Combo Fever Mode (2x Bonus Score) & Multi-Slice Feedback
+      const isFever = nextCombo >= 8;
+      if (isFever) {
+        const feverBonus = sliced.reduce((acc, f) => acc + (f.points > 0 ? f.points : 0), 0);
+        if (feverBonus > 0) {
+          setScore(s => s + feverBonus);
+          triggerToast(`🔥 FEVER ${nextCombo}콤보! 2배 점수 +${feverBonus}`, '#F59E0B', currentX, currentY);
+        }
+      } else if (sliced.length >= 3) {
         triggerToast(`🔥 COMBO x${sliced.length}! +50점`, '#EC4899', currentX, currentY);
         setScore(s => s + 50);
       } else if (sliced.length === 2) {
@@ -647,28 +654,33 @@ export default function SnackCatchGame({
   }, []);
 
   // -----------------------------------------------------------------
-  // 60FPS Arc Physics Loop
+  // 60/120FPS Delta-Time Normalized Arc Physics Loop
   // -----------------------------------------------------------------
   useEffect(() => {
     if (gameState !== 'playing') return;
 
     let isRunning = true;
+    let lastFrameTime = Date.now();
 
     const updatePhysics = () => {
       if (!isRunning || gameStateRef.current !== 'playing') return;
 
+      const now = Date.now();
+      const dtScale = Math.min(2.0, Math.max(0.5, (now - lastFrameTime) / 16.667));
+      lastFrameTime = now;
+
       const stageHeight = screenHeightRef.current;
 
-      // 1. Update whole fruits (gravity + arc + rotation)
+      // 1. Update whole fruits (delta-time gravity + arc + rotation)
       const currentFruits = fruitsRef.current;
       const remainingFruits = [];
 
       for (let i = 0; i < currentFruits.length; i++) {
         const f = currentFruits[i];
-        f.x += f.vx;
-        f.y += f.vy;
-        f.vy += GRAVITY;
-        f.rotation += f.rotationSpeed;
+        f.x += f.vx * dtScale;
+        f.y += f.vy * dtScale;
+        f.vy += GRAVITY * dtScale;
+        f.rotation += f.rotationSpeed * dtScale;
 
         // Keep until falls below screen bottom
         if (f.y < stageHeight + 60) {
@@ -685,10 +697,10 @@ export default function SnackCatchGame({
 
       for (let i = 0; i < currentHalves.length; i++) {
         const h = currentHalves[i];
-        h.x += h.vx;
-        h.y += h.vy;
-        h.vy += GRAVITY * 1.1;
-        h.rotation += h.rotSpeed;
+        h.x += h.vx * dtScale;
+        h.y += h.vy * dtScale;
+        h.vy += GRAVITY * 1.1 * dtScale;
+        h.rotation += h.rotSpeed * dtScale;
 
         if (h.y < stageHeight + 60) {
           remainingHalves.push(h);

@@ -255,6 +255,10 @@ FamLink/
 │   │   ├── chatHelpers.ts           # 인용 답장·포토북 주문 카드 파서 및 대화방 시간 포맷터
 │   │   ├── ChatAttachmentModals.tsx # 7종 멀티미디어 첨부 바텀시트 & 메시지 컨텍스트 메뉴 모달
 │   │   └── ChatStyles.ts            # 메신저 전용 스타일시트
+│   ├── petmong/                     # 반려몽 룸 물리·애니메이션·온기 모달 서브 패키지 (TypeScript)
+│   │   ├── petmongConstants.tsx     # 수호 별자리 8종, 부유 하트 파티클, 바닥 탭 물결 리플 컴포넌트
+│   │   ├── PetmongWarmthModal.tsx   # 가족 대화 온기 지수 및 성장 스탯 상세 모달
+│   │   └── PetmongStyles.ts         # 반려몽 룸 엔진 전용 스타일시트
 │   ├── smalltalk/                   # 오늘 함께(스몰톡/집안일) 모듈화 서브 패키지 (TypeScript)
 │   │   ├── smallTalkHelpers.ts      # 한국형 생활 집안일 스마트 아이콘·카테고리 매퍼
 │   │   ├── SmallTalkModals.tsx      # 스몰톡 답변 작성·열람 및 집안일 추가 모달
