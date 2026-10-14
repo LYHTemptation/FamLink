@@ -178,10 +178,12 @@ export default function PetmongGameEngine({
   const [floatingHearts, setFloatingHearts] = useState<FloatingHeart[]>([]);
   const comboResetTimerRef = useRef<any>(null);
   const particleTimersRef = useRef<Set<any>>(new Set());
+  const nightReturnTimerRef = useRef<any>(null);
 
   useEffect(() => {
     return () => {
       if (comboResetTimerRef.current) clearTimeout(comboResetTimerRef.current);
+      if (nightReturnTimerRef.current) clearTimeout(nightReturnTimerRef.current);
       particleTimersRef.current.forEach((t) => clearTimeout(t));
       particleTimersRef.current.clear();
     };
@@ -204,10 +206,12 @@ export default function PetmongGameEngine({
   const constGlowAnim = useRef(new Animated.Value(1.0)).current;
   const isMouseActiveRef = useRef(false);
 
-  // 오늘 이미 해당 별자리를 완성했는지 DB(petmong_activities: actor_id, action_type) 및 로컬 캐시 확인
+  const [hasAwardedConstExpToday, setHasAwardedConstExpToday] = useState(false);
+
+  // 오늘 별자리 완성 EXP 보상을 이미 수령했는지 DB(petmong_activities) 및 로컬 캐시 확인
   useEffect(() => {
     let isMounted = true;
-    const todayKey = `@famlink_const_${todayStr}_${currentConstellation.id}`;
+    const expKey = `@famlink_const_exp_${todayStr}`;
 
     const checkConstellationCompleted = async () => {
       if (character?.id) {
@@ -217,13 +221,12 @@ export default function PetmongGameEngine({
             .select('id, action_type')
             .eq('actor_id', character.id)
             .gte('created_at', todayStartIso)
-            .eq('action_type', `CONSTELLATION:${currentConstellation.id}`);
+            .ilike('action_type', 'CONSTELLATION:%');
 
           if (!error && Array.isArray(data) && data.length > 0) {
             if (isMounted) {
-              setIsConstCompleted(true);
-              setConnectedStarIds(currentConstellation.stars.map((s) => s.id));
-              AsyncStorage.setItem(todayKey, 'true').catch(() => {});
+              setHasAwardedConstExpToday(true);
+              AsyncStorage.setItem(expKey, 'true').catch(() => {});
             }
             return;
           }
@@ -232,15 +235,11 @@ export default function PetmongGameEngine({
         }
       }
 
-      AsyncStorage.getItem(todayKey)
+      AsyncStorage.getItem(expKey)
         .then((val) => {
           if (!isMounted) return;
           if (val === 'true') {
-            setIsConstCompleted(true);
-            setConnectedStarIds(currentConstellation.stars.map((s) => s.id));
-          } else {
-            setIsConstCompleted(false);
-            setConnectedStarIds([1]);
+            setHasAwardedConstExpToday(true);
           }
         })
         .catch(() => {});
@@ -250,7 +249,7 @@ export default function PetmongGameEngine({
     return () => {
       isMounted = false;
     };
-  }, [character?.id, currentConstellation, todayStr, todayStartIso]);
+  }, [character?.id, todayStr, todayStartIso]);
 
   const [dialogue, setDialogue] = useState(
     unreadWhispers && unreadWhispers.length > 0
@@ -650,10 +649,11 @@ export default function PetmongGameEngine({
   // 8. 🌙 낮/밤 조명 전환 & 거실 바닥 탭 호출 인터랙션
   // -------------------------------------------------------------
   const handleToggleNightLights = () => {
+    if (nightReturnTimerRef.current) clearTimeout(nightReturnTimerRef.current);
     const nextNight = !isNightMode;
     setIsNightMode(nextNight);
     Animated.timing(lightsDimAnim, {
-      toValue: nextNight ? (isConstCompleted ? 0.25 : 1) : 0,
+      toValue: nextNight ? 1 : 0,
       duration: 650,
       useNativeDriver: USE_NATIVE_DRIVER,
     }).start();
@@ -661,7 +661,9 @@ export default function PetmongGameEngine({
     if (nextNight) {
       setLivingRoutine('napping');
       setDialogue(
-        '조명을 살짝 낮췄어요 🌙 천장에 떠오른 수호 별자리를 순서대로 이어보세요 ✨'
+        isConstCompleted
+          ? '조명을 낮춰 은하수 별빛을 밝혔어요 🌙 몽이가 포근하게 자고 있어요 zZ'
+          : '조명을 살짝 낮췄어요 🌙 천장에 떠오른 수호 별자리를 순서대로 이어보세요 ✨'
       );
       spawnHeartToast('밤하늘 별자리 모드 🌙');
     } else {
@@ -717,60 +719,22 @@ export default function PetmongGameEngine({
     );
   };
 
-  // 마운트 시 밤 시간대 조명 동기화
+  // 마운트 시 밤 시간대 조명 동기화: 별자리 완성 여부와 관계없이 밤 시간대라면 아늑한 밤 조명 유지
   useEffect(() => {
     if (checkIsNightTime()) {
+      setIsNightMode(true);
       setLivingRoutine('napping');
 
-      const syncNightLights = async () => {
-        if (character?.id) {
-          try {
-            const { data } = await supabase
-              .from('petmong_activities')
-              .select('id')
-              .eq('actor_id', character.id)
-              .gte('created_at', todayStartIso)
-              .ilike('action_type', 'CONSTELLATION:%');
-
-            if (data && data.length > 0) {
-              lightsDimAnim.setValue(0);
-              return;
-            }
-          } catch (e) {
-            console.warn('Night lights sync error:', e);
-          }
-        }
-
-        const todayKey = `@famlink_const_${todayStr}_${currentConstellation.id}`;
-        AsyncStorage.getItem(todayKey)
-          .then((val) => {
-            if (val === 'true') {
-              lightsDimAnim.setValue(0);
-            } else {
-              Animated.timing(lightsDimAnim, {
-                toValue: 1,
-                duration: 400,
-                useNativeDriver: USE_NATIVE_DRIVER,
-              }).start();
-            }
-          })
-          .catch(() => {
-            lightsDimAnim.setValue(1);
-          });
-      };
-
-      syncNightLights();
+      Animated.timing(lightsDimAnim, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: USE_NATIVE_DRIVER,
+      }).start();
     } else {
+      setIsNightMode(false);
       lightsDimAnim.setValue(0);
     }
-  }, [
-    checkIsNightTime,
-    lightsDimAnim,
-    character?.id,
-    todayStartIso,
-    todayStr,
-    currentConstellation.id,
-  ]);
+  }, [checkIsNightTime, lightsDimAnim]);
 
   useEffect(() => {
     let anim: Animated.CompositeAnimation | null = null;
@@ -866,8 +830,11 @@ export default function PetmongGameEngine({
       ]),
     ]).start();
 
-    const awardedExp = 35;
-    if (onGainExp) onGainExp(awardedExp);
+    const isFirstTimeToday = !hasAwardedConstExpToday;
+    const awardedExp = isFirstTimeToday ? 35 : 0;
+    if (awardedExp > 0 && onGainExp) {
+      onGainExp(awardedExp);
+    }
     if (onUpdateVitals) {
       onUpdateVitals((prev: any) => ({
         ...prev,
@@ -876,31 +843,63 @@ export default function PetmongGameEngine({
       }));
     }
 
-    spawnHeartToast(`+${awardedExp} EXP [${currentConstellation.name}] 완성! 💡`);
-    setDialogue(
-      `별자리가 완성되어 방 안의 불이 환하게 켜졌어요! "${currentConstellation.meaning}"의 은하수 축복으로 몽이의 꿀잠 에너지가 가득 찼어요 몽 🌟💡`
-    );
+    if (isFirstTimeToday) {
+      setHasAwardedConstExpToday(true);
+      const expKey = `@famlink_const_exp_${todayStr}`;
+      AsyncStorage.setItem(expKey, 'true').catch(() => {});
+      spawnHeartToast(`+${awardedExp} EXP [${currentConstellation.name}] 완성! 🌟`);
+      setDialogue(
+        `별자리가 완성되어 은하수가 환하게 빛났어요! "${currentConstellation.meaning}"의 별빛 축복으로 몽이의 꿀잠 에너지가 충전됐어요 몽 🌟✨`
+      );
 
-    const todayKey = `@famlink_const_${todayStr}_${currentConstellation.id}`;
-    AsyncStorage.setItem(todayKey, 'true').catch(() => {});
-
-    // Supabase petmong_activities 정규 컬럼(family_id, actor_id, action_type)으로 저장
-    if (character?.id && character?.family_id) {
-      supabase
-        .from('petmong_activities')
-        .insert({
-          family_id: character.family_id,
-          actor_id: character.id,
-          action_type: `CONSTELLATION:${currentConstellation.id}`,
-        })
-        .then(
-          () => {},
-          (e) => console.warn('Constellation log error:', e)
-        );
+      // Supabase petmong_activities 정규 컬럼(family_id, actor_id, action_type)으로 저장
+      if (character?.id && character?.family_id) {
+        supabase
+          .from('petmong_activities')
+          .insert({
+            family_id: character.family_id,
+            actor_id: character.id,
+            action_type: `CONSTELLATION:${currentConstellation.id}`,
+          })
+          .then(
+            () => {},
+            (e) => console.warn('Constellation log error:', e)
+          );
+      }
+    } else {
+      spawnHeartToast(`[${currentConstellation.name}] 완성! 🌟`);
+      setDialogue(
+        `새로운 별자리가 완성되어 은하수가 포근하게 빛났어요! "${currentConstellation.meaning}"의 별빛을 받으며 몽이가 쉬고 있어요 몽 🌟✨`
+      );
     }
+
+    // 🌟 5초간 환한 축하 후, 다음 별자리로 자동 리셋되어 언제든 새로 이을 수 있게 전환
+    if (nightReturnTimerRef.current) clearTimeout(nightReturnTimerRef.current);
+    nightReturnTimerRef.current = setTimeout(() => {
+      const nextIdx = (constellationIndex + 1) % GUARDIAN_CONSTELLATIONS.length;
+      setConstellationIndex(nextIdx);
+      setIsConstCompleted(false);
+      setConnectedStarIds([1]);
+      setDragCurrentPos(null);
+
+      if (checkIsNightTime() || isNightMode) {
+        Animated.timing(lightsDimAnim, {
+          toValue: 1,
+          duration: 1500,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: USE_NATIVE_DRIVER,
+        }).start();
+        setLivingRoutine('napping');
+        setDialogue(
+          `몽이가 은하수 별빛을 받으며 다시 포근하게 잠들었어요 zZ 🌙 새로운 별자리 "${GUARDIAN_CONSTELLATIONS[nextIdx]?.name}"를 이어보세요 ✨`
+        );
+        spawnHeartToast(`새로운 별자리: ${GUARDIAN_CONSTELLATIONS[nextIdx]?.name} ✨`);
+      }
+    }, 5000);
   };
 
   const handleResetConstellation = () => {
+    if (nightReturnTimerRef.current) clearTimeout(nightReturnTimerRef.current);
     const nextIdx = (constellationIndex + 1) % GUARDIAN_CONSTELLATIONS.length;
     setConstellationIndex(nextIdx);
     setIsConstCompleted(false);
@@ -913,6 +912,9 @@ export default function PetmongGameEngine({
     }).start();
     spawnHeartToast(
       `새로운 수호 별자리: ${GUARDIAN_CONSTELLATIONS[nextIdx]?.name} ✨`
+    );
+    setDialogue(
+      `새로운 수호 별자리 "${GUARDIAN_CONSTELLATIONS[nextIdx]?.name}"가 밤하늘에 떠올랐어요 🌙 별을 순서대로 이어보세요 ✨`
     );
   };
 
@@ -1115,7 +1117,11 @@ export default function PetmongGameEngine({
             {!isConstCompleted ? (
               <View style={styles.constellationHeaderPill}>
                 <Sparkles size={12} color="#FDE047" fill="#FDE047" />
-                <Text style={styles.constellationHeaderText}>
+                <Text
+                  style={styles.constellationHeaderText}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
                   수호 별자리: {currentConstellation.name} · 별을 순서대로 이어보세요
                 </Text>
               </View>
@@ -1123,7 +1129,11 @@ export default function PetmongGameEngine({
               <View style={styles.constellationCompletedRow}>
                 <View style={styles.constellationHeaderPillDone}>
                   <Star size={12} color="#FDE047" fill="#FDE047" />
-                  <Text style={styles.constellationHeaderTextDone}>
+                  <Text
+                    style={styles.constellationHeaderTextDone}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
                     {currentConstellation.name} 완성! ✨ {currentConstellation.meaning}
                   </Text>
                 </View>

@@ -257,15 +257,22 @@ export default function ChatScreen({
     prevMsgCountRef.current = messages?.length || 0;
   }, [messages?.length, selectedRoomId, isScrolledToBottom]);
 
+  // 키보드가 올라올 때 최신 메시지가 가려지지 않도록 하단으로 부드럽게 스크롤
+  useEffect(() => {
+    if (!selectedRoomId || Platform.OS === 'web') return undefined;
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const sub = Keyboard.addListener(showEvent, () => {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 60);
+    });
+    return () => sub.remove();
+  }, [selectedRoomId]);
+
   // Create Custom Room Modal States
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [newRoomTitle, setNewRoomTitle] = useState('');
-  const [selectedAvatar, setSelectedAvatar] = useState('💬');
-  const [selectedColor, setSelectedColor] = useState('#FF6B47');
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
-
-  const EMOJI_OPTIONS = ['💬', '⛺', '⚽', '🍕', '🎁', '🏖️', '☕', '🎵', '🚗', '🐱', '🎮', '❤️'];
-  const COLOR_OPTIONS = ['#FF6B47', '#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'];
 
   const DEFAULT_MEMBERS = {
     mom: { name: '엄마', avatar: '👩‍🦰', color: '#FF6B47' },
@@ -1332,8 +1339,8 @@ export default function ChatScreen({
       subtitle: `멤버 ${selectedMembers.length + 1}명 참여`,
       lastMessage: '새로운 대화방이 시작되었습니다. 인사 나눠보세요!',
       time: '방금',
-      avatar: selectedAvatar,
-      color: selectedColor,
+      avatar: '💬',
+      color: '#FF6B47',
       badge: 'NEW',
       isGroup: true,
       members: [currentUserProfile?.id || currentUser, ...selectedMembers],
@@ -2173,36 +2180,6 @@ export default function ChatScreen({
                   onChangeText={setNewRoomTitle}
                 />
 
-                <Text style={styles.modalLabel}>대표 아이콘</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
-                  {EMOJI_OPTIONS.map((emoji) => (
-                    <TouchableOpacity
-                      key={emoji}
-                      style={[styles.emojiChip, selectedAvatar === emoji && styles.emojiChipSelected]}
-                      onPress={() => setSelectedAvatar(emoji)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.emojiChipText}>{emoji}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-
-                <Text style={styles.modalLabel}>테마 컬러</Text>
-                <View style={styles.colorPaletteRow}>
-                  {COLOR_OPTIONS.map((colorItem) => (
-                    <TouchableOpacity
-                      key={colorItem}
-                      style={[
-                        styles.colorDot,
-                        { backgroundColor: colorItem },
-                        selectedColor === colorItem && styles.colorDotSelected,
-                      ]}
-                      onPress={() => setSelectedColor(colorItem)}
-                      activeOpacity={0.7}
-                    />
-                  ))}
-                </View>
-
                 <Text style={styles.modalLabel}>초대할 가족 멤버</Text>
                 <View style={styles.memberChecklistRow}>
                   {(familyMembers || [
@@ -2249,18 +2226,6 @@ export default function ChatScreen({
       </View>
     );
   }
-
-  // 키보드가 올라올 때 최신 메시지가 가려지지 않도록 하단으로 부드럽게 스크롤
-  useEffect(() => {
-    if (!selectedRoomId || Platform.OS === 'web') return undefined;
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const sub = Keyboard.addListener(showEvent, () => {
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 60);
-    });
-    return () => sub.remove();
-  }, [selectedRoomId]);
 
   // 2. RENDER CHAT CONVERSATION VIEW (When a chat room is opened)
   const currentRoom = CHAT_ROOMS.find(r => r.id === selectedRoomId) || CHAT_ROOMS[0];

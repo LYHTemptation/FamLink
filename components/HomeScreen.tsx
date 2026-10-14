@@ -763,10 +763,7 @@ export default function HomeScreen({
             <View style={styles.cardHeaderRow}>
               <View style={styles.cardHeaderLeftCol}>
                 <Text style={[styles.cardSubLabel, styles.albumSubLabel]}>우리 가족 앨범</Text>
-                <View style={styles.albumTitleRow}>
-                  <Text style={styles.cardMainTitle}>이번 달 추억</Text>
-                  <Text style={styles.albumTitleTotal}> · {totalPhotosCount}장 보관 중</Text>
-                </View>
+                <Text style={styles.cardMainTitle}>소중한 추억 모아보기</Text>
               </View>
 
               <TouchableOpacity
@@ -789,14 +786,13 @@ export default function HomeScreen({
 
               <View style={styles.albumContentCol}>
                 <Text style={styles.albumTitleText} numberOfLines={1}>
-                  소중한 일상 사진과 일기
+                  함께 나눈 일상 사진과 이야기
                 </Text>
                 <Text style={styles.albumSubText}>
                   가족들과 나눈 따뜻한 순간들을 모아보세요
                 </Text>
               </View>
 
-              <View style={styles.albumDot} />
             </View>
           </TouchableOpacity>
         </View>
