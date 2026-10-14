@@ -63,7 +63,7 @@ const styles = StyleSheet.create({
   canvasAreaSubtitle: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#FF7E82',
+    color: colors.primary,
     marginTop: 2,
   },
   logBtn: {
@@ -146,8 +146,8 @@ const styles = StyleSheet.create({
     marginLeft: 'auto',
   },
   roomTouchChipProgress: {
-    backgroundColor: '#FFF0F2',
-    borderColor: '#FFCCD4',
+    backgroundColor: colors.primaryLight,
+    borderColor: colors.primaryBorder,
   },
   roomTouchChipDone: {
     backgroundColor: '#ECFDF5',
@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
   petStatusCardLevel: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#FF7E82',
+    color: colors.primary,
   },
   petStatusCardSub: {
     fontSize: 10,
@@ -222,7 +222,7 @@ const styles = StyleSheet.create({
   petStatusExpVal: {
     fontSize: 9.5,
     fontWeight: '800',
-    color: '#FF7E82',
+    color: colors.primary,
   },
   petStatusExpBarBg: {
     width: '100%',
@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
   },
   petStatusExpBarFill: {
     height: '100%',
-    backgroundColor: '#FF7E82',
+    backgroundColor: colors.primary,
     borderRadius: 3,
   },
   themeSelectBtn: {
@@ -315,11 +315,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFE4E8',
     alignSelf: 'center',
     borderWidth: 2,
-    borderColor: '#FFCCD4',
+    borderColor: colors.primaryBorder,
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 1,
-    shadowColor: '#FF7E82',
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.15,
     shadowRadius: 5,
@@ -363,7 +363,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 3.5,
     borderColor: '#FFFFFF',
-    shadowColor: '#FF7E82',
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
@@ -434,7 +434,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   personalityTag: {
-    backgroundColor: '#FFF2F3',
+    backgroundColor: colors.primaryLight,
     paddingHorizontal: 6,
     paddingVertical: 1,
     borderRadius: 6,
@@ -442,7 +442,7 @@ const styles = StyleSheet.create({
   personalityTagText: {
     fontSize: 8,
     fontWeight: '800',
-    color: '#FF7E82',
+    color: colors.primary,
   },
   mainCharName: {
     fontSize: 12,
@@ -459,7 +459,7 @@ const styles = StyleSheet.create({
   },
   expBarFill: {
     height: '100%',
-    backgroundColor: '#FF7E82',
+    backgroundColor: colors.primary,
   },
   levelText: {
     fontSize: 9,
@@ -541,7 +541,7 @@ const styles = StyleSheet.create({
   inventoryItemChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
+    backgroundColor: colors.background,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 16,
@@ -550,8 +550,8 @@ const styles = StyleSheet.create({
     borderColor: '#EBEBEB',
   },
   inventoryItemChipActive: {
-    backgroundColor: '#FFEBEB',
-    borderColor: '#FF7E82',
+    backgroundColor: colors.primaryLight,
+    borderColor: colors.primary,
   },
   inventoryItemEmoji: {
     fontSize: 18,
@@ -728,7 +728,7 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   traitSelectBtnActive: {
-    backgroundColor: '#FF7E82',
+    backgroundColor: colors.primary,
   },
   traitSelectText: {
     fontSize: 12,
@@ -739,7 +739,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   modalConfirmBtn: {
-    backgroundColor: '#FF7E82',
+    backgroundColor: colors.primary,
     padding: 14,
     borderRadius: 12,
     flexDirection: 'row',
@@ -813,11 +813,11 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: '#FF7E82',
+    borderColor: colors.primary,
     maxWidth: 220,
     minWidth: 140,
     alignItems: 'center',
-    shadowColor: '#FF7E82',
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
@@ -839,7 +839,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRightWidth: 1.5,
     borderBottomWidth: 1.5,
-    borderColor: '#FF7E82',
+    borderColor: colors.primary,
     transform: [{ rotate: '45deg' }],
   },
   floatingHeartContainer: {
@@ -858,12 +858,12 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#FFEBEB',
+    borderColor: colors.primaryLight,
   },
   touchExpTextDone: {
-    color: '#FF7E82',
-    backgroundColor: '#FFF0F2',
-    borderColor: '#FFCCD4',
+    color: colors.primary,
+    backgroundColor: colors.primaryLight,
+    borderColor: colors.primaryBorder,
     fontSize: 10,
     fontWeight: '800',
   },
@@ -972,7 +972,7 @@ const styles = StyleSheet.create({
   levelUpTitle: {
     fontSize: 22,
     fontWeight: '900',
-    color: '#FF7E82',
+    color: colors.primary,
     marginBottom: 6,
   },
   levelUpNameText: {
@@ -989,7 +989,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   levelUpBtn: {
-    backgroundColor: '#FF7E82',
+    backgroundColor: colors.primary,
     paddingHorizontal: 28,
     paddingVertical: 12,
     borderRadius: 16,
@@ -1081,15 +1081,15 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: colors.background,
     borderWidth: 1.5,
     borderColor: '#EBEBEB',
     justifyContent: 'center',
     alignItems: 'center',
   },
   emojiPickBtnActive: {
-    backgroundColor: '#FFF0F2',
-    borderColor: '#FF7E82',
+    backgroundColor: colors.primaryLight,
+    borderColor: colors.primary,
   },
   creationBtnGroup: {
     width: '100%',
@@ -1134,8 +1134,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   dailyStatusChipProgress: {
-    backgroundColor: '#FFF0F2',
-    borderColor: '#FFCCD4',
+    backgroundColor: colors.primaryLight,
+    borderColor: colors.primaryBorder,
   },
   dailyStatusChipDone: {
     backgroundColor: '#ECFDF5',
@@ -1185,14 +1185,14 @@ const styles = StyleSheet.create({
   },
   bookPetCardMine: {
     backgroundColor: '#FFFDFC',
-    borderColor: '#FFCCD4',
+    borderColor: colors.primaryBorder,
     borderWidth: 1.5,
   },
   bookPetAvatarBox: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: colors.background,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -1211,7 +1211,7 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
   },
   bookTagMine: {
-    backgroundColor: '#FFEBEB',
+    backgroundColor: colors.primaryLight,
     paddingHorizontal: 6,
     paddingVertical: 1.5,
     borderRadius: 6,
@@ -1219,7 +1219,7 @@ const styles = StyleSheet.create({
   bookTagMineText: {
     fontSize: 9,
     fontWeight: '800',
-    color: '#FF7E82',
+    color: colors.primary,
   },
   bookTagRoaming: {
     backgroundColor: '#EBF5FF',
@@ -1254,7 +1254,7 @@ const styles = StyleSheet.create({
     color: '#8E8E93',
   },
   bookPetPersonalityTag: {
-    backgroundColor: '#F2F2F7',
+    backgroundColor: colors.divider,
     paddingHorizontal: 6,
     paddingVertical: 1,
     borderRadius: 6,
@@ -1267,19 +1267,19 @@ const styles = StyleSheet.create({
   bookExpBarBg: {
     width: '80%',
     height: 4,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: colors.divider,
     borderRadius: 2,
     marginTop: 5,
     overflow: 'hidden',
   },
   bookExpBarFill: {
     height: '100%',
-    backgroundColor: '#FF7E82',
+    backgroundColor: colors.primary,
   },
   bookInteractBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFEBEB',
+    backgroundColor: colors.primaryLight,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 12,
@@ -1296,13 +1296,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 14,
     borderRadius: 16,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: colors.background,
     borderWidth: 1.5,
     borderColor: '#EFEFEF',
   },
   themeCardItemActive: {
-    backgroundColor: '#FFF5F5',
-    borderColor: '#FF7E82',
+    backgroundColor: colors.primaryLight,
+    borderColor: colors.primary,
   },
   themeCardIconWrap: {
     width: 46,
@@ -1328,7 +1328,7 @@ const styles = StyleSheet.create({
   themeSelectedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FF7E82',
+    backgroundColor: colors.primary,
     paddingHorizontal: 6,
     paddingVertical: 1.5,
     borderRadius: 6,
@@ -1468,8 +1468,8 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
   },
   familyRoomChipActive: {
-    backgroundColor: '#FF7E82',
-    borderColor: '#FF7E82',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   familyRoomChipAvatar: {
     fontSize: 13,
@@ -1519,7 +1519,7 @@ const styles = StyleSheet.create({
     borderColor: '#DDD6FE',
   },
   topActionIconBtnPink: {
-    backgroundColor: '#FFF0F2',
+    backgroundColor: colors.primaryLight,
     borderColor: '#FFE4E8',
   },
   topActionIconBtnPinkActive: {
@@ -1632,7 +1632,7 @@ const styles = StyleSheet.create({
     color: '#1F2937',
   },
   hudMiniLevelBadge: {
-    backgroundColor: '#FFEBEB',
+    backgroundColor: colors.primaryLight,
     paddingHorizontal: 5,
     paddingVertical: 1.5,
     borderRadius: 6,
@@ -1640,7 +1640,7 @@ const styles = StyleSheet.create({
   hudMiniLevelText: {
     fontSize: 10.5,
     fontWeight: '800',
-    color: '#FF7E82',
+    color: colors.primary,
   },
   hudMiniDivider: {
     width: 1,
@@ -1706,7 +1706,7 @@ const styles = StyleSheet.create({
   hudPetLevel: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#FF7E82',
+    color: colors.primary,
   },
   hudOwnerSub: {
     fontSize: 10,
@@ -1729,7 +1729,7 @@ const styles = StyleSheet.create({
   hudExpValue: {
     fontSize: 9.5,
     fontWeight: '800',
-    color: '#FF7E82',
+    color: colors.primary,
   },
   hudExpBarBg: {
     width: '100%',
@@ -1741,7 +1741,7 @@ const styles = StyleSheet.create({
   hudExpBarFill: {
     height: '100%',
     borderRadius: 3,
-    backgroundColor: '#FF7E82',
+    backgroundColor: colors.primary,
   },
   hudDivider: {
     height: 1,
@@ -1776,11 +1776,11 @@ const styles = StyleSheet.create({
   hudHarvestAllBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FF7E82',
+    backgroundColor: colors.primary,
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 14,
-    shadowColor: '#FF7E82',
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
@@ -1798,9 +1798,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 12,
-    backgroundColor: '#FFF0F2',
+    backgroundColor: colors.primaryLight,
     borderWidth: 1,
-    borderColor: '#FFCCD4',
+    borderColor: colors.primaryBorder,
   },
   hudTouchBtnDone: {
     backgroundColor: '#ECFDF5',
@@ -1841,8 +1841,8 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: '#FFCCD4',
-    shadowColor: '#FF7E82',
+    borderColor: colors.primaryBorder,
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 10,
@@ -1864,7 +1864,7 @@ const styles = StyleSheet.create({
   createPromptBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FF7E82',
+    backgroundColor: colors.primary,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 14,
@@ -2027,11 +2027,11 @@ const styles = StyleSheet.create({
   },
   evolutionConfirmBtn: {
     width: '100%',
-    backgroundColor: '#FF7E82',
+    backgroundColor: colors.primary,
     paddingVertical: 14,
     borderRadius: 16,
     alignItems: 'center',
-    shadowColor: '#FF7E82',
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.3,
     shadowRadius: 6,
@@ -2110,7 +2110,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   whisperMemberChipActive: {
-    backgroundColor: '#FFF0F2',
+    backgroundColor: colors.primaryLight,
     borderColor: '#FF4D6D',
   },
   whisperMemberChipText: {

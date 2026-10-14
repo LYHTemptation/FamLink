@@ -1,3 +1,9 @@
+import type {
+  KoreanHolidayInfo,
+  MonthKoreanHolidayItem,
+  UpcomingKoreanHolidayInfo,
+} from '../types/domain';
+
 /**
  * 대한민국 법정 공휴일 및 대체공휴일 관리 유틸리티 (2024년 ~ 2030년 + 무기한 고정 공휴일 알고리즘)
  * - 관공서의 공휴일에 관한 규정(대통령령) 준수
@@ -5,7 +11,7 @@
  */
 
 // 2024 ~ 2030년 정확한 법정 공휴일 및 대체공휴일 데이터셋
-const KOREAN_HOLIDAYS_MAP = {
+const KOREAN_HOLIDAYS_MAP: Record<string, { name: string; isSubstitute: boolean }> = {
   // === 2024년 ===
   '2024-01-01': { name: '신정', isSubstitute: false },
   '2024-02-09': { name: '설날 연휴', isSubstitute: false },
@@ -151,7 +157,7 @@ const KOREAN_HOLIDAYS_MAP = {
 };
 
 // 양력 고정 공휴일 (데이터셋 범위 밖 연도 폴백용)
-const SOLAR_FIXED_HOLIDAYS = {
+const SOLAR_FIXED_HOLIDAYS: Record<string, string> = {
   '01-01': '신정',
   '03-01': '삼일절',
   '05-05': '어린이날',
@@ -167,7 +173,7 @@ const SOLAR_FIXED_HOLIDAYS = {
  * @param {string} dateStr 
  * @returns {{ name: string, isHoliday: boolean, isSubstitute: boolean } | null}
  */
-export function getKoreanHoliday(dateStr) {
+export function getKoreanHoliday(dateStr?: string | null): KoreanHolidayInfo | null {
   if (!dateStr || typeof dateStr !== 'string') return null;
 
   // 1. 사전 정의된 2024~2030 매핑 검색
@@ -201,7 +207,7 @@ export function getKoreanHoliday(dateStr) {
  * @param {string} dateStr 
  * @returns {boolean}
  */
-export function isKoreanHoliday(dateStr) {
+export function isKoreanHoliday(dateStr?: string | null): boolean {
   return Boolean(getKoreanHoliday(dateStr));
 }
 
@@ -211,10 +217,10 @@ export function isKoreanHoliday(dateStr) {
  * @param {number} month (1~12)
  * @returns {Array<{ date: string, name: string, isSubstitute: boolean }>}
  */
-export function getMonthKoreanHolidays(year, month) {
+export function getMonthKoreanHolidays(year: number, month: number): MonthKoreanHolidayItem[] {
   const mStr = String(month).padStart(2, '0');
   const prefix = `${year}-${mStr}`;
-  const results = [];
+  const results: MonthKoreanHolidayItem[] = [];
 
   const daysInMonth = new Date(year, month, 0).getDate();
   for (let d = 1; d <= daysInMonth; d++) {
@@ -237,7 +243,7 @@ export function getMonthKoreanHolidays(year, month) {
  * @param {string} fromDateStr ("YYYY-MM-DD")
  * @returns {{ date: string, name: string, diffDays: number, isToday: boolean } | null}
  */
-export function getNextUpcomingHoliday(fromDateStr) {
+export function getNextUpcomingHoliday(fromDateStr?: string | null): UpcomingKoreanHolidayInfo | null {
   if (!fromDateStr) return null;
   const fromTime = new Date(`${fromDateStr}T00:00:00`).getTime();
 

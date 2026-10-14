@@ -1,11 +1,22 @@
 import React from 'react';
 import { Text } from 'react-native';
-import Svg, { Path, Circle, Rect } from 'react-native-svg';
+import Svg, { Path, Circle, Rect, SvgProps } from 'react-native-svg';
+import { colors } from '../../theme';
+
+export interface MoodSvgIconProps extends SvgProps {
+  size?: number;
+  color?: string;
+  strokeWidth?: number;
+}
+
+export interface MoodIconProps extends MoodSvgIconProps {
+  mood?: string;
+}
 
 /**
  * 1. 행복/미소 (MoodHappyIcon)
  */
-export function MoodHappyIcon({ size = 20, color = '#F39C12', strokeWidth = 2, ...props }) {
+export function MoodHappyIcon({ size = 20, color = '#F39C12', strokeWidth = 2, ...props }: MoodSvgIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Circle cx="12" cy="12" r="9.5" stroke={color} strokeWidth={strokeWidth} fill={color + '18'} />
@@ -24,7 +35,7 @@ export function MoodHappyIcon({ size = 20, color = '#F39C12', strokeWidth = 2, .
 /**
  * 2. 신남/환호 (MoodExcitedIcon)
  */
-export function MoodExcitedIcon({ size = 20, color = '#FF7E82', strokeWidth = 2, ...props }) {
+export function MoodExcitedIcon({ size = 20, color = colors.primary, strokeWidth = 2, ...props }: MoodSvgIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Circle cx="12" cy="12" r="9.5" stroke={color} strokeWidth={strokeWidth} fill={color + '18'} />
@@ -42,7 +53,7 @@ export function MoodExcitedIcon({ size = 20, color = '#FF7E82', strokeWidth = 2,
 /**
  * 3. 졸림/피곤 (MoodSleepyIcon)
  */
-export function MoodSleepyIcon({ size = 20, color = '#4A90E2', strokeWidth = 2, ...props }) {
+export function MoodSleepyIcon({ size = 20, color = '#4A90E2', strokeWidth = 2, ...props }: MoodSvgIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Circle cx="11" cy="13" r="8.5" stroke={color} strokeWidth={strokeWidth} fill={color + '15'} />
@@ -61,7 +72,7 @@ export function MoodSleepyIcon({ size = 20, color = '#4A90E2', strokeWidth = 2, 
 /**
  * 4. 공부/열중 (MoodStudyIcon)
  */
-export function MoodStudyIcon({ size = 20, color = '#2ECC71', strokeWidth = 2, ...props }) {
+export function MoodStudyIcon({ size = 20, color = '#2ECC71', strokeWidth = 2, ...props }: MoodSvgIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       {/* 연필 본체 */}
@@ -78,7 +89,7 @@ export function MoodStudyIcon({ size = 20, color = '#2ECC71', strokeWidth = 2, .
 /**
  * 5. 쇼핑/외출 (MoodShoppingIcon)
  */
-export function MoodShoppingIcon({ size = 20, color = '#9B59B6', strokeWidth = 2, ...props }) {
+export function MoodShoppingIcon({ size = 20, color = '#9B59B6', strokeWidth = 2, ...props }: MoodSvgIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       {/* 쇼핑백 몸통 */}
@@ -94,7 +105,7 @@ export function MoodShoppingIcon({ size = 20, color = '#9B59B6', strokeWidth = 2
 /**
  * 6. 식사/냠냠 (MoodMealIcon)
  */
-export function MoodMealIcon({ size = 20, color = '#E67E22', strokeWidth = 2, ...props }) {
+export function MoodMealIcon({ size = 20, color = '#E67E22', strokeWidth = 2, ...props }: MoodSvgIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       {/* 둥근 닭다리/음식 쉐입 */}
@@ -113,7 +124,7 @@ export function MoodMealIcon({ size = 20, color = '#E67E22', strokeWidth = 2, ..
 /**
  * 7. 운동/파이팅 (MoodExerciseIcon)
  */
-export function MoodExerciseIcon({ size = 20, color = '#E74C3C', strokeWidth = 2, ...props }) {
+export function MoodExerciseIcon({ size = 20, color = '#E74C3C', strokeWidth = 2, ...props }: MoodSvgIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       {/* 덤벨 아령 */}
@@ -129,7 +140,7 @@ export function MoodExerciseIcon({ size = 20, color = '#E74C3C', strokeWidth = 2
 /**
  * 8. 사랑/감사 (MoodLoveIcon)
  */
-export function MoodLoveIcon({ size = 20, color = '#FF7E82', strokeWidth = 2, ...props }) {
+export function MoodLoveIcon({ size = 20, color = colors.primary, strokeWidth = 2, ...props }: MoodSvgIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       <Path
@@ -149,7 +160,7 @@ export function MoodLoveIcon({ size = 20, color = '#FF7E82', strokeWidth = 2, ..
 /**
  * 9. 집콕/휴식 (MoodHomeIcon)
  */
-export function MoodHomeIcon({ size = 20, color = '#1ABC9C', strokeWidth = 2, ...props }) {
+export function MoodHomeIcon({ size = 20, color = '#1ABC9C', strokeWidth = 2, ...props }: MoodSvgIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       {/* 굴뚝과 몽실몽실 연기 */}
@@ -170,7 +181,7 @@ export function MoodHomeIcon({ size = 20, color = '#1ABC9C', strokeWidth = 2, ..
 /**
  * 10. 게임/취미 (MoodGameIcon)
  */
-export function MoodGameIcon({ size = 20, color = '#3498DB', strokeWidth = 2, ...props }) {
+export function MoodGameIcon({ size = 20, color = '#3498DB', strokeWidth = 2, ...props }: MoodSvgIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
       {/* 조이패드 본체 */}
@@ -195,7 +206,7 @@ export function MoodGameIcon({ size = 20, color = '#3498DB', strokeWidth = 2, ..
 /**
  * 기분 매핑 테이블 및 호환 래퍼 컴포넌트
  */
-const MOOD_MAP = {
+const MOOD_MAP: Record<string, React.ComponentType<MoodSvgIconProps>> = {
   '😊': MoodHappyIcon,
   '😄': MoodExcitedIcon,
   '😴': MoodSleepyIcon,
@@ -220,22 +231,22 @@ const MOOD_MAP = {
 
 export const MOOD_ITEMS = [
   { id: '😊', label: '행복', component: MoodHappyIcon, color: '#F39C12' },
-  { id: '😄', label: '신남', component: MoodExcitedIcon, color: '#FF7E82' },
+  { id: '😄', label: '신남', component: MoodExcitedIcon, color: colors.primary },
   { id: '😴', label: '피곤', component: MoodSleepyIcon, color: '#4A90E2' },
   { id: '✏️', label: '공부', component: MoodStudyIcon, color: '#2ECC71' },
   { id: '🛍️', label: '쇼핑', component: MoodShoppingIcon, color: '#9B59B6' },
   { id: '🍗', label: '식사', component: MoodMealIcon, color: '#E67E22' },
   { id: '💪', label: '운동', component: MoodExerciseIcon, color: '#E74C3C' },
-  { id: '❤️', label: '사랑', component: MoodLoveIcon, color: '#FF7E82' },
+  { id: '❤️', label: '사랑', component: MoodLoveIcon, color: colors.primary },
   { id: '🏠', label: '집콕', component: MoodHomeIcon, color: '#1ABC9C' },
   { id: '🎮', label: '게임', component: MoodGameIcon, color: '#3498DB' },
 ];
 
-export function MoodIcon({ mood = '😊', size = 20, color, strokeWidth = 2, ...props }) {
+export function MoodIcon({ mood = '😊', size = 20, color, strokeWidth = 2, ...props }: MoodIconProps) {
   const IconComp = MOOD_MAP[mood];
   if (IconComp) {
     const matched = MOOD_ITEMS.find((item) => item.id === mood || item.id === mood);
-    const defaultColor = matched ? matched.color : '#FF7E82';
+    const defaultColor = matched ? matched.color : colors.primary;
     return <IconComp size={size} color={color || defaultColor} strokeWidth={strokeWidth} {...props} />;
   }
   return <Text style={{ fontSize: size * 0.85 }}>{mood}</Text>;

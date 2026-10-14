@@ -2,11 +2,9 @@
 
 /**
  * sync-readme.js
- * 
- * FamLink 프로젝트의 화면/컴포넌트 변경 사항을 감지하여
+ *
+ * FamLink 프로젝트의 화면/컴포넌트 변경 사항(.js, .jsx, .ts, .tsx)을 감지하여
  * README.md의 기능 및 컴포넌트 목록이 최신 상태인지 검증하고 동기화 상태를 점검합니다.
- * 
- * 실행: npm run docs:sync 또는 node scripts/sync-readme.js
  */
 
 const fs = require('fs');
@@ -26,9 +24,9 @@ function checkDocumentationSync() {
 
   const readmeContent = fs.readFileSync(README_PATH, 'utf8');
 
-  // components 디렉토리 내 주요 js 파일 목록 조회
+  const validExts = ['.js', '.jsx', '.ts', '.tsx'];
   const componentFiles = fs.readdirSync(COMPONENTS_DIR)
-    .filter(file => file.endsWith('.js') && !file.startsWith('.'))
+    .filter(file => validExts.includes(path.extname(file)) && !file.startsWith('.'))
     .sort();
 
   console.log(`📁 감지된 컴포넌트 목록 (${componentFiles.length}개):`);
@@ -39,7 +37,7 @@ function checkDocumentationSync() {
   const coveredComponents = [];
 
   componentFiles.forEach(file => {
-    const baseName = file.replace(/\.js$/, '');
+    const baseName = file.replace(/\.(js|jsx|ts|tsx)$/, '');
     if (readmeContent.includes(file) || readmeContent.includes(baseName)) {
       coveredComponents.push(file);
     } else {

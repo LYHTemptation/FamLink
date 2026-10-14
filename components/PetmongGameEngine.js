@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
+import { colors } from '../theme';
 import Svg, { Circle, Path, Line, G, Text as SvgText } from 'react-native-svg';
 import {
   Heart,
@@ -150,7 +151,7 @@ const GUARDIAN_CONSTELLATIONS = [
 function WarmthFruitIcon({ size = 32 }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 32 32" fill="none">
-      <Circle cx="16" cy="16" r="14" fill="#FFE4E8" stroke="#FF7E82" strokeWidth={2} />
+      <Circle cx="16" cy="16" r="14" fill="#FFE4E8" stroke={colors.primary} strokeWidth={2} />
       <Path
         d="M16 22C16 22 9 17.5 9 13C9 10.5 11 8.5 13.5 8.5C14.8 8.5 15.6 9.2 16 9.8C16.4 9.2 17.2 8.5 18.5 8.5C21 8.5 23 10.5 23 13C23 17.5 16 22 16 22Z"
         fill="#FF4D6D"
@@ -1489,8 +1490,8 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#FFD4D7',
-    shadowColor: '#FF7E82',
+    borderColor: colors.primaryBorder,
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 4,
@@ -1507,7 +1508,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF0F3',
+    backgroundColor: colors.primaryLight,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 14,
@@ -1652,7 +1653,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#FFD4D7',
+    borderColor: colors.primaryBorder,
     marginTop: 2,
     gap: 2,
     shadowColor: '#FF4D6D',
@@ -1753,8 +1754,8 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   warmthActionBtnActive: {
-    backgroundColor: '#FFF0F3',
-    borderColor: '#FF7E82',
+    backgroundColor: colors.primaryLight,
+    borderColor: colors.primary,
     borderWidth: 2,
   },
   warmthActionBtnLabel: {

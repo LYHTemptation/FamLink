@@ -1,13 +1,14 @@
 /**
  * FamLink Global Color Palette (Warm Cozy Family Theme)
- * 피그마 기반의 따뜻하고 편안한 감성 패밀리 디자인 시스템 토큰
+ * 피그마 기반의 따뜻하고 편안한 감성 패밀리 디자인 시스템 토큰 (Single Source of Truth)
  */
 export const colors = {
   // Brand Primary (Warm Coral & Peach)
   primary: '#FF6B47',
   primaryLight: '#FFF5F2',
   primaryDark: '#E05330',
-  primaryBorder: '#FED7AA',
+  primaryBorder: '#FFE8E0',
+  primaryAccentBorder: '#FED7AA',
   brandCoral: '#FF6B47',
   brandPeach: '#FFF5F2',
 
@@ -21,6 +22,7 @@ export const colors = {
 
   // Functional Status Colors
   success: '#10B981',
+  successBright: '#2ECC71',
   successLight: '#ECFDF5',
   successBorder: '#A7F3D0',
 
@@ -38,11 +40,11 @@ export const colors = {
   pointBorder: '#FDE68A',
 
   // Neutrals & Surfaces (Warm Linen & Stone)
-  background: '#FAF8F3', // Figma node 1:700 웜 아이보리 캔버스
+  background: '#FAF8F3', // Figma Warm Ivory Canvas
   card: '#FFFFFF',
   cardWarm: '#FFFDF9',
   surface: '#FFFFFF',
-  inputBg: '#FFFFFF',
+  inputBg: '#FAF8F3',
   divider: '#F5F0E8',
   border: '#F5F0E8',
   borderLight: '#FAF5ED',
@@ -61,6 +63,8 @@ export const colors = {
   overlay: 'rgba(28, 25, 23, 0.45)',
   overlayDark: 'rgba(28, 25, 23, 0.65)',
   overlayLight: 'rgba(250, 248, 243, 0.92)',
-};
+} as const;
+
+export type ThemeColors = typeof colors;
 
 export default colors;

@@ -1,4 +1,28 @@
 {
-  "compilerOptions": {},
-  "extends": "expo/tsconfig.base"
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "allowJs": true,
+    "jsx": "react-native",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true
+  },
+  "include": [
+    "App.js",
+    "index.js",
+    "types/**/*.ts",
+    "theme/**/*.ts",
+    "utils/**/*.ts",
+    "lib/**/*.js",
+    "lib/**/*.ts",
+    "services/**/*.js",
+    "services/**/*.ts",
+    "screens/**/*.js",
+    "screens/**/*.tsx",
+    "components/**/*.js",
+    "components/**/*.ts",
+    "components/**/*.tsx"
+  ]
 }

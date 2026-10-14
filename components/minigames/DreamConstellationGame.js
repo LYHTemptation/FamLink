@@ -13,6 +13,7 @@ import {
 import Svg, { Line, Circle, G, Defs, RadialGradient, Stop, Path } from 'react-native-svg';
 import { Image as ExpoImage } from 'expo-image';
 import { useTransparentImage } from '../../lib/imageTransparencyService';
+import { colors } from '../../theme';
 import {
   Trophy,
   Sparkles,

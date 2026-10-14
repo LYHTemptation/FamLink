@@ -45,6 +45,7 @@ import {
   startBackgroundStagePreGeneration,
   detectSpecies,
 } from '../lib/petmongEvolutionService';
+import { colors, typography, commonStyles } from '../theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 

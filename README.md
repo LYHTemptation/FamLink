@@ -157,9 +157,9 @@
 - **동적 기간 필터링(현재 월, 전 월, 전체, 연·월 선택) & 질문별 전체 문답 진행률 통계**:
   - `2026년 10월 (N/M)`, `2026년 9월 (N/M)`, `전체보기 (N/M)` 칩을 통해 전체 질문 수 대비 우리 가족이 답변 완료한 질문 수를 명확하게 파악
   - **`[🗓️ 연·월 선택]` 모달 피커 (`MonthPickerModal`)**: 수년 치 가족 문답이 누적되더라도 연도별 아코디언 및 월별 그리드를 통해 원하는 과거 시점으로 1초 만에 점프 탐색 가능
-- **3D 플립북(Flipbook) 뷰어 & 실물 양장본(POD) 인쇄 발주**:
-  - `FamilyStorybookModal.js`와 원터치 연동되어 완성된 책을 실제 책장 넘기듯 양면 펼침면(Spread)으로 미리보기
-  - 가족들이 함께 모은 포인트(P)를 차감하여 150×150mm 규격 300DPI 고급 하드커버 양장본 실물 인쇄 및 배송 신청 연동
+- **풀스크린 북 리더 & 실물 양장본(POD) 인쇄 발주 일원화 (`PhotobookStudioScreen.js`)**:
+  - 구형 150×150mm 모달을 제거하고 150×210mm A5 16P 단행본 조판 캔버스 및 풀스크린 북 리더로 통합
+  - 가족들이 함께 모은 포인트(P)를 차감하여 150×210mm A5 규격 300DPI 고급 하드커버 양장본 실물 인쇄 및 배송 신청 연동
 
 ---
 
@@ -238,23 +238,23 @@ FamLink/
 │   ├── ChatScreen.js                # 실시간 가족 메신저 & 1:1 대화방
 │   ├── CalendarScreen.js            # 공유 캘린더 & D-Day 기념일
 │   ├── SmallTalkScreen.js           # [함께 허브] 데일리 스몰톡 & 2대 서브탭 (가족 장보기/집안일, 패밀리 미니게임)
-│   ├── FamilyStorybookModal.js      # A5 인쇄 규격 AI 가족 이야기책 스튜디오 & POD 주문
 │   ├── ShoppingListScreen.js        # 장보기 & 집안일 체크리스트 (임베디드 모드 지원)
 │   ├── InteriorScreen.js            # 풀스크린 감성 룸 & 테마/도감/성장 관리 컨테이너
-│   ├── InteriorStyles.js            # 풀스크린 룸 & 플로팅 글래스 헤더 전용 모듈화 스타일시트
+│   ├── InteriorStyles.ts            # 풀스크린 룸 & 플로팅 글래스 헤더 전용 모듈화 스타일시트 (TypeScript)
 │   ├── PetmongGameEngine.js         # 가족 대화 흡수 자율 성장 엔진 (온기 게이지, 온기 열매, 5대 자율 일상 루틴)
 │   ├── PetmongGrowthBookModal.js    # 우리 가족 반려몽 4단계 성장 타임라인 및 동물상 도감
 │   ├── FamilyScreen.js              # 가족 프로필, 기분 상태 & 가훈 관리
-│   ├── PhotoAlbumScreen.js          # 스냅스형 가족 포토북 스튜디오 & 스몰톡 문답 아카이브 (사진 관리 내장)
+│   ├── PhotoAlbumScreen.tsx         # 가족 포토북 스튜디오 & 스몰톡 문답 아카이브 허브 (TypeScript)
 │   ├── PhotobookStudioScreen.js     # 6개월 반기 포토북 스튜디오 (16P A5 단행본 조판 캔버스 & POD 커머스)
-│   ├── UserAvatar.js                # 사진(Data URI/URL) & 이모지 아바타 반응형 렌더링 컴포넌트
+│   ├── UserAvatar.tsx               # 사진(Data URI/URL) & 이모지 아바타 반응형 렌더링 컴포넌트 (TypeScript)
 │   ├── minigames/                   # 체류형 인터랙티브 미니게임 (함께 탭 4대 액션 게임존)
 │   │   ├── SnackCatchGame.js        # 제1탄 [후르츠 닌자 슬라이스] (과일 썰기)
 │   │   ├── CardMatchGame.js         # 제2탄 [카드 짝맞추기] (3×6 반려몽 보물 짝맞추기)
 │   │   ├── BubblePopGame.js         # 제3탄 [비누방울 머지 퍼즐] (수박게임 버블 물리)
 │   │   └── DreamConstellationGame.js # 제4탄 [꿈나라 별자리 잇기] (감성 별자리 퍼즐)
 │   └── icons/                       # 전용 SVG 및 Lucide 커스텀 아이콘 팩
-├── theme/                           # 전역 디자인 시스템 및 공통 스타일 (colors, typography, commonStyles)
+├── types/                           # 전역 도메인 TypeScript 인터페이스 (domain.ts)
+├── theme/                           # 전역 디자인 시스템 및 공통 스타일 (colors.ts, typography.ts, commonStyles.ts)
 ├── lib/                             # 공통 라이브러리 및 AI/DB 서비스
 │   ├── supabase.js                  # Supabase 클라이언트 인스턴스
 │   ├── aiSystemPrompts.js           # Gemini AI 표준 시스템 프롬프트 & 페르소나 모듈
@@ -262,7 +262,7 @@ FamLink/
 │   ├── petmongEvolution.js          # 반려몽 4단계 성장 마일스톤 및 동물상 진화 스펙
 │   └── petmongEvolutionService.js   # Gemini 2.5 Flash 기반 AI 진화 생성 & 상태 동기화 서비스
 ├── screens/                         # 사용자 인증 및 로그인 (AuthScreen.js)
-├── utils/                           # 알림(notifications.js), 데일리 주제(topics.js)
+├── utils/                           # 알림(notifications.ts), 데일리 주제(topics.ts), 공휴일(koreanHolidays.ts), 에러 핸들러(errorHandler.ts)
 ├── scripts/                         # 유지보수 및 품질 검증 스크립트
 │   ├── check-syntax.js              # Babel AST 기반 문법 및 미선언 참조(ReferenceError) 자동 전수 검사
 │   └── sync-readme.js               # 문서-컴포넌트 자동 동기화 검증

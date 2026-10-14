@@ -32,6 +32,7 @@ import {
   Gift,
 } from 'lucide-react-native';
 import UserAvatar from './UserAvatar';
+import { colors, typography, commonStyles } from '../theme';
 import SnackCatchGame from './minigames/SnackCatchGame';
 import CardMatchGame from './minigames/CardMatchGame';
 import BubblePopGame from './minigames/BubblePopGame';

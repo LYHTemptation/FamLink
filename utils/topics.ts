@@ -1,9 +1,9 @@
-// FamLink Daily Small-talk Topics Rotation Utility
+// FamLink Daily Small-talk Topics Rotation Utility (TypeScript)
 
 /**
  * 문자열에서 모든 유니코드 이모티콘을 완벽하게 제거하고 공백을 정돈합니다.
  */
-export function stripEmojis(str) {
+export function stripEmojis(str?: string | null): string {
   if (!str || typeof str !== 'string') return '';
   return str
     .replace(
@@ -15,7 +15,7 @@ export function stripEmojis(str) {
 }
 
 // 이모티콘이 전혀 없는 순수 고품질 가족 소통 질문 리스트
-export const PREDEFINED_TOPICS = [
+export const PREDEFINED_TOPICS: readonly string[] = [
   '오늘 하루 중 가장 많이 웃었던 일은 무엇인가요?',
   '최근에 산 물건 중 가장 마음에 드는 것은 무엇인가요?',
   '가족들과 다 함께 꼭 가보고 싶은 버킷리스트 여행지는 어디인가요?',
@@ -48,19 +48,17 @@ export const PREDEFINED_TOPICS = [
   '가족에게 듣고 싶은 따뜻한 응원의 한마디는 무엇인가요?',
 ];
 
-export function getTopicForDate(date = new Date()) {
+export function getTopicForDate(date: Date | string | number = new Date()): string {
   const d = new Date(date);
-  // Calculate day of year (0-365)
   const start = new Date(d.getFullYear(), 0, 0);
-  const diff = d - start;
+  const diff = d.getTime() - start.getTime();
   const oneDay = 1000 * 60 * 60 * 24;
   const dayOfYear = Math.floor(diff / oneDay);
 
-  // Deterministic pick based on date
   const index = Math.abs(dayOfYear) % PREDEFINED_TOPICS.length;
   return stripEmojis(PREDEFINED_TOPICS[index]);
 }
 
-export function getTopicForToday() {
+export function getTopicForToday(): string {
   return getTopicForDate(new Date());
 }

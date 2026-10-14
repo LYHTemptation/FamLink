@@ -63,6 +63,7 @@ import {
   AlertCircle,
 } from 'lucide-react-native';
 import UserAvatar from './UserAvatar';
+import { colors, typography, commonStyles } from '../theme';
 import { stripEmojis } from '../utils/topics';
 
 /**

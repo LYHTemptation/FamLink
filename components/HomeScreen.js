@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Plus, Send } from 'lucide-react-native';
 import UserAvatar from './UserAvatar';
+import { colors, typography, commonStyles } from '../theme';
 import { getEvolutionStage, getStageNameWithPet, getRequiredExpForLevel } from '../lib/petmongEvolution';
 import { stripEmojis } from '../utils/topics';
 import { getKoreanHoliday } from '../utils/koreanHolidays';

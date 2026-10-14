@@ -37,8 +37,11 @@ function getFiles(dir, exts = ['.js', '.jsx', '.ts', '.tsx']) {
 }
 
 const filesToCheck = [
-  'App.js',
+  ...['App.js', 'App.tsx'].filter(f => fs.existsSync(f)),
+  ...getFiles('types'),
+  ...getFiles('theme'),
   ...getFiles('components'),
+  ...getFiles('screens'),
   ...getFiles('lib'),
   ...getFiles('services'),
   ...getFiles('utils')
@@ -46,7 +49,7 @@ const filesToCheck = [
 
 let hasErrors = false;
 
-console.log(`🔍 Checking ${filesToCheck.length} source files for syntax & undefined references...\n`);
+console.log(`🔍 Checking ${filesToCheck.length} source files (.js/.ts/.tsx) for syntax & undefined references...\n`);
 
 for (const filePath of filesToCheck) {
   const code = fs.readFileSync(filePath, 'utf8');
@@ -69,9 +72,26 @@ for (const filePath of filesToCheck) {
       ReferencedIdentifier(p) {
         const name = p.node.name;
         if (standardGlobals.has(name)) return;
-        
-        // Ignore JSX namespace tags (e.g., Svg.Path) or typeof checks
-        if (p.parentPath.isTypeQuery?.()) return;
+
+        // Ignore TypeScript type annotations, interfaces, type aliases, and type queries
+        if (
+          p.parentPath.isTypeQuery?.() ||
+          p.parentPath.isTSTypeReference?.() ||
+          p.parentPath.isTSTypeQuery?.() ||
+          p.parentPath.isTSExpressionWithTypeArguments?.() ||
+          p.parentPath.isTSQualifiedName?.() ||
+          p.findParent(
+            ancestor =>
+              ancestor.isTSType?.() ||
+              ancestor.isTSTypeAnnotation?.() ||
+              ancestor.isTSInterfaceDeclaration?.() ||
+              ancestor.isTSTypeAliasDeclaration?.() ||
+              ancestor.isTSTypeParameterDeclaration?.() ||
+              ancestor.isTSTypeParameterInstantiation?.()
+          )
+        ) {
+          return;
+        }
 
         if (!p.scope.hasBinding(name)) {
           if (!undeclared.has(name)) {

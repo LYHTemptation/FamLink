@@ -1,5 +1,22 @@
 import React from 'react';
-import { View, Text, Image, StyleSheet } from 'react-native';
+import {
+  View,
+  Text,
+  Image,
+  StyleSheet,
+  StyleProp,
+  ViewStyle,
+  TextStyle,
+} from 'react-native';
+import { colors } from '../theme';
+
+export interface UserAvatarProps {
+  avatar?: string | null;
+  size?: number;
+  style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
+  borderColor?: string;
+}
 
 export default function UserAvatar({
   avatar,
@@ -7,18 +24,18 @@ export default function UserAvatar({
   style,
   textStyle,
   borderColor,
-}) {
-  const isImageString = typeof avatar === 'string' && (
-    avatar.startsWith('http') ||
-    avatar.startsWith('data:') ||
-    avatar.startsWith('blob:') ||
-    avatar.startsWith('file:') ||
-    avatar.startsWith('/') ||
-    avatar.length > 50
-  );
+}: UserAvatarProps): React.ReactElement {
+  const isImageString =
+    typeof avatar === 'string' &&
+    (avatar.startsWith('http') ||
+      avatar.startsWith('data:') ||
+      avatar.startsWith('blob:') ||
+      avatar.startsWith('file:') ||
+      avatar.startsWith('/') ||
+      avatar.length > 50);
 
-  let imageUri = null;
-  if (isImageString) {
+  let imageUri: string | null = null;
+  if (isImageString && typeof avatar === 'string') {
     if (
       avatar.startsWith('http') ||
       avatar.startsWith('data:') ||
@@ -57,7 +74,8 @@ export default function UserAvatar({
   }
 
   // Ensure raw base64 or long strings are never displayed inside Text
-  const displayEmoji = typeof avatar === 'string' && avatar.length <= 10 ? avatar : '👦';
+  const displayEmoji =
+    typeof avatar === 'string' && avatar.length <= 10 ? avatar : '👦';
 
   return (
     <View
@@ -85,7 +103,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
-    backgroundColor: '#F2F2F7',
+    backgroundColor: colors.divider,
   },
   textContainer: {
     justifyContent: 'center',

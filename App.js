@@ -27,6 +27,7 @@ import {
   TabFamilyIcon,
 } from './components/icons';
 import UserAvatar from './components/UserAvatar';
+import { colors, typography, commonStyles } from './theme';
 import { getRequiredExpForLevel, getEvolutionStage } from './lib/petmongEvolution';
 
 // Web Polyfill for Alert.alert (react-native-web has empty stub alert() {})
