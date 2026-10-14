@@ -112,10 +112,11 @@ export default function PhotobookStudioScreen({
   const screenWidth = windowWidth || Dimensions.get('window').width;
   const isSmallScreen = screenWidth < 380;
 
-  // 1. 볼륨 선택 (6개월 단위 누적 볼륨제: Vol. 1, Vol. 2, Vol. 3)
+  // 1. 볼륨 선택 (6개월 단위 누적 볼륨제: Vol. 1, Vol. 2, Vol. 3...)
   const [selectedVolume, setSelectedVolume] = useState('vol-1');
+  const [volumeList, setVolumeList] = useState(VOLUME_OPTIONS);
   const [volumePickerModalVisible, setVolumePickerModalVisible] = useState(false);
-  const currentVolObj = VOLUME_OPTIONS.find(v => v.id === selectedVolume) || VOLUME_OPTIONS[0];
+  const currentVolObj = volumeList.find(v => v.id === selectedVolume) || volumeList[0] || VOLUME_OPTIONS[0];
 
   const [selectedThemeId, setSelectedThemeId] = useState('linen');
   const currentTheme = STUDIO_THEMES.find(t => t.id === selectedThemeId) || STUDIO_THEMES[0];
@@ -398,8 +399,13 @@ export default function PhotobookStudioScreen({
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
 
   // 원격(다른 가족)의 변경 사항을 내 화면 상태에 실시간 주입
-  const applyRemotePhotobookUpdate = useCallback((payload) => {
+  const applyRemotePhotobookUpdate = useCallback((payload, targetVolumeId) => {
     if (!payload) return;
+    const currentVol = targetVolumeId || selectedVolume;
+    // 내가 작업 중인 권차와 다른 권차의 실시간 수정 사항은 현재 화면에 주입하지 않음 (권차 간 화면 오염 방지)
+    if (payload.selectedVolume && payload.selectedVolume !== currentVol) {
+      return;
+    }
     isApplyingRemoteRef.current = true;
     try {
       if (payload.selectedVolume !== undefined) setSelectedVolume(payload.selectedVolume);
@@ -440,7 +446,7 @@ export default function PhotobookStudioScreen({
         isApplyingRemoteRef.current = false;
       }, 50);
     }
-  }, [currentUserName]);
+  }, [currentUserName, selectedVolume]);
 
   // 내 화면 변경 사항을 가족 채널로 실시간 브로드캐스트 + AsyncStorage 백업
   const broadcastPhotobookChange = useCallback((updatedPartial) => {
@@ -468,8 +474,9 @@ export default function PhotobookStudioScreen({
       ...updatedPartial,
     };
 
-    // 로컬 캐시 즉시 저장
-    AsyncStorage.setItem(`FAMLINK_PHOTOBOOK_SYNC_${effectiveFamilyId}`, JSON.stringify(fullPayload)).catch(() => {});
+    // 로컬 캐시 즉시 저장 (권차별 분리 캐싱으로 다권 데이터 오염 방지)
+    const currentVol = updatedPartial?.selectedVolume || selectedVolume || 'vol-1';
+    AsyncStorage.setItem(`FAMLINK_PHOTOBOOK_SYNC_${effectiveFamilyId}_${currentVol}`, JSON.stringify(fullPayload)).catch(() => {});
 
     // Supabase Realtime Broadcast 전송 (가족 기기들에 0.1초 내 실시간 전송)
     if (photobookChannelRef.current) {
@@ -546,24 +553,157 @@ export default function PhotobookStudioScreen({
     customGalleryPhotos,
   ]);
 
-  // 실시간 Supabase 채널 구독 및 초기 캐시 로드
-  useEffect(() => {
-    if (!effectiveFamilyId) return;
+  // 특정 권차의 기본 상태 리셋
+  const resetVolumeToDefaults = useCallback((volId, volObj) => {
+    const vObj = volObj || volumeList.find(v => v.id === volId) || VOLUME_OPTIONS.find(v => v.id === volId);
+    const volNumMatch = (volId || '').match(/\d+/);
+    const volNum = volNumMatch ? volNumMatch[0] : '1';
+    const volLabel = vObj?.label || `제${volNum}권`;
+    const volTitle = vObj?.title || `Vol. ${volNum}`;
+    setBookTitle(`우리 가족의 ${volLabel} 이야기 (${volTitle})`);
+    setBookSubtitle('사소한 일상이 모여 만든 가장 눈부신 기적');
+    setCoverSignature('우리 가족의 따뜻한 이야기');
+    setCoverPhoto(null);
+    setCoverStyle('classic');
+    setSelectedThemeId('linen');
+    setBookFontFamily('serif');
+    setBookFontSize('medium');
+    setSpreadPhotos({});
+    setSpreadLayouts({});
+    setSpreadCaptions({});
+    setPageFormats({});
+    setCustomSpreadTopics({});
+  }, [volumeList]);
 
-    // 1. AsyncStorage 캐시 불러오기
-    AsyncStorage.getItem(`FAMLINK_PHOTOBOOK_SYNC_${effectiveFamilyId}`)
+  // 권차(이야기책) 전환 핸들러
+  const handleSwitchVolume = useCallback((volId, volObj) => {
+    if (volId === selectedVolume) {
+      setVolumePickerModalVisible(false);
+      return;
+    }
+    setSelectedVolume(volId);
+    setVolumePickerModalVisible(false);
+    setCurrentPageNum(0);
+    setViewerPageNum(0);
+
+    // 1. 해당 권차의 로컬 캐시 조회
+    AsyncStorage.getItem(`FAMLINK_PHOTOBOOK_SYNC_${effectiveFamilyId}_${volId}`)
       .then(saved => {
         if (saved) {
           try {
             const parsed = JSON.parse(saved);
-            applyRemotePhotobookUpdate(parsed);
+            applyRemotePhotobookUpdate(parsed, volId);
+            return;
+          } catch (e) {}
+        }
+        resetVolumeToDefaults(volId, volObj);
+      })
+      .catch(() => {
+        resetVolumeToDefaults(volId, volObj);
+      });
+
+    // 2. Supabase DB에서 해당 권차 데이터 조회
+    if (effectiveFamilyId && effectiveFamilyId !== 'default-family') {
+      supabase
+        .from('family_photobooks')
+        .select('*')
+        .eq('family_id', effectiveFamilyId)
+        .eq('volume_id', volId)
+        .maybeSingle()
+        .then(({ data, error }) => {
+          if (!error && data) {
+            applyRemotePhotobookUpdate({
+              selectedVolume: data.volume_id,
+              selectedThemeId: data.theme_id,
+              bookFontFamily: data.font_family,
+              bookFontSize: data.font_size,
+              bookTitle: data.title,
+              bookSubtitle: data.subtitle,
+              coverSignature: data.cover_signature,
+              coverPhoto: data.cover_photo_url,
+              coverStyle: data.cover_style,
+              pageFormats: data.page_formats || {},
+              spreadPhotos: data.spread_photos || {},
+              spreadLayouts: data.spread_layouts || {},
+              spreadCaptions: data.spread_captions || {},
+              customSpreadTopics: data.custom_spread_topics || {},
+              customGalleryPhotos: data.custom_gallery_photos || [],
+              prologueEssay: data.prologue_essay,
+              epilogueEssay: data.epilogue_essay,
+              updatedBy: data.updated_by,
+            }, volId);
+          } else {
+            resetVolumeToDefaults(volId, volObj);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [effectiveFamilyId, selectedVolume, applyRemotePhotobookUpdate, resetVolumeToDefaults]);
+
+  // 새로운 이야기책(권차) 무한 추가
+  const handleAddNewVolume = () => {
+    const nextNum = volumeList.length + 1;
+    const newVolId = `vol-${nextNum}`;
+    const newVolObj = {
+      id: newVolId,
+      title: `Vol. ${nextNum}`,
+      label: `제${nextNum}권`,
+      period: `${nextNum * 180}일의 기록`,
+      desc: `우리 가족 ${nextNum}번째 이야기`,
+    };
+    setVolumeList(prev => [...prev, newVolObj]);
+    handleSwitchVolume(newVolId, newVolObj);
+  };
+
+  // 실시간 Supabase 채널 구독 및 초기 캐시 로드
+  useEffect(() => {
+    if (!effectiveFamilyId) return;
+
+    // 0. 가족이 작성해 둔 모든 권차 목록 조회하여 volumeList에 동적 병합
+    if (effectiveFamilyId !== 'default-family') {
+      supabase
+        .from('family_photobooks')
+        .select('volume_id, title')
+        .eq('family_id', effectiveFamilyId)
+        .then(({ data }) => {
+          if (data && data.length > 0) {
+            setVolumeList(prev => {
+              const existingIds = new Set(prev.map(v => v.id));
+              const additions = [];
+              data.forEach(row => {
+                if (row.volume_id && !existingIds.has(row.volume_id)) {
+                  const numMatch = row.volume_id.match(/\d+/);
+                  const num = numMatch ? numMatch[0] : (prev.length + additions.length + 1);
+                  additions.push({
+                    id: row.volume_id,
+                    title: `Vol. ${num}`,
+                    label: `제${num}권`,
+                    period: `${num * 180}일의 기록`,
+                    desc: row.title || `우리 가족 ${num}번째 이야기`,
+                  });
+                }
+              });
+              return additions.length > 0 ? [...prev, ...additions] : prev;
+            });
+          }
+        })
+        .catch(() => {});
+    }
+
+    // 1. AsyncStorage 캐시 불러오기 (해당 권차 캐시)
+    AsyncStorage.getItem(`FAMLINK_PHOTOBOOK_SYNC_${effectiveFamilyId}_${selectedVolume}`)
+      .then(saved => {
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            applyRemotePhotobookUpdate(parsed, selectedVolume);
           } catch (e) {}
         }
       })
       .catch(() => {});
 
-    // 2. Supabase DB (family_photobooks)에서 최신 원격 설정 조회 (어느 기기에서든 영구 보존된 표지/설정 로드)
-    if (effectiveFamilyId && effectiveFamilyId !== 'default-family') {
+    // 2. Supabase DB (family_photobooks)에서 최신 원격 설정 조회
+    if (effectiveFamilyId !== 'default-family') {
       supabase
         .from('family_photobooks')
         .select('*')
@@ -591,7 +731,7 @@ export default function PhotobookStudioScreen({
               prologueEssay: data.prologue_essay,
               epilogueEssay: data.epilogue_essay,
               updatedBy: data.updated_by,
-            });
+            }, selectedVolume);
           }
         })
         .catch(() => {});
@@ -604,8 +744,8 @@ export default function PhotobookStudioScreen({
 
     channel
       .on('broadcast', { event: 'PHOTOBOOK_SYNC' }, ({ payload }) => {
-        if (payload) {
-          applyRemotePhotobookUpdate(payload);
+        if (payload && payload.selectedVolume === selectedVolume) {
+          applyRemotePhotobookUpdate(payload, selectedVolume);
         }
       })
       .on(
@@ -618,7 +758,7 @@ export default function PhotobookStudioScreen({
         },
         (payload) => {
           const row = payload.new;
-          if (row) {
+          if (row && row.volume_id === selectedVolume) {
             applyRemotePhotobookUpdate({
               selectedVolume: row.volume_id,
               selectedThemeId: row.theme_id,
@@ -638,7 +778,7 @@ export default function PhotobookStudioScreen({
               prologueEssay: row.prologue_essay,
               epilogueEssay: row.epilogue_essay,
               updatedBy: row.updated_by,
-            });
+            }, selectedVolume);
           }
         }
       )
@@ -1142,9 +1282,31 @@ ${topicSnippets.join('\n')}
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const orderNumber = `ORD-${orderDateStr}-${randomSuffix}`;
 
+    const bookSnapshot = {
+      volume_id: selectedVolume || 'vol-1',
+      title: bookTitle || '우리 가족 이야기',
+      subtitle: bookSubtitle || '',
+      cover_photo_url: effectiveCoverPhoto || null,
+      cover_signature: coverSignature || '',
+      cover_style: coverStyle || 'classic',
+      theme_id: selectedThemeId || 'linen',
+      font_family: bookFontFamily || 'serif',
+      font_size: bookFontSize || 'medium',
+      spread_photos: spreadPhotos || {},
+      spread_layouts: spreadLayouts || {},
+      page_formats: pageFormats || {},
+      spread_captions: spreadCaptions || {},
+      custom_spread_topics: customSpreadTopics || {},
+      prologue_essay: prologueEssay || '',
+      epilogue_essay: epilogueEssay || '',
+      ordered_by: currentUserName,
+      ordered_at: new Date().toISOString(),
+    };
+
     const orderRecord = {
       family_id: currentUserProfile?.family_id || null,
       profile_id: currentUserProfile?.id || null,
+      volume_id: selectedVolume || 'vol-1',
       order_number: orderNumber,
       book_title: bookTitle || '우리 가족 이야기',
       cover_type: coverStyle === 'hardcover' ? '하드커버 (양장본)' : (coverStyle === 'softcover' ? '소프트커버' : '양장본'),
@@ -1154,6 +1316,7 @@ ${topicSnippets.join('\n')}
       postal_code: orderPostalCode.trim() || '06234',
       shipping_address: orderAddress.trim(),
       shipping_memo: orderShippingMemo.trim() || '문 앞 배송 부탁드립니다',
+      book_snapshot: bookSnapshot,
       status: 'pending',
     };
 
@@ -1950,17 +2113,13 @@ ${topicSnippets.join('\n')}
         </View>
 
         <ScrollView contentContainerStyle={styles.volumeListScroll} showsVerticalScrollIndicator={false}>
-          {VOLUME_OPTIONS.map((v, idx) => {
+          {volumeList.map((v, idx) => {
             const isSelected = selectedVolume === v.id;
             return (
               <TouchableOpacity
                 key={v.id}
                 style={[styles.volumeOptionCard, isSelected && styles.volumeOptionCardActive]}
-                onPress={() => {
-                  setSelectedVolume(v.id);
-                  setBookTitle(`우리 가족의 ${v.label === '제1권' ? '첫 번째' : v.label === '제2권' ? '두 번째' : '세 번째'} 이야기 (${v.title})`);
-                  setVolumePickerModalVisible(false);
-                }}
+                onPress={() => handleSwitchVolume(v.id, v)}
                 activeOpacity={0.85}
               >
                 <View style={[styles.volumeBadgeCircle, isSelected && styles.volumeBadgeCircleActive]}>
@@ -1989,6 +2148,16 @@ ${topicSnippets.join('\n')}
               </TouchableOpacity>
             );
           })}
+
+          {/* ➕ 새 권차(이야기책) 추가하기 버튼 */}
+          <TouchableOpacity
+            style={styles.addVolumeCtaBtn}
+            onPress={handleAddNewVolume}
+            activeOpacity={0.85}
+          >
+            <Plus size={16} color="#FF6B47" strokeWidth={2.5} style={{ marginRight: 6 }} />
+            <Text style={styles.addVolumeCtaText}>새 이야기책(권차) 추가하기</Text>
+          </TouchableOpacity>
         </ScrollView>
       </View>
     </View>
@@ -5453,9 +5622,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  volumeRadioCircleActive: {
+    volumeRadioCircleActive: {
     backgroundColor: '#FF6B47',
     borderColor: '#FF6B47',
+  },
+  addVolumeCtaBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF5F2',
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: '#FF6B47',
+    borderRadius: 16,
+    paddingVertical: 14,
+    marginTop: 4,
+  },
+  addVolumeCtaText: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: '#FF6B47',
   },
 
 

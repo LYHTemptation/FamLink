@@ -258,6 +258,7 @@ CREATE TABLE IF NOT EXISTS photobook_orders (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   family_id UUID REFERENCES families(id) ON DELETE CASCADE,
   profile_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+  volume_id TEXT DEFAULT 'vol-1',
   order_number TEXT UNIQUE NOT NULL,
   book_title TEXT NOT NULL,
   cover_type TEXT DEFAULT '양장본',
@@ -267,12 +268,15 @@ CREATE TABLE IF NOT EXISTS photobook_orders (
   postal_code TEXT,
   shipping_address TEXT NOT NULL,
   shipping_memo TEXT,
+  book_snapshot JSONB,
   status TEXT DEFAULT 'pending' NOT NULL,
   tracking_number TEXT,
   courier TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+ALTER TABLE photobook_orders ADD COLUMN IF NOT EXISTS volume_id TEXT DEFAULT 'vol-1';
+ALTER TABLE photobook_orders ADD COLUMN IF NOT EXISTS book_snapshot JSONB;
 ALTER TABLE photobook_orders DISABLE ROW LEVEL SECURITY;
 
 -- 20. 가족 공동 포토북 편집 상태 테이블 (family_photobooks)
