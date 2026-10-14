@@ -247,6 +247,18 @@ FamLink/
 │   ├── PhotoAlbumScreen.tsx         # 가족 포토북 스튜디오 & 스몰톡 문답 아카이브 허브 (TypeScript)
 │   ├── PhotobookStudioScreen.js     # 6개월 반기 포토북 스튜디오 (16P A5 단행본 조판 캔버스 & POD 커머스)
 │   ├── UserAvatar.tsx               # 사진(Data URI/URL) & 이모지 아바타 반응형 렌더링 컴포넌트 (TypeScript)
+│   ├── photobook/                   # 포토북 스튜디오 모듈화 서브 패키지 (TypeScript)
+│   │   ├── photobookConstants.ts    # 포토북 테마·볼륨·16P 스프레드 명세 및 문답 프리셋
+│   │   ├── PhotobookHudModals.tsx   # 테마·서체·16P 빠른 이동 그리드 모달 컴포넌트
+│   │   └── PhotobookStyles.ts       # 포토북 스튜디오 전용 스타일시트
+│   ├── chat/                        # 실시간 가족 메신저 모듈화 서브 패키지 (TypeScript)
+│   │   ├── chatHelpers.ts           # 인용 답장·포토북 주문 카드 파서 및 대화방 시간 포맷터
+│   │   ├── ChatAttachmentModals.tsx # 7종 멀티미디어 첨부 바텀시트 & 메시지 컨텍스트 메뉴 모달
+│   │   └── ChatStyles.ts            # 메신저 전용 스타일시트
+│   ├── smalltalk/                   # 오늘 함께(스몰톡/집안일) 모듈화 서브 패키지 (TypeScript)
+│   │   ├── smallTalkHelpers.ts      # 한국형 생활 집안일 스마트 아이콘·카테고리 매퍼
+│   │   ├── SmallTalkModals.tsx      # 스몰톡 답변 작성·열람 및 집안일 추가 모달
+│   │   └── SmallTalkStyles.ts       # 스몰톡 & 집안일 허브 전용 스타일시트
 │   ├── minigames/                   # 체류형 인터랙티브 미니게임 (함께 탭 4대 액션 게임존)
 │   │   ├── SnackCatchGame.js        # 제1탄 [후르츠 닌자 슬라이스] (과일 썰기)
 │   │   ├── CardMatchGame.js         # 제2탄 [카드 짝맞추기] (3×6 반려몽 보물 짝맞추기)
