@@ -30,38 +30,8 @@ import UserAvatar from './components/UserAvatar';
 import { colors, typography, commonStyles } from './theme';
 import { getRequiredExpForLevel, getEvolutionStage } from './lib/petmongEvolution';
 
-// Web Polyfill for Alert.alert (react-native-web has empty stub alert() {})
-if (Platform.OS === 'web') {
-  Alert.alert = (title, message, buttons) => {
-    const text = [title, message].filter(Boolean).join('\n\n');
-    if (!buttons || buttons.length === 0) {
-      if (typeof window !== 'undefined' && window.alert) {
-        window.alert(text);
-      }
-      return;
-    }
-    if (buttons.length === 1) {
-      if (typeof window !== 'undefined' && window.alert) {
-        window.alert(text);
-      }
-      if (buttons[0].onPress) buttons[0].onPress();
-      return;
-    }
-    const cancelBtn = buttons.find(b => b.style === 'cancel');
-    const confirmBtn = buttons.find(b => b.style !== 'cancel') || buttons[buttons.length - 1];
-
-    if (typeof window !== 'undefined' && window.confirm) {
-      const confirmed = window.confirm(text);
-      if (confirmed) {
-        if (confirmBtn && confirmBtn.onPress) confirmBtn.onPress();
-      } else {
-        if (cancelBtn && cancelBtn.onPress) cancelBtn.onPress();
-      }
-    } else {
-      if (confirmBtn && confirmBtn.onPress) confirmBtn.onPress();
-    }
-  };
-}
+import { setupWebAlertPolyfill } from './utils/webAlertPolyfill';
+setupWebAlertPolyfill();
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 // Import Screens & Libs
@@ -81,102 +51,27 @@ import { showError } from './utils/errorHandler';
 import * as Notifications from 'expo-notifications';
 import { registerForPushNotificationsAsync, sendExpoPushNotification } from './utils/notifications';
 
-const FAMILY_MEMBERS = {
-  mom: { name: '엄마', avatar: '👩‍🦰', color: '#FF6B47' },
-  dad: { name: '아빠', avatar: '👨‍💼', color: '#4A90E2' },
-  son: { name: '아들', avatar: '👦', color: '#2ECC71' },
-  daughter: { name: '딸', avatar: '👧', color: '#F39C12' },
-};
-
-const INITIAL_MOCK_SHOPPING = [];
-
-const INITIAL_MOCK_POINT_HISTORY = [
-  {
-    id: 'ph-1',
-    type: 'earn',
-    amount: 100,
-    balance: 100,
-    title: '스몰톡 소통 미션 가족 전원 완료',
-    category: 'smalltalk',
-    date: '2026-09-12 21:00',
-    user: '가족 전체',
-  },
-  {
-    id: 'ph-2',
-    type: 'earn',
-    amount: 10,
-    balance: 110,
-    title: '장보기 완료 (우유 2팩 사오기)',
-    category: 'shopping',
-    date: '2026-09-13 11:30',
-    user: '아들',
-  },
-  {
-    id: 'ph-3',
-    type: 'earn',
-    amount: 10,
-    balance: 120,
-    title: '장보기 완료 (주말 음식물 쓰레기 버리기)',
-    category: 'shopping',
-    date: '2026-09-13 14:15',
-    user: '엄마',
-  },
-];
-
-// Initial Mock Data (for Local Mock Sandbox Mode)
-const INITIAL_MOCK_DATA = {
-  points: 120,
-  messages: [
-    {
-      id: '1',
-      sender: 'son',
-      text: '엄마 아빠 오늘 저녁 치킨 먹어요!! 🍗',
-      timestamp: '오후 6:00',
-      created_at: new Date(Date.now() - 35 * 60 * 1000).toISOString(),
-      readBy: ['son', 'mom', 'dad'],
-    },
-    {
-      id: '2',
-      sender: 'mom',
-      text: '그래? 아빠 퇴근할 때 시켜달라고 하자~',
-      timestamp: '오후 6:02',
-      created_at: new Date(Date.now() - 33 * 60 * 1000).toISOString(),
-      readBy: ['son', 'mom', 'dad'],
-    },
-    {
-      id: '3',
-      sender: 'dad',
-      text: '좋지! 아빠가 치킨 쏠게 퇴근하고 보자! 😎',
-      timestamp: '오후 6:05',
-      created_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-      readBy: ['son', 'mom', 'dad'],
-    },
-  ],
-  events: [],
-  smallTalk: {
-    topic: getTopicForToday(),
-    responses: {},
-    pointsAwarded: false,
-  },
-};
-
-const getTodayString = (dateObj = new Date()) => {
-  const y = dateObj.getFullYear();
-  const m = String(dateObj.getMonth() + 1).padStart(2, '0');
-  const d = String(dateObj.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-};
-
-const addDaysToDateStr = (dateStr, days) => {
-  if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
-  const [y, m, d] = dateStr.split('-').map(Number);
-  const dt = new Date(y, m - 1, d);
-  dt.setDate(dt.getDate() + days);
-  const ry = dt.getFullYear();
-  const rm = String(dt.getMonth() + 1).padStart(2, '0');
-  const rd = String(dt.getDate()).padStart(2, '0');
-  return `${ry}-${rm}-${rd}`;
-};
+import {
+  FAMILY_MEMBERS,
+  INITIAL_MOCK_SHOPPING,
+  INITIAL_MOCK_POINT_HISTORY,
+  INITIAL_MOCK_DATA,
+  BASE_MOCK_FAMILY_MEMBERS,
+  getTodayString,
+  addDaysToDateStr,
+} from './components/app/appConstants';
+import {
+  AppTopNavbar,
+  AppBottomTabbar,
+  AppGlobalModals,
+} from './components/app/AppNavigationShell';
+import styles from './components/app/AppStyles';
+import {
+  normalizeRecurringShoppingItems,
+  normalizeMessageTextPayload,
+  formatSupabaseMessageRow,
+  calculateDecayedPetVitals,
+} from './services/familyDataService';
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -592,18 +487,7 @@ export default function App() {
         const rawJson = data[0].action_type.substring('VITALS_UPDATE:'.length).split('__by__')[0];
         const serverVitals = JSON.parse(rawJson);
         if (serverVitals && typeof serverVitals === 'object') {
-          // --- 다마고치 시간 경과에 따른 자연 소모 (Time-based Vital Decay) ---
-          const lastUpdated = new Date(data[0].created_at).getTime();
-          const now = Date.now();
-          const elapsedHours = Math.max(0, (now - lastUpdated) / (1000 * 60 * 60));
-
-          let calculatedVitals = { ...serverVitals };
-          if (elapsedHours > 0.25) { // 15분 이상 경과 시 현실적인 다마고치 자연 소모 적용
-            calculatedVitals.hunger = Math.max(15, Math.min(100, Math.round(serverVitals.hunger - elapsedHours * 5)));
-            calculatedVitals.happiness = Math.max(15, Math.min(100, Math.round(serverVitals.happiness - elapsedHours * 4)));
-            calculatedVitals.cleanliness = Math.max(15, Math.min(100, Math.round(serverVitals.cleanliness - elapsedHours * 2.5)));
-            calculatedVitals.energy = Math.max(15, Math.min(100, Math.round(serverVitals.energy - elapsedHours * 3)));
-          }
+          const calculatedVitals = calculateDecayedPetVitals(serverVitals, data[0].created_at);
 
           setPetVitals(calculatedVitals);
           AsyncStorage.setItem(`@famlink_game_vitals_${familyId}`, JSON.stringify(calculatedVitals)).catch(() => {});
@@ -706,33 +590,7 @@ export default function App() {
       .limit(200);
 
     if (data) {
-      const formatted = data.map(m => {
-        const timestamp = new Date(m.created_at).toLocaleTimeString('ko-KR', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true
-        });
-        return {
-          id: m.id,
-          sender: m.profiles?.role || 'son',
-          profile_id: m.profile_id,
-          senderObj: m.profiles || null,
-          senderName: m.profiles?.name || null,
-          text: typeof m.text === 'string'
-            ? m.text
-            : (typeof m.text === 'object' && m.text !== null
-                ? (m.text.bookTitle
-                    ? `📦 [실물 포토북 주문] "${m.text.bookTitle}" (수령인: ${m.text.recipient || '가족'}님)`
-                    : JSON.stringify(m.text))
-                : String(m.text || '')),
-          image: m.image_url || null,
-          image_url: m.image_url || null,
-          room_id: m.room_id || 'family-group',
-          timestamp,
-          created_at: m.created_at,
-          readBy: m.read_by || [],
-        };
-      });
+      const formatted = data.map(formatSupabaseMessageRow);
       setMessages(prev => {
         // Retain any pending optimistic messages that haven't landed in DB yet
         const pending = prev.filter(m => m.isSending);
@@ -766,104 +624,7 @@ export default function App() {
     }
   };
 
-  const normalizeRecurringItems = (items) => {
-    if (!items || !Array.isArray(items)) return items;
-    const todayStr = getTodayString();
-    const expiredOneTimeIds = [];
-    const resetRecurringIds = [];
-    const activeList = [];
-
-    items.forEach(item => {
-      const isDaily = item.repeat_type === 'daily';
-      const isWeekly = item.repeat_type === 'weekly';
-      const isOneTime = !isDaily && !isWeekly;
-      const compDate = item.completed_date || (item.completed_at ? item.completed_at.slice(0, 10) : null);
-
-      if (item.is_completed) {
-        if (isOneTime) {
-          // 📌 1회성 집안일: 완료 날짜가 오늘이 아닌 과거인 경우 다음 날 자동 삭제/정리 대상
-          if (compDate && compDate !== todayStr) {
-            expiredOneTimeIds.push(item.id);
-            return; // UI 목록에서 즉시 제외
-          }
-        } else if (isDaily) {
-          // 🔄 매일 반복 집안일: 완료 날짜가 과거인 경우 자정 리셋하여 오늘 할 일(미완료)로 부활
-          if (compDate && compDate !== todayStr) {
-            resetRecurringIds.push(item.id);
-            activeList.push({
-              ...item,
-              is_completed: false,
-              completed_by: null,
-              points_earned: false,
-              completed_date: null,
-              completed_at: null,
-            });
-            return;
-          }
-        } else if (isWeekly) {
-          // 주간 반복 집안일: 7일 이상 경과 시 리셋
-          if (compDate) {
-            const compTime = new Date(compDate).getTime();
-            const nowTime = new Date().getTime();
-            const diffDays = (nowTime - compTime) / (1000 * 3600 * 24);
-            if (diffDays >= 7) {
-              resetRecurringIds.push(item.id);
-              activeList.push({
-                ...item,
-                is_completed: false,
-                completed_by: null,
-                points_earned: false,
-                completed_date: null,
-                completed_at: null,
-              });
-              return;
-            }
-          }
-        }
-      }
-
-      activeList.push(item);
-    });
-
-    // 🚀 Supabase DB 백그라운드 자동 동기화
-    if (isSupabaseReady) {
-      const isUuid = id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
-
-      // 1. 만료된 1회성 완료 항목 DB 영구 삭제
-      const targetDeleteUuids = expiredOneTimeIds.filter(isUuid);
-      if (targetDeleteUuids.length > 0) {
-        supabase
-          .from('shopping_items')
-          .delete()
-          .in('id', targetDeleteUuids)
-          .then(({ error }) => {
-            if (error) console.log('Auto-cleanup expired one-time chores error:', error);
-          })
-          .catch(() => {});
-      }
-
-      // 2. 자정 지난 반복 루틴 항목 DB 미완료 리셋 동기화
-      const targetResetUuids = resetRecurringIds.filter(isUuid);
-      if (targetResetUuids.length > 0) {
-        supabase
-          .from('shopping_items')
-          .update({
-            is_completed: false,
-            completed_by: null,
-            points_earned: false,
-            completed_date: null,
-            completed_at: null,
-          })
-          .in('id', targetResetUuids)
-          .then(({ error }) => {
-            if (error) console.log('Auto-reset recurring chores in DB error:', error);
-          })
-          .catch(() => {});
-      }
-    }
-
-    return activeList;
-  };
+  const normalizeRecurringItems = normalizeRecurringShoppingItems;
 
   const fetchRealShoppingItems = async (familyId) => {
     const { data } = await supabase
@@ -2305,472 +2066,43 @@ export default function App() {
         <ExpoStatusBar style="dark" />
 
         {/* Top Navbar */}
-        <View style={styles.topNavbar}>
-          <View style={styles.logoRow}>
-            <Text style={styles.logoText}>FamLink</Text>
-          </View>
-
-          <View style={styles.topRightControls}>
-            {/* Points Display */}
-            <View style={styles.pointIndicator}>
-              <Trophy size={14} color="#F1C40F" style={{ marginRight: 4 }} />
-              <Text style={styles.pointIndicatorText}>{points} P</Text>
-            </View>
-
-            {/* User Profile Button (Navigates to Family Screen) */}
-            {!isSupabaseReady ? (
-              <TouchableOpacity
-                style={[styles.userSwitcherButton, { borderColor: activeMember.color }]}
-                onPress={() => setCurrentScreen('family')}
-                activeOpacity={0.7}
-              >
-                <UserAvatar avatar={activeMember.avatar} size={22} style={{ marginRight: 6 }} />
-                <Text style={styles.switcherName}>{activeMember.name} (시뮬)</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={[styles.userBadge, { borderColor: activeMember.color }]}
-                onPress={() => setCurrentScreen('family')}
-                activeOpacity={0.7}
-              >
-                <UserAvatar avatar={activeMember.avatar} size={22} style={{ marginRight: 6 }} />
-                <Text style={styles.switcherName}>{profile.name}</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
+        <AppTopNavbar
+          points={points}
+          isSupabaseReady={isSupabaseReady}
+          activeMember={activeMember}
+          profileName={profile.name}
+          onPressProfile={() => setCurrentScreen('family')}
+        />
 
         {/* Screen Area and Tabbar wrapped in KeyboardAvoidingView */}
-        <KeyboardAvoidingView 
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined} 
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.flexOne}
         >
-          {/* Screen Area */}
           <View style={styles.screenArea}>
             {renderActiveScreen()}
           </View>
 
-          {/* Custom Tabbar (5 Tabs: [홈, 퀘스트, 반려몽, 채팅, 앨범] - Figma node-id 5:361 Spec) */}
-          <SafeAreaView edges={['bottom']} style={styles.tabbarContainer}>
-            <View style={styles.tabbar}>
-              {/* 1. 홈 (Home) */}
-              <TouchableOpacity
-                style={[styles.tabItem, currentScreen === 'home' && styles.tabItemActive]}
-                onPress={() => setCurrentScreen('home')}
-                activeOpacity={0.8}
-              >
-                <TabHomeIcon size={20} color={currentScreen === 'home' ? '#FF6B47' : '#A8A29E'} focused={currentScreen === 'home'} />
-                <Text style={[styles.tabLabel, currentScreen === 'home' && styles.tabLabelActive]}>홈</Text>
-              </TouchableOpacity>
-
-              {/* 2. 오늘 함께 (Together / SmallTalk & Chores) */}
-              <TouchableOpacity
-                style={[styles.tabItem, currentScreen === 'smalltalk' && styles.tabItemActive]}
-                onPress={() => setCurrentScreen('smalltalk')}
-                activeOpacity={0.8}
-              >
-                <TabQuestIcon size={20} color={currentScreen === 'smalltalk' ? '#FF6B47' : '#A8A29E'} focused={currentScreen === 'smalltalk'} />
-                <Text style={[styles.tabLabel, currentScreen === 'smalltalk' && styles.tabLabelActive]}>함께</Text>
-              </TouchableOpacity>
-
-              {/* 3. 반려몽 (Pet) */}
-              <TouchableOpacity
-                style={[styles.tabItem, currentScreen === 'interior' && styles.tabItemActive]}
-                onPress={() => setCurrentScreen('interior')}
-                activeOpacity={0.8}
-              >
-                <TabPetIcon size={20} color={currentScreen === 'interior' ? '#FF6B47' : '#A8A29E'} focused={currentScreen === 'interior'} />
-                <Text style={[styles.tabLabel, currentScreen === 'interior' && styles.tabLabelActive]}>반려몽</Text>
-              </TouchableOpacity>
-
-              {/* 4. 채팅 (Chat) */}
-              <TouchableOpacity
-                style={[styles.tabItem, currentScreen === 'chat' && styles.tabItemActive]}
-                onPress={() => setCurrentScreen('chat')}
-                activeOpacity={0.8}
-              >
-                <TabChatIcon size={20} color={currentScreen === 'chat' ? '#FF6B47' : '#A8A29E'} focused={currentScreen === 'chat'} />
-                <Text style={[styles.tabLabel, currentScreen === 'chat' && styles.tabLabelActive]}>채팅</Text>
-              </TouchableOpacity>
-
-              {/* 5. 앨범 (Album / Book) */}
-              <TouchableOpacity
-                style={[styles.tabItem, currentScreen === 'album' && styles.tabItemActive]}
-                onPress={() => setCurrentScreen('album')}
-                activeOpacity={0.8}
-              >
-                <TabBookIcon size={20} color={currentScreen === 'album' ? '#FF6B47' : '#A8A29E'} focused={currentScreen === 'album'} />
-                <Text style={[styles.tabLabel, currentScreen === 'album' && styles.tabLabelActive]}>앨범</Text>
-              </TouchableOpacity>
-            </View>
-          </SafeAreaView>
+          <AppBottomTabbar
+            currentScreen={currentScreen}
+            onSelectScreen={setCurrentScreen}
+          />
         </KeyboardAvoidingView>
 
-
-        {/* User Switcher Modal */}
-        <Modal
-          animationType="fade"
-          transparent={true}
-          visible={userModalVisible}
-          onRequestClose={() => setUserModalVisible(false)}
-        >
-          <TouchableOpacity
-            style={styles.modalOverlay}
-            activeOpacity={1}
-            onPress={() => setUserModalVisible(false)}
-          >
-            <View style={styles.switcherModal}>
-              <Text style={styles.switcherModalTitle}>시뮬레이터 계정 전환</Text>
-              <Text style={styles.switcherModalDesc}>가족 역할을 바꾸며 테스트해 보세요.</Text>
-
-              <View style={styles.membersGrid}>
-                {familyMembersList.map((member) => {
-                  const isCurrent = (profile?.id && member.id)
-                    ? profile.id === member.id
-                    : (currentUser === member.id || currentUser === member.role);
-                  return (
-                    <TouchableOpacity
-                      key={member.id || member.role}
-                      style={[
-                        styles.memberSelectCard,
-                        { borderColor: isCurrent ? member.color : '#EBEBEB' },
-                        isCurrent && { backgroundColor: member.color + '10' }
-                      ]}
-                      onPress={() => switchUser(member)}
-                    >
-                      <UserAvatar avatar={member.avatar} size={36} style={{ marginBottom: 4 }} />
-                      <Text style={[styles.memberSelectName, isCurrent && { fontWeight: 'bold', color: member.color }]}>
-                        {member.name}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              <TouchableOpacity style={styles.resetButton} onPress={handleResetData}>
-                <RotateCcw size={13} color="#E74C3C" style={{ marginRight: 6 }} />
-                <Text style={styles.resetButtonText}>목업 데이터 리셋</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.closeButton} onPress={() => setUserModalVisible(false)}>
-                <Text style={styles.closeButtonText}>닫기</Text>
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        </Modal>
-
-        {/* Mission Complete Celebration Modal */}
-        <Modal
-          animationType="fade"
-          transparent={true}
-          visible={celebrationVisible}
-          onRequestClose={() => setCelebrationVisible(false)}
-        >
-          <View style={styles.celebrationOverlay}>
-            <View style={styles.celebrationCard}>
-              <Text style={styles.celebrationEmoji}>🎉🏆🎉</Text>
-              <Text style={styles.celebrationTitle}>가족 전원 답변 완료!</Text>
-              <Text style={styles.celebrationText}>오늘의 스몰톡 미션이 완료되었습니다.</Text>
-              <Text style={styles.celebrationPoints}>+100 포인트 적립!</Text>
-              <Text style={styles.celebrationSub}>차곡차곡 모아 가족 포토북을 발주해보세요 ✨</Text>
-
-              <TouchableOpacity
-                style={styles.celebrationCloseButton}
-                onPress={() => setCelebrationVisible(false)}
-              >
-                <Text style={styles.celebrationCloseText}>신난다!</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
+        {/* Global Simulator User Switcher & Mission Complete Celebration Modals */}
+        <AppGlobalModals
+          userModalVisible={userModalVisible}
+          setUserModalVisible={setUserModalVisible}
+          familyMembersList={familyMembersList}
+          profile={profile}
+          currentUser={currentUser}
+          switchUser={switchUser}
+          handleResetData={handleResetData}
+          celebrationVisible={celebrationVisible}
+          setCelebrationVisible={setCelebrationVisible}
+        />
       </SafeAreaView>
     </SafeAreaProvider>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: '#8E8E93',
-    fontWeight: '600',
-  },
-  flexOne: {
-    flex: 1,
-  },
-  topNavbar: {
-    height: 60,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    backgroundColor: '#FAF8F3',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F5F0E8',
-  },
-  logoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  logoText: {
-    fontSize: 20,
-    fontWeight: '900',
-    color: '#FF6B47',
-    letterSpacing: -0.5,
-  },
-  familyCodeBadge: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#FF6B47',
-    backgroundColor: '#FFF5F2',
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    marginLeft: 6,
-    borderWidth: 0.5,
-    borderColor: '#FED7AA',
-  },
-  topRightControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  pointIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF9E6',
-    borderWidth: 1,
-    borderColor: '#FFEAA7',
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 12,
-    marginRight: 10,
-  },
-  pointIndicatorText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#D4AC0D',
-  },
-  userSwitcherButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderRadius: 16,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: '#FFFFFF',
-  },
-  userBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderRadius: 16,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: '#FAF8F3',
-  },
-  switcherAvatar: {
-    fontSize: 14,
-    marginRight: 4,
-  },
-  switcherName: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#1C1C1E',
-  },
-  logoutButton: {
-    padding: 8,
-    marginLeft: 6,
-  },
-  screenArea: {
-    flex: 1,
-    backgroundColor: '#FAF8F3',
-    position: 'relative',
-  },
-  screenLayer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  screenLayerVisible: {
-    opacity: 1,
-    zIndex: 10,
-  },
-  screenLayerHidden: {
-    opacity: 0,
-    zIndex: -1,
-  },
-  tabbarContainer: {
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#F5F0E8',
-  },
-  tabbar: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    paddingTop: 6,
-    paddingBottom: Platform.OS === 'ios' ? 2 : 6,
-    paddingHorizontal: 8,
-    justifyContent: 'space-around',
-    alignItems: 'center',
-  },
-  tabItem: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 4,
-  },
-  tabItemActive: {},
-  tabLabel: {
-    fontSize: 10.5,
-    color: '#A8A29E',
-    marginTop: 2,
-    fontWeight: '700',
-  },
-  tabLabelActive: {
-    color: '#FF6B47',
-    fontWeight: '800',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  switcherModal: {
-    width: '85%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 24,
-    alignItems: 'center',
-  },
-  switcherModalTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#1C1C1E',
-    marginBottom: 4,
-  },
-  switcherModalDesc: {
-    fontSize: 12,
-    color: '#8E8E93',
-    marginBottom: 20,
-  },
-  membersGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    width: '100%',
-    marginBottom: 16,
-  },
-  memberSelectCard: {
-    width: '47%',
-    borderWidth: 1.5,
-    borderRadius: 14,
-    padding: 12,
-    alignItems: 'center',
-    marginBottom: 12,
-    backgroundColor: '#FFFFFF',
-  },
-  memberSelectAvatar: {
-    fontSize: 24,
-    marginBottom: 6,
-  },
-  memberSelectName: {
-    fontSize: 13,
-    color: '#1C1C1E',
-    fontWeight: '600',
-  },
-  resetButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#FFEBEB',
-    backgroundColor: '#FFF8F8',
-    width: '100%',
-    marginBottom: 12,
-  },
-  resetButtonText: {
-    fontSize: 12,
-    color: '#E74C3C',
-    fontWeight: '700',
-  },
-  closeButton: {
-    paddingVertical: 13,
-    width: '100%',
-    alignItems: 'center',
-    backgroundColor: '#F1F2F4',
-    borderRadius: 12,
-  },
-  closeButtonText: {
-    fontSize: 13,
-    color: '#8E8E93',
-    fontWeight: '700',
-  },
-  celebrationOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  celebrationCard: {
-    width: '80%',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 30,
-    alignItems: 'center',
-  },
-  celebrationEmoji: {
-    fontSize: 40,
-    marginBottom: 16,
-  },
-  celebrationTitle: {
-    fontSize: 20,
-    fontWeight: '950',
-    color: '#1C1C1E',
-    marginBottom: 8,
-  },
-  celebrationText: {
-    fontSize: 13,
-    color: '#8E8E93',
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  celebrationPoints: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: '#FF6B47',
-    marginVertical: 10,
-  },
-  celebrationSub: {
-    fontSize: 11,
-    color: '#AEAEB2',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  celebrationCloseButton: {
-    backgroundColor: '#FF6B47',
-    paddingVertical: 13,
-    paddingHorizontal: 36,
-    borderRadius: 16,
-  },
-  celebrationCloseText: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-    fontSize: 14,
-  },
-});

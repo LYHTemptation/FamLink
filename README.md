@@ -259,6 +259,10 @@ FamLink/
 │   │   ├── smallTalkHelpers.ts      # 한국형 생활 집안일 스마트 아이콘·카테고리 매퍼
 │   │   ├── SmallTalkModals.tsx      # 스몰톡 답변 작성·열람 및 집안일 추가 모달
 │   │   └── SmallTalkStyles.ts       # 스몰톡 & 집안일 허브 전용 스타일시트
+│   ├── app/                         # 메인 앱 셸·내비게이션·전역 모달 서브 패키지 (TypeScript)
+│   │   ├── appConstants.ts          # 초기 목업 데이터, 가족 기본 역할 및 날짜 유틸
+│   │   ├── AppNavigationShell.tsx   # 상단 헤더(Navbar), 하단 5탭 바(Tabbar), 시뮬레이터/축하 모달
+│   │   └── AppStyles.ts             # 메인 앱 레이아웃 전용 스타일시트
 │   ├── minigames/                   # 체류형 인터랙티브 미니게임 (함께 탭 4대 액션 게임존)
 │   │   ├── SnackCatchGame.js        # 제1탄 [후르츠 닌자 슬라이스] (과일 썰기)
 │   │   ├── CardMatchGame.js         # 제2탄 [카드 짝맞추기] (3×6 반려몽 보물 짝맞추기)
@@ -276,9 +280,10 @@ FamLink/
 ├── services/                        # 비즈니스 로직 및 외부 API/DB 연동 서비스 계층 (TypeScript)
 │   ├── geminiService.ts             # Gemini 2.5 Flash 텍스트/비전/이미지 생성 통합 AI 서비스
 │   ├── photobookService.ts          # 포토북 원격 동기화(family_photobooks) 및 POD 주문(photobook_orders) 서비스
-│   └── smallTalkService.ts          # 스몰톡 질문 DB 조회·시딩 및 날짜별 질문 매핑 서비스
+│   ├── smallTalkService.ts          # 스몰톡 질문 DB 조회·시딩 및 날짜별 질문 매핑 서비스
+│   └── familyDataService.ts         # 반복 집안일 자정 리셋, 메시지 정규화, 반려몽 생체 게이지 소모 계산 서비스
 ├── screens/                         # 사용자 인증 및 로그인 (AuthScreen.js)
-├── utils/                           # 알림(notifications.ts), 데일리 주제(topics.ts), 공휴일(koreanHolidays.ts), 에러 핸들러(errorHandler.ts)
+├── utils/                           # 알림(notifications.ts), 데일리 주제(topics.ts), 공휴일(koreanHolidays.ts), 에러 핸들러(errorHandler.ts), 웹 알림 폴리필(webAlertPolyfill.ts)
 ├── scripts/                         # 유지보수 및 품질 검증 스크립트
 │   ├── check-syntax.js              # Babel AST 기반 문법 및 미선언 참조(ReferenceError) 자동 전수 검사
 │   └── sync-readme.js               # 문서-컴포넌트 자동 동기화 검증

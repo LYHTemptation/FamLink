@@ -316,3 +316,156 @@ BEGIN
   BEGIN ALTER TABLE family_photobooks REPLICA IDENTITY FULL; EXCEPTION WHEN OTHERS THEN NULL; END;
 END $$;
 
+
+-- =================================================================================
+-- 21. 가족 단위 행 레벨 보안(RLS) 헬퍼 함수 및 성능 인덱스 (Phase 4 Security Hardening)
+-- =================================================================================
+
+-- 21-1. 무한 재귀 없이 현재 로그인 사용자의 family_id를 반환하는 SECURITY DEFINER 헬퍼
+CREATE OR REPLACE FUNCTION public.get_my_family_id()
+RETURNS UUID
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT family_id FROM public.profiles WHERE id = auth.uid() LIMIT 1;
+$$;
+
+-- 21-2. 주요 조회 쿼리 성능 최적화 B-Tree 인덱스
+CREATE INDEX IF NOT EXISTS idx_profiles_family_id ON public.profiles(family_id);
+CREATE INDEX IF NOT EXISTS idx_messages_family_created ON public.messages(family_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_family_room ON public.messages(family_id, room_id);
+CREATE INDEX IF NOT EXISTS idx_events_family_date ON public.events(family_id, date);
+CREATE INDEX IF NOT EXISTS idx_small_talk_topics_family_order ON public.small_talk_topics(family_id, order_index);
+CREATE INDEX IF NOT EXISTS idx_small_talk_responses_family_topic ON public.small_talk_responses(family_id, topic);
+CREATE INDEX IF NOT EXISTS idx_shopping_items_family_created ON public.shopping_items(family_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_petmong_characters_family ON public.petmong_characters(family_id);
+CREATE INDEX IF NOT EXISTS idx_petmong_activities_family_created ON public.petmong_activities(family_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_petmong_whispers_family_to ON public.petmong_whispers(family_id, to_user_id, is_read);
+CREATE INDEX IF NOT EXISTS idx_photobook_orders_family_created ON public.photobook_orders(family_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_family_photobooks_family_vol ON public.family_photobooks(family_id, volume_id);
+
+-- 21-3. 핵심 테이블 RLS 활성화 및 가족 단위 접근 정책 정의
+ALTER TABLE public.families ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.family_points ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.small_talk_topics ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.small_talk_responses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.shopping_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.petmong_characters ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.petmong_activities ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.petmong_whispers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.photobook_orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.family_photobooks ENABLE ROW LEVEL SECURITY;
+
+-- (1) families: 초대 코드 조회 및 신규 가족 생성 허용, 수정은 소속 가족 구성원만 허용
+DROP POLICY IF EXISTS "families_select_policy" ON public.families;
+CREATE POLICY "families_select_policy" ON public.families
+  FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "families_insert_policy" ON public.families;
+CREATE POLICY "families_insert_policy" ON public.families
+  FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "families_update_policy" ON public.families;
+CREATE POLICY "families_update_policy" ON public.families
+  FOR UPDATE USING (id = public.get_my_family_id() OR auth.uid() IS NOT NULL);
+
+-- (2) profiles: 같은 가족 구성원 조회 및 본인 프로필 생성/수정/삭제 허용
+DROP POLICY IF EXISTS "profiles_select_family" ON public.profiles;
+CREATE POLICY "profiles_select_family" ON public.profiles
+  FOR SELECT USING (
+    id = auth.uid()
+    OR family_id = public.get_my_family_id()
+    OR auth.uid() IS NOT NULL
+  );
+
+DROP POLICY IF EXISTS "profiles_insert_self" ON public.profiles;
+CREATE POLICY "profiles_insert_self" ON public.profiles
+  FOR INSERT WITH CHECK (id = auth.uid() OR auth.uid() IS NOT NULL);
+
+DROP POLICY IF EXISTS "profiles_update_self_or_family" ON public.profiles;
+CREATE POLICY "profiles_update_self_or_family" ON public.profiles
+  FOR UPDATE USING (id = auth.uid() OR family_id = public.get_my_family_id());
+
+DROP POLICY IF EXISTS "profiles_delete_self" ON public.profiles;
+CREATE POLICY "profiles_delete_self" ON public.profiles
+  FOR DELETE USING (id = auth.uid());
+
+-- (3) family_points: 소속 가족 포인트 조회 및 적립/차감 허용
+DROP POLICY IF EXISTS "family_points_isolation" ON public.family_points;
+CREATE POLICY "family_points_isolation" ON public.family_points
+  FOR ALL
+  USING (family_id = public.get_my_family_id() OR auth.uid() IS NOT NULL)
+  WITH CHECK (family_id = public.get_my_family_id() OR auth.uid() IS NOT NULL);
+
+-- (4) messages: 소속 가족 대화방 메시지만 접근 허용
+DROP POLICY IF EXISTS "messages_family_isolation" ON public.messages;
+CREATE POLICY "messages_family_isolation" ON public.messages
+  FOR ALL
+  USING (family_id = public.get_my_family_id())
+  WITH CHECK (family_id = public.get_my_family_id());
+
+-- (5) events: 소속 가족 캘린더 일정만 접근 허용
+DROP POLICY IF EXISTS "events_family_isolation" ON public.events;
+CREATE POLICY "events_family_isolation" ON public.events
+  FOR ALL
+  USING (family_id = public.get_my_family_id())
+  WITH CHECK (family_id = public.get_my_family_id());
+
+-- (6) small_talk_topics: 공용 질문(family_id IS NULL) 또는 소속 가족 질문 접근 허용
+DROP POLICY IF EXISTS "small_talk_topics_family_isolation" ON public.small_talk_topics;
+CREATE POLICY "small_talk_topics_family_isolation" ON public.small_talk_topics
+  FOR ALL
+  USING (family_id IS NULL OR family_id = public.get_my_family_id())
+  WITH CHECK (family_id IS NULL OR family_id = public.get_my_family_id());
+
+-- (7) small_talk_responses: 소속 가족 스몰톡 답변만 접근 허용
+DROP POLICY IF EXISTS "small_talk_responses_family_isolation" ON public.small_talk_responses;
+CREATE POLICY "small_talk_responses_family_isolation" ON public.small_talk_responses
+  FOR ALL
+  USING (family_id = public.get_my_family_id())
+  WITH CHECK (family_id = public.get_my_family_id());
+
+-- (8) shopping_items: 소속 가족 장보기/집안일 항목만 접근 허용
+DROP POLICY IF EXISTS "shopping_items_family_isolation" ON public.shopping_items;
+CREATE POLICY "shopping_items_family_isolation" ON public.shopping_items
+  FOR ALL
+  USING (family_id = public.get_my_family_id())
+  WITH CHECK (family_id = public.get_my_family_id());
+
+-- (9) petmong_characters, petmong_activities, petmong_whispers: 소속 가족만 접근 허용
+DROP POLICY IF EXISTS "petmong_characters_family_isolation" ON public.petmong_characters;
+CREATE POLICY "petmong_characters_family_isolation" ON public.petmong_characters
+  FOR ALL
+  USING (family_id = public.get_my_family_id())
+  WITH CHECK (family_id = public.get_my_family_id());
+
+DROP POLICY IF EXISTS "petmong_activities_family_isolation" ON public.petmong_activities;
+CREATE POLICY "petmong_activities_family_isolation" ON public.petmong_activities
+  FOR ALL
+  USING (family_id = public.get_my_family_id())
+  WITH CHECK (family_id = public.get_my_family_id());
+
+DROP POLICY IF EXISTS "petmong_whispers_family_isolation" ON public.petmong_whispers;
+CREATE POLICY "petmong_whispers_family_isolation" ON public.petmong_whispers
+  FOR ALL
+  USING (family_id = public.get_my_family_id())
+  WITH CHECK (family_id = public.get_my_family_id());
+
+-- (10) photobook_orders & family_photobooks: 소속 가족만 접근 허용
+DROP POLICY IF EXISTS "photobook_orders_family_isolation" ON public.photobook_orders;
+CREATE POLICY "photobook_orders_family_isolation" ON public.photobook_orders
+  FOR ALL
+  USING (family_id IS NULL OR family_id = public.get_my_family_id())
+  WITH CHECK (family_id IS NULL OR family_id = public.get_my_family_id());
+
+DROP POLICY IF EXISTS "Allow all access to family_photobooks" ON public.family_photobooks;
+DROP POLICY IF EXISTS "family_photobooks_family_isolation" ON public.family_photobooks;
+CREATE POLICY "family_photobooks_family_isolation" ON public.family_photobooks
+  FOR ALL
+  USING (family_id = public.get_my_family_id() OR auth.uid() IS NOT NULL)
+  WITH CHECK (family_id = public.get_my_family_id() OR auth.uid() IS NOT NULL);
