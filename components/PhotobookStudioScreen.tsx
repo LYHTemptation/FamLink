@@ -13,6 +13,7 @@ import {
   Platform,
   useWindowDimensions,
   ActivityIndicator,
+  KeyboardAvoidingView,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
@@ -366,8 +367,9 @@ export default function PhotobookStudioScreen({
   const [orderModalVisible, setOrderModalVisible] = useState(false);
   const [topicPickerModalVisible, setTopicPickerModalVisible] = useState(false);
   const [selectedTopicSlot, setSelectedTopicSlot] = useState(0);
-  const [topicModalTab, setTopicModalTab] = useState('recommended'); // 'recommended' | 'archive'
   const [topicSearchQuery, setTopicSearchQuery] = useState('');
+  const [selectedArchiveMonth, setSelectedArchiveMonth] = useState<string>('all');
+  const [isMonthPickerExpanded, setIsMonthPickerExpanded] = useState<boolean>(false);
   const [appendixModalVisible, setAppendixModalVisible] = useState(false);
   const [customSpreadTopics, setCustomSpreadTopics] = useState<Record<string | number, any>>({});
 
@@ -837,6 +839,78 @@ export default function PhotobookStudioScreen({
     }
     return (smallTalkArchiveList as any[]).slice(0, 2);
   }, [smallTalkArchiveList]);
+
+  // 스몰톡 문답 교체 모달용 연·월(기간) 집계 및 필터링
+  const availableArchiveMonths = useMemo(() => {
+    const monthMap = new Map<string, { id: string; label: string; year: number; month: number; count: number }>();
+    (smallTalkArchiveList || []).forEach((item: any) => {
+      const ym = item.yearMonth || (item.date ? String(item.date).slice(0, 7) : '');
+      if (ym && ym.includes('-')) {
+        const parts = ym.split('-');
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10);
+        const label = item.yearMonthLabel || `${year}년 ${month}월`;
+        const cur = monthMap.get(ym);
+        if (cur) {
+          cur.count += 1;
+        } else {
+          monthMap.set(ym, { id: ym, label, year, month, count: 1 });
+        }
+      }
+    });
+    return Array.from(monthMap.values()).sort((a, b) => b.id.localeCompare(a.id));
+  }, [smallTalkArchiveList]);
+
+  const groupedArchiveYears = useMemo(() => {
+    const groups: Record<number, { id: string; label: string; year: number; month: number; count: number }[]> = {};
+    availableArchiveMonths.forEach(m => {
+      if (!groups[m.year]) groups[m.year] = [];
+      groups[m.year].push(m);
+    });
+    return Object.keys(groups)
+      .map(Number)
+      .sort((a, b) => b - a)
+      .map(year => ({
+        year,
+        months: groups[year].sort((a, b) => b.month - a.month),
+      }));
+  }, [availableArchiveMonths]);
+
+  const currentMonthInfo = useMemo(() => {
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth();
+    const curMonthId = `${curYear}-${String(curMonth + 1).padStart(2, '0')}`;
+    const curMatch = availableArchiveMonths.find((m) => m.id === curMonthId);
+    return {
+      id: curMonthId,
+      label: `현재달 (${curMonth + 1}월)`,
+      year: curYear,
+      month: curMonth + 1,
+      count: curMatch ? curMatch.count : 0,
+    };
+  }, [availableArchiveMonths]);
+
+  const selectedArchiveMonthLabel = useMemo(() => {
+    if (selectedArchiveMonth === 'all') return '전체 기간';
+    const found = availableArchiveMonths.find(m => m.id === selectedArchiveMonth);
+    return found ? found.label : selectedArchiveMonth;
+  }, [selectedArchiveMonth, availableArchiveMonths]);
+
+  const filteredArchiveList = useMemo(() => {
+    return (smallTalkArchiveList || []).filter((item: any) => {
+      if (selectedArchiveMonth !== 'all') {
+        const ym = item.yearMonth || (item.date ? String(item.date).slice(0, 7) : '');
+        if (ym !== selectedArchiveMonth) return false;
+      }
+      if (topicSearchQuery.trim()) {
+        const query = topicSearchQuery.trim().toLowerCase();
+        const topicText = (item.topic || '').toLowerCase();
+        return topicText.includes(query);
+      }
+      return true;
+    });
+  }, [smallTalkArchiveList, selectedArchiveMonth, topicSearchQuery]);
 
   // 7. 레이아웃 셔플 핸들러 (15×15 스퀘어 4대 조판 템플릿)
   const handleShuffleLayout = () => {
@@ -1937,10 +2011,13 @@ export default function PhotobookStudioScreen({
   );
 
   const renderOrderModalContent = () => (
-    <View style={styles.modalBackdrop}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      style={styles.modalBackdrop}
+    >
       <View style={styles.orderSheetCard}>
         <View style={styles.sheetHeader}>
-          <View>
+          <View style={{ flex: 1, marginRight: 12 }}>
             <Text style={styles.sheetTitle}>양장 하드커버 실물 인쇄 발주</Text>
             <Text style={styles.sheetSub}>6개월간의 소중한 기록을 영구 소장 도서로 제작합니다.</Text>
           </View>
@@ -1949,7 +2026,11 @@ export default function PhotobookStudioScreen({
           </TouchableOpacity>
         </View>
 
-        <ScrollView contentContainerStyle={styles.orderFormScroll} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.orderFormScroll}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           {/* 도서 명세 요약 */}
           <View style={styles.orderSummaryCard}>
             <Text style={styles.orderBookTitle}>{bookTitle}</Text>
@@ -1986,7 +2067,7 @@ export default function PhotobookStudioScreen({
                 <View style={[styles.pointsCheckSquare, usePointsDiscount && styles.pointsCheckSquareActive]}>
                   {usePointsDiscount && <Check size={12} color="#FFFFFF" strokeWidth={3} />}
                 </View>
-                <View style={{ flex: 1 }}>
+                <View style={{ flex: 1, marginRight: 8 }}>
                   <Text style={styles.pointsApplyTitle}>
                     포인트로 -{availablePointsToUse.toLocaleString()}원 즉시 할인
                   </Text>
@@ -2016,8 +2097,8 @@ export default function PhotobookStudioScreen({
             <View style={styles.addCopyCheckbox}>
               {orderAddCopy && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
             </View>
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View style={{ flex: 1, marginRight: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
                 <Text style={styles.addCopyTitle}>부모님/조부모님 선물용 +1권 추가</Text>
                 <View style={styles.discountBadge}>
                   <Text style={styles.discountBadgeText}>42% 파격 특가</Text>
@@ -2030,7 +2111,7 @@ export default function PhotobookStudioScreen({
 
           {/* 총 결제 예정 금액 (하이브리드 명세) */}
           <View style={styles.totalPriceBanner}>
-            <View>
+            <View style={{ flex: 1, marginRight: 10 }}>
               <Text style={styles.totalPriceLabel}>최종 실결제 금액 (배송비 무료):</Text>
               {appliedPoints > 0 && (
                 <Text style={styles.totalPriceSubNotice}>
@@ -2101,7 +2182,7 @@ export default function PhotobookStudioScreen({
           </TouchableOpacity>
         </ScrollView>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 
   const renderEditTitleModalContent = () => (
@@ -2374,146 +2455,226 @@ export default function PhotobookStudioScreen({
               </View>
             </View>
 
-            {/* B. 2대 탭 세그먼트: [✨ 추천 질문] / [💬 가족 스몰톡 기록 (N개)] */}
-            <View style={styles.topicModalTabBar}>
+            {/* B. 가족 스몰톡 기록 검색 및 목록 */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <MessageSquare size={14} color="#FF6B47" style={{ marginRight: 6 }} />
+                <Text style={{ fontSize: 13, fontWeight: '800', color: '#1C1917' }}>
+                  가족 실제 문답 기록 ({filteredArchiveList.length}개)
+                </Text>
+              </View>
+              <Text style={{ fontSize: 11, color: '#78716C', fontWeight: '600' }}>
+                탭하여 Q{selectedTopicSlot + 1}에 즉시 교체
+              </Text>
+            </View>
+
+            {/* 연·월 기간 필터 바 (스몰톡 아카이브와 동일한 [연·월 선택] / [현재달] 2버튼 구성) */}
+            <View style={styles.topicMonthChipsRow}>
               <TouchableOpacity
-                style={[styles.topicModalTabBtn, topicModalTab === 'recommended' && styles.topicModalTabBtnActive]}
-                onPress={() => setTopicModalTab('recommended')}
+                style={[
+                  styles.topicMonthChipBtn,
+                  selectedArchiveMonth !== currentMonthInfo.id && styles.topicMonthChipBtnActive,
+                ]}
+                onPress={() => setIsMonthPickerExpanded(prev => !prev)}
                 activeOpacity={0.8}
               >
-                <Sparkles size={13} color={topicModalTab === 'recommended' ? '#FF6B47' : '#78716C'} style={{ marginRight: 4 }} />
-                <Text style={[styles.topicModalTabBtnText, topicModalTab === 'recommended' && styles.topicModalTabBtnTextActive]}>
-                  추천 질문 풀
+                <Calendar
+                  size={13}
+                  color={selectedArchiveMonth !== currentMonthInfo.id ? '#FFFFFF' : '#FF6B47'}
+                  style={{ marginRight: 5 }}
+                />
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.topicMonthChipBtnText,
+                    selectedArchiveMonth !== currentMonthInfo.id && styles.topicMonthChipBtnTextActive,
+                  ]}
+                >
+                  {selectedArchiveMonth !== currentMonthInfo.id ? selectedArchiveMonthLabel : '연·월 선택'}
                 </Text>
+                <ChevronDown
+                  size={13}
+                  color={selectedArchiveMonth !== currentMonthInfo.id ? '#FFFFFF' : '#78716C'}
+                  style={{
+                    marginLeft: 3,
+                    transform: [{ rotate: isMonthPickerExpanded ? '180deg' : '0deg' }],
+                  }}
+                />
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.topicModalTabBtn, topicModalTab === 'archive' && styles.topicModalTabBtnActive]}
-                onPress={() => setTopicModalTab('archive')}
+                style={[
+                  styles.topicMonthChipBtn,
+                  selectedArchiveMonth === currentMonthInfo.id && styles.topicMonthChipBtnActive,
+                ]}
+                onPress={() => {
+                  setSelectedArchiveMonth(currentMonthInfo.id);
+                  setIsMonthPickerExpanded(false);
+                }}
                 activeOpacity={0.8}
               >
-                <MessageSquare size={13} color={topicModalTab === 'archive' ? '#FF6B47' : '#78716C'} style={{ marginRight: 4 }} />
-                <Text style={[styles.topicModalTabBtnText, topicModalTab === 'archive' && styles.topicModalTabBtnTextActive]}>
-                  가족 실제 문답 기록 ({smallTalkArchiveList.length}개)
+                <Calendar
+                  size={13}
+                  color={selectedArchiveMonth === currentMonthInfo.id ? '#FFFFFF' : '#78716C'}
+                  style={{ marginRight: 5 }}
+                />
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.topicMonthChipBtnText,
+                    selectedArchiveMonth === currentMonthInfo.id && styles.topicMonthChipBtnTextActive,
+                  ]}
+                >
+                  {currentMonthInfo.label} ({currentMonthInfo.count}개)
                 </Text>
               </TouchableOpacity>
             </View>
 
-            {/* C. 탭별 콘텐츠 */}
-            <ScrollView contentContainerStyle={{ paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
-              {topicModalTab === 'recommended' ? (
-                <>
-                  <Text style={{ fontSize: 12.5, fontWeight: '800', color: '#1C1917', marginBottom: 8 }}>
-                    💡 테마별 감성 인터뷰 질문 (탭하여 즉시 Q{selectedTopicSlot + 1}에 교체)
-                  </Text>
-                  {[
-                    '가족에게 가장 감동받았던 사소한 배려는 무엇인가요?',
-                    '우리 집에서 가장 편안하고 아늑한 나만의 아지트는?',
-                    '가족들과 함께 해보고 싶은 소소한 취미가 있나요?',
-                    '다시 돌아가고 싶은 우리 가족의 하루가 있다면 언제인가요?',
-                    '가족들에게 꼭 해주고 싶은 따뜻한 요리가 있나요?',
-                    '최근 나를 가장 크게 웃게 했던 가족의 모습은 무엇인가요?',
-                    '우리 가족만의 특별한 약속이나 가훈을 정한다면?',
-                    '힘들고 지칠 때 나를 위로해주는 우리 집만의 안식처는?',
-                    '가족들에게 꼭 추천해주고 싶은 나만의 힐링 음악은?',
-                    '우리 가족과 함께 떠났던 여행 중 가장 기억에 남는 곳은?',
-                  ].map((qText, sIdx) => (
-                    <TouchableOpacity
-                      key={sIdx}
-                      style={styles.topicPickerCandidateCard}
-                      onPress={() => {
-                        const updated = [...currentInterviewTopics];
-                        updated[selectedTopicSlot] = {
-                          ...updated[selectedTopicSlot],
-                          topic: qText,
-                        };
-                        setCustomSpreadTopics(prev => ({ ...prev, [currentSpreadIndex]: updated }));
-                        setTopicPickerModalVisible(false);
-                        Alert.alert('질문 교체 완료 🪄', `P.${currentPageNum} Q${selectedTopicSlot + 1} 질문이 새로운 문답으로 교체되었습니다!`);
-                      }}
-                      activeOpacity={0.8}
+            {/* 연·월 선택기 확장 패널 (아코디언 그리드) */}
+            {isMonthPickerExpanded && (
+              <View style={styles.topicPeriodPickerExpandedCard}>
+                <View style={styles.topicPeriodPickerHeader}>
+                  <Text style={styles.topicPeriodPickerHeading}>조회할 연·월 선택</Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.topicPeriodPickerAllBtn,
+                      selectedArchiveMonth === 'all' && styles.topicPeriodPickerAllBtnActive,
+                    ]}
+                    onPress={() => {
+                      setSelectedArchiveMonth('all');
+                      setIsMonthPickerExpanded(false);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.topicPeriodPickerAllBtnText,
+                        selectedArchiveMonth === 'all' && styles.topicPeriodPickerAllBtnTextActive,
+                      ]}
                     >
-                      <Sparkles size={14} color="#7C3AED" style={{ marginRight: 8 }} />
-                      <Text style={styles.candidateText}>"{qText}"</Text>
-                    </TouchableOpacity>
-                  ))}
-                </>
-              ) : (
-                <>
-                  {/* 검색창 */}
-                  <View style={styles.topicSearchBox}>
-                    <Search size={14} color="#78716C" style={{ marginRight: 6 }} />
-                    <TextInput
-                      style={styles.topicSearchInput}
-                      value={topicSearchQuery}
-                      onChangeText={setTopicSearchQuery}
-                      placeholder="가족과 나눈 질문 검색..."
-                      placeholderTextColor="#A8A29E"
-                    />
-                    {topicSearchQuery ? (
-                      <TouchableOpacity onPress={() => setTopicSearchQuery('')}>
-                        <X size={14} color="#78716C" />
-                      </TouchableOpacity>
-                    ) : null}
-                  </View>
+                      전체 기간 ({smallTalkArchiveList.length}개)
+                    </Text>
+                  </TouchableOpacity>
+                </View>
 
-                  {/* 아카이브 리스트 */}
-                  {smallTalkArchiveList
-                    .filter(item => !topicSearchQuery || (item.topic && item.topic.includes(topicSearchQuery)))
-                    .map((item, aIdx) => {
-                      // 실제 가족 답변들 매핑
-                      const answersMap: Record<string, string> = {};
-                      if (Array.isArray(item.answers)) {
-                        item.answers.forEach(ans => {
-                          const authorId = ans.user_id || ans.userId || ans.id;
-                          if (authorId) answersMap[authorId] = ans.response_text || ans.responseText || ans.text;
-                        });
-                      }
-
-                      return (
-                        <TouchableOpacity
-                          key={item.id || aIdx}
-                          style={styles.archiveTopicItemCard}
-                          onPress={() => {
-                            const updated = [...currentInterviewTopics];
-                            updated[selectedTopicSlot] = {
-                              id: item.id || `archive-${aIdx}`,
-                              date: item.dateLabel || item.yearMonthLabel || '가족 아카이브',
-                              topic: item.topic,
-                              answers: Object.keys(answersMap).length > 0 ? answersMap : (item.answers || updated[selectedTopicSlot]?.answers || {}),
-                            };
-                            setCustomSpreadTopics(prev => ({ ...prev, [currentSpreadIndex]: updated }));
-                            setTopicPickerModalVisible(false);
-                            Alert.alert('아카이브 질문 반영 완료 ✨', `가족들이 답변한 실제 기록이 P.${currentPageNum} Q${selectedTopicSlot + 1}에 수록되었습니다!`);
-                          }}
-                          activeOpacity={0.8}
-                        >
-                          <View style={styles.archiveTopicItemHeader}>
-                            <Text style={styles.archiveTopicItemDate}>
-                              {item.dateLabel || item.yearMonthLabel || `${aIdx + 1}번째 질문`}
+                {groupedArchiveYears.map(group => (
+                  <View key={group.year} style={styles.topicPeriodYearGroup}>
+                    <Text style={styles.topicPeriodYearTitle}>{group.year}년</Text>
+                    <View style={styles.topicPeriodMonthGrid}>
+                      {group.months.map(m => {
+                        const isSelected = selectedArchiveMonth === m.id;
+                        return (
+                          <TouchableOpacity
+                            key={m.id}
+                            style={[
+                              styles.topicPeriodMonthCell,
+                              isSelected && styles.topicPeriodMonthCellActive,
+                            ]}
+                            onPress={() => {
+                              setSelectedArchiveMonth(m.id);
+                              setIsMonthPickerExpanded(false);
+                            }}
+                            activeOpacity={0.7}
+                          >
+                            <Text
+                              style={[
+                                styles.topicPeriodMonthCellText,
+                                isSelected && styles.topicPeriodMonthCellTextActive,
+                              ]}
+                            >
+                              {m.month}월
                             </Text>
-                            {item.isAnswered && (
-                              <View style={styles.archiveAnsweredBadge}>
-                                <Text style={styles.archiveAnsweredBadgeText}>답변 완료 ✨</Text>
-                              </View>
-                            )}
-                          </View>
-                          <Text style={styles.archiveTopicItemTitle}>"{item.topic}"</Text>
-                          {Array.isArray(item.answers) && item.answers.length > 0 && (
-                            <Text style={styles.archiveTopicAnswerCount}>
-                              총 {item.answers.length}명의 가족 답변 수록됨
+                            <Text
+                              style={[
+                                styles.topicPeriodMonthCellCount,
+                                isSelected && styles.topicPeriodMonthCellCountActive,
+                              ]}
+                            >
+                              {m.count}개
                             </Text>
-                          )}
-                        </TouchableOpacity>
-                      );
-                    })}
-
-                  {smallTalkArchiveList.length === 0 && (
-                    <View style={styles.emptyArchiveBox}>
-                      <Text style={styles.emptyArchiveText}>아직 등록된 가족 스몰톡 기록이 없습니다.</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
                     </View>
-                  )}
-                </>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* 검색창 */}
+            <View style={styles.topicSearchBox}>
+              <Search size={14} color="#78716C" style={{ marginRight: 6 }} />
+              <TextInput
+                style={styles.topicSearchInput}
+                value={topicSearchQuery}
+                onChangeText={setTopicSearchQuery}
+                placeholder={selectedArchiveMonth === 'all' ? '가족과 나눈 질문 검색...' : `${selectedArchiveMonthLabel} 질문 검색...`}
+                placeholderTextColor="#A8A29E"
+              />
+              {topicSearchQuery ? (
+                <TouchableOpacity onPress={() => setTopicSearchQuery('')}>
+                  <X size={14} color="#78716C" />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
+            {/* C. 아카이브 리스트 */}
+            <ScrollView contentContainerStyle={{ paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
+              {filteredArchiveList.map((item, aIdx) => {
+                // 실제 가족 답변들 매핑
+                const answersMap: Record<string, string> = {};
+                if (Array.isArray(item.answers)) {
+                  item.answers.forEach(ans => {
+                    const authorId = ans.user_id || ans.userId || ans.id;
+                    if (authorId) answersMap[authorId] = ans.response_text || ans.responseText || ans.text;
+                  });
+                }
+
+                return (
+                  <TouchableOpacity
+                    key={item.id || aIdx}
+                    style={styles.archiveTopicItemCard}
+                    onPress={() => {
+                      const updated = [...currentInterviewTopics];
+                      updated[selectedTopicSlot] = {
+                        id: item.id || `archive-${aIdx}`,
+                        date: item.dateLabel || item.yearMonthLabel || '가족 아카이브',
+                        topic: item.topic,
+                        answers: Object.keys(answersMap).length > 0 ? answersMap : (item.answers || updated[selectedTopicSlot]?.answers || {}),
+                      };
+                      setCustomSpreadTopics(prev => ({ ...prev, [currentSpreadIndex]: updated }));
+                      setTopicPickerModalVisible(false);
+                      Alert.alert('아카이브 질문 반영 완료 ✨', `가족들이 답변한 실제 기록이 P.${currentPageNum} Q${selectedTopicSlot + 1}에 수록되었습니다!`);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.archiveTopicItemHeader}>
+                      <Text style={styles.archiveTopicItemDate}>
+                        {item.dateLabel || item.yearMonthLabel || `${aIdx + 1}번째 질문`}
+                      </Text>
+                      {item.isAnswered && (
+                        <View style={styles.archiveAnsweredBadge}>
+                          <Text style={styles.archiveAnsweredBadgeText}>답변 완료 ✨</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.archiveTopicItemTitle}>"{item.topic}"</Text>
+                    {Array.isArray(item.answers) && item.answers.length > 0 && (
+                      <Text style={styles.archiveTopicAnswerCount}>
+                        총 {item.answers.length}명의 가족 답변 수록됨
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+
+              {filteredArchiveList.length === 0 && (
+                <View style={styles.emptyArchiveBox}>
+                  <Text style={styles.emptyArchiveText}>
+                    {topicSearchQuery
+                      ? '검색 결과와 일치하는 스몰톡 기록이 없습니다.'
+                      : `${selectedArchiveMonthLabel}에 등록된 스몰톡 기록이 없습니다.`}
+                  </Text>
+                </View>
               )}
             </ScrollView>
           </>

@@ -546,69 +546,96 @@ export default function CardMatchGame({
     <Modal visible={visible} animationType="fade" transparent onRequestClose={handleExitPress}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.modalBackdrop}>
-        <View style={styles.gameContainer}>
-          {/* 1. Header Bar */}
-          <View style={styles.headerRow}>
-            <TouchableOpacity onPress={handleExitPress} style={styles.closeBtn} activeOpacity={0.7}>
-              <X size={20} color="#78716C" />
+        {gameState === 'ready' ? (
+          <View style={styles.readyCard}>
+            <TouchableOpacity
+              onPress={handleExitPress}
+              style={styles.readyCloseBtn}
+              activeOpacity={0.7}
+            >
+              <X size={18} color="#78716C" />
             </TouchableOpacity>
 
-            <View style={styles.headerTitleBox}>
-              <Layers size={17} color="#FF6B47" />
-              <Text style={styles.headerTitle}>반려몽 카드 짝맞추기</Text>
+            <View style={styles.readyBadgeRow}>
+              <View style={styles.gameNoBadge}>
+                <Text style={styles.gameNoBadgeText}>제2탄 미니게임</Text>
+              </View>
+              <View style={styles.categoryBadge}>
+                <Layers size={14} color="#EA580C" style={{ marginRight: 3 }} />
+                <Text style={styles.categoryBadgeText}>놀아주기</Text>
+              </View>
             </View>
 
-            <View style={styles.rewardPill}>
-              <Sparkles size={13} color="#FF6B47" fill="#FF6B47" />
-              <Text style={styles.rewardPillText}>
-                {canEarnReward ? `보상 ${remainingRewards}회 남음` : '자유 연습'}
-              </Text>
+            <Text style={styles.readyTitle}>🃏 3×6 카드 짝맞추기</Text>
+            <Text style={styles.readySubtitle}>
+              뒤집혀 있는 18장의 카드 중 {character?.name || '반려몽'}의 최애 보물 9쌍을 모두 찾아보세요!
+            </Text>
+
+            {/* Cards / Reward Previews */}
+            <View style={styles.readyPreviewBox}>
+              <View style={styles.readyPreviewItem}>
+                <Layers size={26} color="#FF6B47" />
+                <Text style={styles.readyPreviewLabel}>18장</Text>
+                <Text style={styles.readyPreviewPoints}>3 × 6 그리드</Text>
+              </View>
+              <View style={styles.readyPreviewItem}>
+                <Trophy size={26} color="#F59E0B" />
+                <Text style={styles.readyPreviewLabel}>9쌍</Text>
+                <Text style={styles.readyPreviewPoints}>보물 짝맞추기</Text>
+              </View>
+              <View style={styles.readyPreviewItem}>
+                <Sparkles size={26} color="#10B981" />
+                <Text style={[styles.readyPreviewLabel, { color: '#10B981' }]}>+35~50점</Text>
+                <Text style={styles.readyPreviewPoints}>성장 EXP</Text>
+              </View>
             </View>
-          </View>
 
-          {/* 2. State Switcher: READY / PLAYING / GAMEOVER */}
-          {gameState === 'ready' && (
-            <View style={styles.readyContainer}>
-              <View style={styles.readyHeroCard}>
-                <View style={styles.readyAvatarRing}>
-                  {cleanPetUrl ? (
-                    <Image source={{ uri: cleanPetUrl }} style={styles.readyPetImg} resizeMode="contain" />
-                  ) : (
-                    <Text style={styles.readyPetEmoji}>{character?.emoji || '🐶'}</Text>
-                  )}
-                </View>
-
-                <Text style={styles.readyTitle}>3×6 카드 짝맞추기</Text>
-                <Text style={styles.readyDesc}>
-                  뒤집혀 있는 18장의 카드 중{'\n'}
-                  <Text style={{ fontWeight: '800', color: '#FF6B47' }}>{character?.name || '반려몽'}</Text>과
-                  최애 보물 9쌍을 모두 찾아보세요!
+            {/* Instructions */}
+            <View style={styles.instructionsList}>
+              <View style={styles.instructionItem}>
+                <Sparkles size={16} color="#EA580C" style={{ marginRight: 8 }} />
+                <Text style={styles.instructionText}>
+                  카드를 2장씩 터치해 숨겨진 같은 보물 짝을 맞춰보세요!
                 </Text>
+              </View>
+              <View style={styles.instructionItem}>
+                <Flame size={16} color="#EA580C" style={{ marginRight: 8 }} />
+                <Text style={styles.instructionText}>
+                  연속으로 정답을 맞추면 콤보 보너스와 높은 랭크 달성!
+                </Text>
+              </View>
+            </View>
 
-                <View style={styles.readyStatsBadgeRow}>
-                  <View style={styles.readyBadgeItem}>
-                    <Text style={styles.readyBadgeNum}>18장</Text>
-                    <Text style={styles.readyBadgeLabel}>3 × 6 그리드</Text>
-                  </View>
-                  <View style={styles.readyBadgeDivider} />
-                  <View style={styles.readyBadgeItem}>
-                    <Text style={styles.readyBadgeNum}>9쌍</Text>
-                    <Text style={styles.readyBadgeLabel}>보물 짝맞추기</Text>
-                  </View>
-                  <View style={styles.readyBadgeDivider} />
-                  <View style={styles.readyBadgeItem}>
-                    <Text style={[styles.readyBadgeNum, { color: '#10B981' }]}>+35~50</Text>
-                    <Text style={styles.readyBadgeLabel}>성장 EXP</Text>
-                  </View>
-                </View>
+            {/* Start Button */}
+            <TouchableOpacity
+              style={styles.startButton}
+              onPress={handleStartGame}
+              activeOpacity={0.85}
+            >
+              <Play size={18} color="#FFF" fill="#FFF" style={{ marginRight: 6 }} />
+              <Text style={styles.startButtonText}>카드 찾기 (START)</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.gameContainer}>
+            {/* 1. Header Bar */}
+            <View style={styles.headerRow}>
+              <TouchableOpacity onPress={handleExitPress} style={styles.closeBtn} activeOpacity={0.7}>
+                <X size={20} color="#78716C" />
+              </TouchableOpacity>
+
+              <View style={styles.headerTitleBox}>
+                <Layers size={17} color="#FF6B47" />
+                <Text style={styles.headerTitle}>반려몽 카드 짝맞추기</Text>
               </View>
 
-              <TouchableOpacity style={styles.startBtn} onPress={handleStartGame} activeOpacity={0.85}>
-                <Play size={18} color="#FFFFFF" fill="#FFFFFF" />
-                <Text style={styles.startBtnText}>게임 시작하기</Text>
-              </TouchableOpacity>
+              <View style={styles.rewardPill}>
+                <Sparkles size={13} color="#FF6B47" fill="#FF6B47" />
+                <Text style={styles.rewardPillText}>
+                  {canEarnReward ? `보상 ${remainingRewards}회 남음` : '자유 연습'}
+                </Text>
+              </View>
             </View>
-          )}
 
           {gameState === 'playing' && (
             <View style={styles.playingContainer}>
@@ -864,6 +891,7 @@ export default function CardMatchGame({
             </View>
           )}
         </View>
+      )}
       </View>
     </Modal>
   );
@@ -875,10 +903,10 @@ export default function CardMatchGame({
 const styles = StyleSheet.create({
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 10,
+    padding: 16,
   },
   gameContainer: {
     width: '100%',
@@ -946,109 +974,140 @@ const styles = StyleSheet.create({
     color: '#FF6B47',
   },
 
-  // 2. Ready State
-  readyContainer: {
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  readyHeroCard: {
+  // 2. Ready State (Unified with Fruit Ninja & Bubble Pop)
+  readyCard: {
     width: '100%',
+    maxWidth: 390,
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    paddingVertical: 22,
-    paddingHorizontal: 18,
+    borderRadius: 24,
+    padding: 24,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#F5F0E8',
-    marginBottom: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 8,
   },
-  readyAvatarRing: {
-    width: 82,
-    height: 82,
-    borderRadius: 41,
-    backgroundColor: '#FFF5F2',
-    borderWidth: 2,
-    borderColor: '#FFE8E0',
+  readyCloseBtn: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F5F5F4',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 14,
+    zIndex: 10,
   },
-  readyPetImg: {
-    width: 66,
-    height: 66,
+  readyBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
   },
-  readyPetEmoji: {
-    fontSize: 42,
+  gameNoBadge: {
+    backgroundColor: '#FFEDD5',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  gameNoBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#C2410C',
+  },
+  categoryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF7ED',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  categoryBadgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#EA580C',
   },
   readyTitle: {
     fontSize: 20,
     fontWeight: '900',
     color: '#1C1917',
     marginBottom: 6,
+    textAlign: 'center',
   },
-  readyDesc: {
+  readySubtitle: {
     fontSize: 13,
-    fontWeight: '600',
     color: '#78716C',
     textAlign: 'center',
-    lineHeight: 19,
+    lineHeight: 18,
     marginBottom: 16,
   },
-  readyStatsBadgeRow: {
+  readyPreviewBox: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FAF8F3',
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: '#F5F0E8',
     width: '100%',
+    backgroundColor: '#FAFAF9',
+    borderRadius: 16,
+    padding: 12,
     justifyContent: 'space-around',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E7E5E4',
   },
-  readyBadgeItem: {
+  readyPreviewItem: {
     alignItems: 'center',
+    gap: 4,
   },
-  readyBadgeNum: {
-    fontSize: 15,
+  readyPreviewLabel: {
+    fontSize: 13,
     fontWeight: '800',
     color: '#1C1917',
   },
-  readyBadgeLabel: {
-    fontSize: 10,
+  readyPreviewPoints: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#78716C',
+  },
+  instructionsList: {
+    width: '100%',
+    backgroundColor: '#FFF7ED',
+    borderRadius: 14,
+    padding: 12,
+    gap: 8,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#FFEDD5',
+  },
+  instructionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  instructionText: {
+    flex: 1,
+    fontSize: 12,
     fontWeight: '600',
-    color: '#A8A29E',
-    marginTop: 2,
+    color: '#9A3412',
+    lineHeight: 16,
   },
-  readyBadgeDivider: {
-    width: 1,
-    height: 22,
-    backgroundColor: '#F5F0E8',
-  },
-  startBtn: {
+  startButton: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
     backgroundColor: '#FF6B47',
-    width: '100%',
-    height: 50,
+    paddingVertical: 14,
     borderRadius: 16,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#FF6B47',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.35,
-        shadowRadius: 8,
-      },
-      android: { elevation: 4 },
-      web: { boxShadow: '0 4px 12px rgba(255,107,71,0.35)' },
-    }),
+    shadowColor: '#FF6B47',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 5,
   },
-  startBtnText: {
+  startButtonText: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: '#FFF',
   },
 
   // 3. Playing HUD

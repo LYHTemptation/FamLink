@@ -796,6 +796,14 @@ export default function BubblePopGame({
         {gameState === 'ready' && (
           <View style={[styles.overlayCenter, { width: screenWidth, height: screenHeight }]}>
             <View style={styles.readyCard}>
+              <TouchableOpacity
+                onPress={handleExitPress}
+                style={styles.readyCloseBtn}
+                activeOpacity={0.7}
+              >
+                <X size={18} color="#78716C" />
+              </TouchableOpacity>
+
               <View style={styles.readyBadgeRow}>
                 <View style={styles.gameNoBadge}>
                   <Text style={styles.gameNoBadgeText}>제3탄 미니게임</Text>
@@ -1209,6 +1217,18 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 20,
     elevation: 8,
+  },
+  readyCloseBtn: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F5F5F4',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
   },
   readyBadgeRow: {
     flexDirection: 'row',

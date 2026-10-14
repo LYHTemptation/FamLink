@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -233,6 +233,18 @@ export default function ChatScreen({
 
   const [isScrolledToBottom, setIsScrolledToBottom] = useState(false);
   const prevMsgCountRef = useRef(messages?.length || 0);
+  const hasUserScrolledRef = useRef(false);
+  const initialScrollTimerRef = useRef<any>(null);
+
+  const scrollToBottomSafely = useCallback((animated = false) => {
+    if (!flatListRef.current) return;
+    flatListRef.current.scrollToEnd({ animated });
+    if (Platform.OS === 'web') {
+      requestAnimationFrame(() => {
+        flatListRef.current?.scrollToEnd({ animated });
+      });
+    }
+  }, []);
 
   // Trigger read receipt update when entering a chat room or receiving new messages in active room
   useEffect(() => {
@@ -241,21 +253,42 @@ export default function ChatScreen({
     }
   }, [selectedRoomId, messages?.length]);
 
-  // 대화방 전환 시 즉시 하단 정렬을 위한 상태 리셋
+  // 대화방 전환 시 즉시 하단 정렬을 위한 상태 리셋 및 단계별 안전 타이머
   useEffect(() => {
     setIsScrolledToBottom(false);
-  }, [selectedRoomId]);
+    hasUserScrolledRef.current = false;
+    if (initialScrollTimerRef.current) clearTimeout(initialScrollTimerRef.current);
+
+    const t1 = setTimeout(() => {
+      if (!hasUserScrolledRef.current) {
+        scrollToBottomSafely(false);
+      }
+    }, 80);
+
+    const t2 = setTimeout(() => {
+      if (!hasUserScrolledRef.current) {
+        scrollToBottomSafely(false);
+      }
+      setIsScrolledToBottom(true);
+    }, 280);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      if (initialScrollTimerRef.current) clearTimeout(initialScrollTimerRef.current);
+    };
+  }, [selectedRoomId, scrollToBottomSafely]);
 
   // 대화방 진입 후 새로운 메시지가 추가되었을 때만 부드럽게 스크롤
   useEffect(() => {
     if (selectedRoomId !== null && isScrolledToBottom) {
       const currentCount = messages?.length || 0;
       if (currentCount > prevMsgCountRef.current) {
-        flatListRef.current?.scrollToEnd({ animated: true });
+        scrollToBottomSafely(true);
       }
     }
     prevMsgCountRef.current = messages?.length || 0;
-  }, [messages?.length, selectedRoomId, isScrolledToBottom]);
+  }, [messages?.length, selectedRoomId, isScrolledToBottom, scrollToBottomSafely]);
 
   // 키보드가 올라올 때 최신 메시지가 가려지지 않도록 하단으로 부드럽게 스크롤
   useEffect(() => {
@@ -263,11 +296,11 @@ export default function ChatScreen({
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const sub = Keyboard.addListener(showEvent, () => {
       setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
+        scrollToBottomSafely(true);
       }, 60);
     });
     return () => sub.remove();
-  }, [selectedRoomId]);
+  }, [selectedRoomId, scrollToBottomSafely]);
 
   // Create Custom Room Modal States
   const [createModalVisible, setCreateModalVisible] = useState(false);
@@ -372,7 +405,8 @@ export default function ChatScreen({
     setSelectedPhoto(null);
 
     setTimeout(() => {
-      flatListRef.current?.scrollToEnd({ animated: true });
+      hasUserScrolledRef.current = false;
+      scrollToBottomSafely(true);
     }, 50);
   };
 
@@ -2318,27 +2352,31 @@ export default function ChatScreen({
           renderItem={renderMessageItem}
           style={[styles.flatListStyle, !isScrolledToBottom && { opacity: 0 }]}
           contentContainerStyle={styles.listContent}
-          initialNumToRender={20}
-          maxToRenderPerBatch={15}
-          windowSize={10}
+          initialNumToRender={Math.max(40, Math.min(roomMessages.length, 120))}
+          maxToRenderPerBatch={30}
+          windowSize={21}
+          onScrollBeginDrag={() => {
+            hasUserScrolledRef.current = true;
+          }}
           onScrollToIndexFailed={(info) => {
             flatListRef.current?.scrollToOffset({
               offset: info.averageItemLength * info.index,
-              animated: true,
+              animated: false,
             });
           }}
           onContentSizeChange={() => {
-            if (!isScrolledToBottom) {
-              flatListRef.current?.scrollToEnd({ animated: false });
-              setTimeout(() => {
-                flatListRef.current?.scrollToEnd({ animated: false });
+            if (!hasUserScrolledRef.current) {
+              scrollToBottomSafely(false);
+              if (initialScrollTimerRef.current) clearTimeout(initialScrollTimerRef.current);
+              initialScrollTimerRef.current = setTimeout(() => {
+                scrollToBottomSafely(false);
                 setIsScrolledToBottom(true);
-              }, 30);
+              }, 80);
             }
           }}
           onLayout={() => {
-            if (!isScrolledToBottom) {
-              flatListRef.current?.scrollToEnd({ animated: false });
+            if (!hasUserScrolledRef.current) {
+              scrollToBottomSafely(false);
             }
           }}
         />
