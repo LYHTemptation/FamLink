@@ -386,14 +386,6 @@ export default function PetmongGrowthBookModal({
                     </Text>
                   )}
                 </View>
-
-                {/* Ground Soft Shadow */}
-                <View
-                  style={[
-                    styles.pedestalShadow,
-                    { width: Math.round(76 * selectedStageData.scale) },
-                  ]}
-                />
               </View>
 
               {/* Status Badge only (No re-roll: appearance is managed via 500P Reincarnation) */}

@@ -181,7 +181,12 @@ END $$;
 -- 13. Supabase Storage 사진 업로드용 버킷 (family-photos) 생성
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('family-photos', 'family-photos', true)
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+DROP POLICY IF EXISTS "Allow Public Storage Access" ON storage.objects;
+CREATE POLICY "Allow Public Storage Access" ON storage.objects
+  FOR ALL USING (bucket_id = 'family-photos')
+  WITH CHECK (bucket_id = 'family-photos');
 
 -- 14. 가족 인테리어 및 가구 배치 테이블 (placed_furniture)
 CREATE TABLE IF NOT EXISTS placed_furniture (
@@ -269,3 +274,41 @@ CREATE TABLE IF NOT EXISTS photobook_orders (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 ALTER TABLE photobook_orders DISABLE ROW LEVEL SECURITY;
+
+-- 20. 가족 공동 포토북 편집 상태 테이블 (family_photobooks)
+CREATE TABLE IF NOT EXISTS family_photobooks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id UUID REFERENCES families(id) ON DELETE CASCADE NOT NULL,
+  volume_id TEXT DEFAULT 'vol-1' NOT NULL,
+  title TEXT DEFAULT '우리 가족의 첫 번째 이야기 (Vol. 1)' NOT NULL,
+  subtitle TEXT DEFAULT '사소한 일상이 모여 만든 가장 눈부신 기적' NOT NULL,
+  cover_signature TEXT DEFAULT '우리 가족의 따뜻한 이야기',
+  cover_photo_url TEXT,
+  cover_style TEXT DEFAULT 'classic',
+  theme_id TEXT DEFAULT 'linen',
+  font_family TEXT DEFAULT 'serif',
+  font_size TEXT DEFAULT 'medium',
+  spread_photos JSONB DEFAULT '{}'::jsonb,
+  spread_layouts JSONB DEFAULT '{}'::jsonb,
+  page_formats JSONB DEFAULT '{}'::jsonb,
+  spread_captions JSONB DEFAULT '{}'::jsonb,
+  custom_spread_topics JSONB DEFAULT '{}'::jsonb,
+  custom_gallery_photos JSONB DEFAULT '[]'::jsonb,
+  prologue_essay TEXT,
+  epilogue_essay TEXT,
+  updated_by TEXT,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  UNIQUE(family_id, volume_id)
+);
+ALTER TABLE family_photobooks DISABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow all access to family_photobooks" ON family_photobooks;
+CREATE POLICY "Allow all access to family_photobooks" ON family_photobooks
+  FOR ALL USING (true) WITH CHECK (true);
+
+-- Realtime 복제 활성화
+DO $$
+BEGIN
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE family_photobooks; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN ALTER TABLE family_photobooks REPLICA IDENTITY FULL; EXCEPTION WHEN OTHERS THEN NULL; END;
+END $$;
+

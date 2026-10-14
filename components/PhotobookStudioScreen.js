@@ -322,14 +322,14 @@ export default function PhotobookStudioScreen({
   const viewerCanvasWidth = Math.round(Math.min(viewerMaxW, viewerMaxH / 1.4));
   const viewerCanvasHeight = Math.round(viewerCanvasWidth * 1.4);
 
-  // 4. 단톡방 사진 목록 추출
+  // 4. 단톡방 사진 목록 추출 (image_url 및 image, Base64 data 모두 완벽 지원)
   const chatPhotos = useMemo(() => {
     if (!messages || !Array.isArray(messages)) return [];
     return messages
-      .filter(m => m && (m.image || (m.text && m.text.startsWith('data:image'))))
+      .filter(m => m && (m.image || m.image_url || (m.text && m.text.startsWith('data:image'))))
       .map((m, idx) => ({
         id: m.id || `photo-${idx}`,
-        uri: m.image || m.text,
+        uri: m.image_url || m.image || m.text,
         sender: m.sender || m.userName || '가족',
         createdAt: m.createdAt || m.created_at || '최근',
       }));
@@ -409,7 +409,12 @@ export default function PhotobookStudioScreen({
       if (payload.bookTitle !== undefined) setBookTitle(payload.bookTitle);
       if (payload.bookSubtitle !== undefined) setBookSubtitle(payload.bookSubtitle);
       if (payload.coverSignature !== undefined) setCoverSignature(payload.coverSignature);
-      if (payload.coverPhoto !== undefined) setCoverPhoto(payload.coverPhoto);
+      if (payload.coverPhoto !== undefined) {
+        // 웹 브라우저 환경에서 모바일 로컬 file:/// 경로 수신 시 무시하여 런타임 오류 방지
+        if (!(Platform.OS === 'web' && typeof payload.coverPhoto === 'string' && payload.coverPhoto.startsWith('file://'))) {
+          setCoverPhoto(payload.coverPhoto);
+        }
+      }
       if (payload.coverStyle !== undefined) setCoverStyle(payload.coverStyle);
       if (payload.pageFormats !== undefined) setPageFormats(payload.pageFormats);
       if (payload.spreadPhotos !== undefined) setSpreadPhotos(payload.spreadPhotos);
@@ -420,7 +425,8 @@ export default function PhotobookStudioScreen({
       if (payload.epilogueEssay !== undefined) setEpilogueEssay(payload.epilogueEssay);
       if (payload.customGalleryPhotos && Array.isArray(payload.customGalleryPhotos)) {
         setCustomGalleryPhotos(prev => {
-          const combined = [...payload.customGalleryPhotos, ...prev];
+          const validOnly = payload.customGalleryPhotos.filter(u => u && (Platform.OS !== 'web' || !u.startsWith('file://')));
+          const combined = [...validOnly, ...prev];
           return Array.from(new Set(combined));
         });
       }
@@ -482,6 +488,41 @@ export default function PhotobookStudioScreen({
         exp_gained: 0,
         points_awarded: 0,
       }).then(() => {}).catch(() => {});
+
+      // 4. Supabase DB (family_photobooks) 영구 저장 (UPSERT)
+      const currentVol = updatedPartial?.selectedVolume || selectedVolume || 'vol-1';
+      // file:/// 경로가 포함된 coverPhoto는 DB에 저장하지 않음 (null 또는 https://, data:만 허용)
+      const cleanCoverPhoto = fullPayload.coverPhoto && typeof fullPayload.coverPhoto === 'string' && fullPayload.coverPhoto.startsWith('file://')
+        ? null
+        : (fullPayload.coverPhoto || null);
+      supabase.from('family_photobooks').upsert({
+        family_id: effectiveFamilyId,
+        volume_id: currentVol,
+        title: fullPayload.bookTitle,
+        subtitle: fullPayload.bookSubtitle,
+        cover_signature: fullPayload.coverSignature,
+        cover_photo_url: cleanCoverPhoto,
+        cover_style: fullPayload.coverStyle,
+        theme_id: fullPayload.selectedThemeId,
+        font_family: fullPayload.bookFontFamily,
+        font_size: fullPayload.bookFontSize,
+        spread_photos: fullPayload.spreadPhotos,
+        spread_layouts: fullPayload.spreadLayouts,
+        page_formats: fullPayload.pageFormats,
+        spread_captions: fullPayload.spreadCaptions,
+        custom_spread_topics: fullPayload.customSpreadTopics,
+        custom_gallery_photos: fullPayload.customGalleryPhotos,
+        prologue_essay: fullPayload.prologueEssay,
+        epilogue_essay: fullPayload.epilogueEssay,
+        updated_by: currentUserName,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'family_id,volume_id' }).then(({ error: upsertErr }) => {
+        if (upsertErr) {
+          console.warn('⚠️ family_photobooks upsert 실패 (RLS 권한 또는 테이블 설정을 확인하세요):', upsertErr.message);
+        }
+      }).catch((dbErr) => {
+        console.warn('family_photobooks upsert sync note:', dbErr);
+      });
     }
   }, [
     effectiveFamilyId,
@@ -521,7 +562,42 @@ export default function PhotobookStudioScreen({
       })
       .catch(() => {});
 
-    // 2. Supabase Realtime Broadcast 채널 연결
+    // 2. Supabase DB (family_photobooks)에서 최신 원격 설정 조회 (어느 기기에서든 영구 보존된 표지/설정 로드)
+    if (effectiveFamilyId && effectiveFamilyId !== 'default-family') {
+      supabase
+        .from('family_photobooks')
+        .select('*')
+        .eq('family_id', effectiveFamilyId)
+        .eq('volume_id', selectedVolume || 'vol-1')
+        .maybeSingle()
+        .then(({ data, error }) => {
+          if (!error && data) {
+            applyRemotePhotobookUpdate({
+              selectedVolume: data.volume_id,
+              selectedThemeId: data.theme_id,
+              bookFontFamily: data.font_family,
+              bookFontSize: data.font_size,
+              bookTitle: data.title,
+              bookSubtitle: data.subtitle,
+              coverSignature: data.cover_signature,
+              coverPhoto: data.cover_photo_url,
+              coverStyle: data.cover_style,
+              pageFormats: data.page_formats || {},
+              spreadPhotos: data.spread_photos || {},
+              spreadLayouts: data.spread_layouts || {},
+              spreadCaptions: data.spread_captions || {},
+              customSpreadTopics: data.custom_spread_topics || {},
+              customGalleryPhotos: data.custom_gallery_photos || [],
+              prologueEssay: data.prologue_essay,
+              epilogueEssay: data.epilogue_essay,
+              updatedBy: data.updated_by,
+            });
+          }
+        })
+        .catch(() => {});
+    }
+
+    // 3. Supabase Realtime Broadcast 채널 연결
     const channel = supabase.channel(`family-photobook-${effectiveFamilyId}`, {
       config: { broadcast: { self: false } },
     });
@@ -532,6 +608,40 @@ export default function PhotobookStudioScreen({
           applyRemotePhotobookUpdate(payload);
         }
       })
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'family_photobooks',
+          filter: `family_id=eq.${effectiveFamilyId}`,
+        },
+        (payload) => {
+          const row = payload.new;
+          if (row) {
+            applyRemotePhotobookUpdate({
+              selectedVolume: row.volume_id,
+              selectedThemeId: row.theme_id,
+              bookFontFamily: row.font_family,
+              bookFontSize: row.font_size,
+              bookTitle: row.title,
+              bookSubtitle: row.subtitle,
+              coverSignature: row.cover_signature,
+              coverPhoto: row.cover_photo_url,
+              coverStyle: row.cover_style,
+              pageFormats: row.page_formats || {},
+              spreadPhotos: row.spread_photos || {},
+              spreadLayouts: row.spread_layouts || {},
+              spreadCaptions: row.spread_captions || {},
+              customSpreadTopics: row.custom_spread_topics || {},
+              customGalleryPhotos: row.custom_gallery_photos || [],
+              prologueEssay: row.prologue_essay,
+              epilogueEssay: row.epilogue_essay,
+              updatedBy: row.updated_by,
+            });
+          }
+        }
+      )
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           setIsRealtimeConnected(true);
@@ -548,7 +658,7 @@ export default function PhotobookStudioScreen({
         photobookChannelRef.current = null;
       }
     };
-  }, [effectiveFamilyId, applyRemotePhotobookUpdate]);
+  }, [effectiveFamilyId, selectedVolume, applyRemotePhotobookUpdate]);
 
   // 단일 1:1 페이지 포맷 지정 핸들러 (실시간 브로드캐스트 연동)
   const handleSetPageFormat = (newFormat, targetPage = currentPageNum) => {
@@ -586,7 +696,13 @@ export default function PhotobookStudioScreen({
 
   // 최종 겉표지 대표 사진 (사용자 지정 coverPhoto 우선, 없을 시 첫 번째 가족 사진)
   const effectiveCoverPhoto = useMemo(() => {
-    if (coverPhoto) return coverPhoto;
+    if (coverPhoto) {
+      if (Platform.OS === 'web' && typeof coverPhoto === 'string' && coverPhoto.startsWith('file://')) {
+        if (chatPhotos && chatPhotos.length > 0) return chatPhotos[0]?.uri;
+        return null;
+      }
+      return coverPhoto;
+    }
     if (chatPhotos && chatPhotos.length > 0) return chatPhotos[0]?.uri;
     return null;
   }, [coverPhoto, chatPhotos]);
@@ -873,7 +989,10 @@ ${topicSnippets.join('\n')}
     if (activePhotoSlotIndex === 'cover') {
       setCoverPhoto(photoUri);
       setPhotoPickerVisible(false);
-      broadcastPhotobookChange({ coverPhoto: photoUri });
+      // 로컬 파일 경로(file://)는 다른 가족 기기(PC 등)에서 열 수 없으므로 브로드캐스트하지 않음
+      if (photoUri && !photoUri.startsWith('file://')) {
+        broadcastPhotobookChange({ coverPhoto: photoUri });
+      }
       return;
     }
     const currentPhotos = getSpreadPhotos(currentSpreadIndex);
@@ -882,10 +1001,14 @@ ${topicSnippets.join('\n')}
     const nextSpreadPhotos = { ...spreadPhotos, [currentSpreadIndex]: updated };
     setSpreadPhotos(nextSpreadPhotos);
     setPhotoPickerVisible(false);
-    broadcastPhotobookChange({ spreadPhotos: nextSpreadPhotos });
+    if (photoUri && !photoUri.startsWith('file://')) {
+      broadcastPhotobookChange({ spreadPhotos: nextSpreadPhotos });
+    }
   };
 
-  // 9-1. 본인 기기 사진첩(갤러리)에서 직접 사진 불러오기
+  // 9-1. 본인 기기 사진첩(갤러리)에서 직접 사진 불러오기 (크로스 디바이스 클라우드 동기화 지원)
+  const [isUploadingGalleryPhoto, setIsUploadingGalleryPhoto] = useState(false);
+
   const handlePickFromDeviceGallery = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -897,17 +1020,90 @@ ${topicSnippets.join('\n')}
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: false,
-        quality: 0.85,
+        quality: 0.5,
+        base64: true,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        const pickedUri = result.assets[0].uri;
-        const nextList = [pickedUri, ...customGalleryPhotos.filter(u => u !== pickedUri)];
-        setCustomGalleryPhotos(nextList);
-        handleSelectPhoto(pickedUri);
-        broadcastPhotobookChange({ customGalleryPhotos: nextList });
+        const asset = result.assets[0];
+        const localPickedUri = asset.uri;
+
+        setIsUploadingGalleryPhoto(true);
+
+        // 1. 현재 사용자 기기 화면에만 즉각 반영 (원격 가족에게는 업로드 완료 후 정규 https:// URL로 전송)
+        if (activePhotoSlotIndex === 'cover') {
+          setCoverPhoto(localPickedUri);
+          setPhotoPickerVisible(false);
+        } else {
+          const currentPhotos = getSpreadPhotos(currentSpreadIndex);
+          const updated = [...(spreadPhotos[currentSpreadIndex] || currentPhotos)];
+          updated[activePhotoSlotIndex] = localPickedUri;
+          setSpreadPhotos({ ...spreadPhotos, [currentSpreadIndex]: updated });
+          setPhotoPickerVisible(false);
+        }
+
+        // 2. 다른 가족 기기(PC, 다른 스마트폰)에서도 열릴 수 있도록 Supabase Storage 업로드 시도
+        let cloudPhotoUrl = null;
+        try {
+          if (effectiveFamilyId && effectiveFamilyId !== 'default-family' && asset.base64) {
+            const fileName = `${effectiveFamilyId}/photobook_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.jpg`;
+
+            // 크로스 플랫폼 바이너리 바이트 변환 (React Native & Web 호환)
+            const cleanB64 = asset.base64.replace(/^data:image\/[a-zA-Z0-9.+_-]+;base64,/, '');
+            const binary = atob(cleanB64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+              bytes[i] = binary.charCodeAt(i);
+            }
+
+            const { error: uploadError } = await supabase.storage
+              .from('family-photos')
+              .upload(fileName, bytes, {
+                cacheControl: '3600',
+                upsert: true,
+                contentType: 'image/jpeg',
+              });
+
+            if (!uploadError) {
+              const { data: { publicUrl } } = supabase.storage
+                .from('family-photos')
+                .getPublicUrl(fileName);
+              if (publicUrl) cloudPhotoUrl = publicUrl;
+            } else {
+              console.warn('⚠️ Supabase Storage 업로드 오류 (버킷 및 정책 확인 필요):', uploadError.message);
+            }
+          }
+        } catch (uploadErr) {
+          console.warn('⚠️ 포토북 사진 클라우드 변환 안내:', uploadErr);
+        } finally {
+          setIsUploadingGalleryPhoto(false);
+        }
+
+        // 3. 클라우드 URL 생성 성공 시 원격 가족 브로드캐스트 + DB 동기화
+        if (cloudPhotoUrl) {
+          const nextList = [cloudPhotoUrl, ...customGalleryPhotos.filter(u => u && !u.startsWith('file://') && u !== cloudPhotoUrl)];
+          setCustomGalleryPhotos(nextList);
+          if (activePhotoSlotIndex === 'cover') {
+            setCoverPhoto(cloudPhotoUrl);
+            broadcastPhotobookChange({
+              customGalleryPhotos: nextList,
+              coverPhoto: cloudPhotoUrl,
+            });
+          } else {
+            const currentPhotos = getSpreadPhotos(currentSpreadIndex);
+            const updated = [...(spreadPhotos[currentSpreadIndex] || currentPhotos)];
+            updated[activePhotoSlotIndex] = cloudPhotoUrl;
+            const nextSpreadPhotos = { ...spreadPhotos, [currentSpreadIndex]: updated };
+            setSpreadPhotos(nextSpreadPhotos);
+            broadcastPhotobookChange({
+              customGalleryPhotos: nextList,
+              spreadPhotos: nextSpreadPhotos,
+            });
+          }
+        }
       }
     } catch (err) {
+      setIsUploadingGalleryPhoto(false);
       console.warn('사진첩 선택 오류:', err);
       Alert.alert('오류', '사진첩에서 사진을 가져오는 중 오류가 발생했습니다.');
     }
@@ -1677,7 +1873,9 @@ ${topicSnippets.join('\n')}
                 </Text>
               </View>
               <View style={styles.photoTrayGridRow}>
-                {customGalleryPhotos.map((uri, idx) => (
+                {customGalleryPhotos
+                  .filter(uri => !(Platform.OS === 'web' && typeof uri === 'string' && uri.startsWith('file://')))
+                  .map((uri, idx) => (
                   <View key={`custom-${idx}`} style={styles.gridThumbBox}>
                     <TouchableOpacity
                       style={{ width: '100%', height: '100%' }}

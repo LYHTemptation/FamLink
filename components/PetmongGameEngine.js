@@ -17,7 +17,6 @@ import Svg, { Circle, Path, Line, G, Text as SvgText } from 'react-native-svg';
 import {
   Heart,
   Sparkles,
-  Sun,
   MessageCircle,
   BookOpen,
   PawPrint,
@@ -1150,9 +1149,6 @@ export default function PetmongGameEngine({
                   )}
                 </Animated.View>
 
-                {/* Ground Contact Shadow */}
-                <View style={styles.petGroundShadow} />
-
                 {/* Autonomous Routine Indicator Badges (Easter Egg Screen Navigation) */}
                 {livingRoutine === 'reading' && (
                   <TouchableOpacity
@@ -1228,7 +1224,6 @@ export default function PetmongGameEngine({
               }}
             >
               <Text style={styles.visitorEmoji}>{visitorCharacter.emoji || '🐶'}</Text>
-              <View style={styles.petGroundShadow} />
             </Animated.View>
           </Animated.View>
         )}
@@ -1254,43 +1249,7 @@ export default function PetmongGameEngine({
           </View>
         </TouchableOpacity>
 
-        {/* 2. 실시간 스마트폰 시간대 (낮 활동 / 밤 은하수 별자리 이스터에그) */}
-        <TouchableOpacity
-          style={[
-            styles.warmthActionBtn,
-            isNightMode && styles.warmthActionBtnDark,
-          ]}
-          onPress={() => {
-            if (isNightMode) {
-              if (isConstCompleted) {
-                setDialogue(`오늘의 [${currentConstellation.name}] 별자리가 방 안을 따뜻하게 비추고 있어요 몽 🌟`);
-                spawnHeartToast('✨ 수호 별자리 빛나는 중');
-              } else {
-                setDialogue(`천장에 수호 별자리가 떠있어요! 1번 별부터 순서대로 선을 스윽 이어보세요 몽 ✨`);
-                spawnHeartToast('천장의 별을 이어보세요 ✨');
-              }
-            } else {
-              handleNightComfort();
-            }
-          }}
-          activeOpacity={0.8}
-        >
-          {isNightMode ? (
-            <Sparkles size={20} color="#FDE047" fill="#FDE047" />
-          ) : (
-            <Sun size={20} color="#F59E0B" fill="#F59E0B" />
-          )}
-          <View>
-            <Text style={[styles.warmthActionBtnLabel, isNightMode && { color: '#E2E8F0' }]}>
-              {isNightMode ? '수호 별자리' : '낮 활동'}
-            </Text>
-            <Text style={[styles.warmthActionBtnVal, isNightMode && { color: '#FBBF24' }]}>
-              {isNightMode ? (isConstCompleted ? '별빛 수호 🌟' : '천장 잇기 ✨') : '활기참'}
-            </Text>
-          </View>
-        </TouchableOpacity>
-
-        {/* 3. 비밀 귓속말 남기기 버튼 */}
+        {/* 2. 비밀 귓속말 남기기 버튼 */}
         {onOpenWriteWhisper && (
           <TouchableOpacity
             style={styles.warmthActionBtn}
@@ -1797,10 +1756,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF0F3',
     borderColor: '#FF7E82',
     borderWidth: 2,
-  },
-  warmthActionBtnDark: {
-    backgroundColor: '#1E293B',
-    borderColor: '#475569',
   },
   warmthActionBtnLabel: {
     fontSize: 10,
