@@ -68,7 +68,11 @@ import {
   fetchFamilyPhotobookVolumes,
   createPhotobookOrderInDB,
 } from '../services/photobookService';
-import { openAddressSearch } from '../utils/daumPostcode';
+import {
+  openAddressSearch,
+  searchKoreanAddressByKeyword,
+  AddressSearchResult,
+} from '../utils/daumPostcode';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -398,12 +402,37 @@ export default function PhotobookStudioScreen({
   const [orderAddCopy, setOrderAddCopy] = useState(false); // 부모님/선물용 추가 1권 (+12,000원 또는 +12,000 P)
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
 
-  // 카카오(다음) 공식 우편번호 및 주소 검색 연동
+  const [mobileAddrSearchVisible, setMobileAddrSearchVisible] = useState(false);
+  const [mobileAddrKeyword, setMobileAddrKeyword] = useState('');
+  const [mobileAddrResults, setMobileAddrResults] = useState<AddressSearchResult[]>([]);
+  const [isSearchingMobileAddr, setIsSearchingMobileAddr] = useState(false);
+
+  // 카카오(다음) 공식 우편번호 및 모바일 인앱 도로명 주소 검색 연동
   const handleSearchAddress = () => {
-    openAddressSearch(({ zonecode, fullAddress }) => {
-      setOrderPostalCode(zonecode);
-      setOrderAddress(fullAddress);
-    });
+    openAddressSearch(
+      ({ zonecode, fullAddress }) => {
+        setOrderPostalCode(zonecode);
+        setOrderAddress(fullAddress);
+      },
+      () => {
+        setMobileAddrSearchVisible((prev) => !prev);
+      }
+    );
+  };
+
+  const handleRunMobileAddressQuery = async () => {
+    const q = mobileAddrKeyword.trim();
+    if (!q) {
+      Alert.alert('알림', '도로명, 건물명 또는 지번을 입력해 주세요. (예: 테헤란로 152)');
+      return;
+    }
+    setIsSearchingMobileAddr(true);
+    try {
+      const list = await searchKoreanAddressByKeyword(q);
+      setMobileAddrResults(list);
+    } finally {
+      setIsSearchingMobileAddr(false);
+    }
   };
 
   // DB(family_points)에서 소속 가족의 실시간 포인트 직접 조회 (가족 그룹 단일 진실 공급원)
@@ -2279,6 +2308,98 @@ export default function PhotobookStudioScreen({
               <Text style={styles.addressSearchBtnText}>주소 검색</Text>
             </TouchableOpacity>
           </View>
+
+          {/* 📱 모바일 앱 전용 인앱 도로명·우편번호 실시간 검색창 */}
+          {mobileAddrSearchVisible && (
+            <View
+              style={{
+                backgroundColor: '#FFF5F2',
+                borderWidth: 1,
+                borderColor: '#FFE8E0',
+                borderRadius: 12,
+                padding: 12,
+                marginBottom: 12,
+              }}
+            >
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <Text style={{ fontSize: 12, fontWeight: '800', color: '#C2410C' }}>
+                  🔍 도로명 · 지번 · 아파트명 검색
+                </Text>
+                <TouchableOpacity onPress={() => setMobileAddrSearchVisible(false)}>
+                  <X size={15} color="#78716C" />
+                </TouchableOpacity>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <TextInput
+                  style={[styles.formInput, { flex: 1, marginBottom: 0, backgroundColor: '#FFFFFF', height: 42 }]}
+                  value={mobileAddrKeyword}
+                  onChangeText={setMobileAddrKeyword}
+                  placeholder="예: 테헤란로 152, 판교역로 166"
+                  returnKeyType="search"
+                  onSubmitEditing={handleRunMobileAddressQuery}
+                />
+                <TouchableOpacity
+                  style={[styles.addressSearchBtn, { height: 42, paddingHorizontal: 14 }]}
+                  onPress={handleRunMobileAddressQuery}
+                  disabled={isSearchingMobileAddr}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.addressSearchBtnText}>
+                    {isSearchingMobileAddr ? '검색중' : '찾기'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {mobileAddrResults.length > 0 && (
+                <View style={{ marginTop: 10, maxHeight: 190 }}>
+                  {mobileAddrResults.slice(0, 5).map((item, idx) => (
+                    <TouchableOpacity
+                      key={`${item.zonecode}-${idx}`}
+                      style={{
+                        backgroundColor: '#FFFFFF',
+                        borderRadius: 10,
+                        paddingVertical: 9,
+                        paddingHorizontal: 11,
+                        marginBottom: 6,
+                        borderWidth: 1,
+                        borderColor: '#F5F0E8',
+                      }}
+                      onPress={() => {
+                        setOrderPostalCode(item.zonecode);
+                        setOrderAddress(item.fullAddress);
+                        setMobileAddrSearchVisible(false);
+                      }}
+                      activeOpacity={0.75}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                        <View
+                          style={{
+                            backgroundColor: '#FF6B47',
+                            borderRadius: 4,
+                            paddingHorizontal: 5,
+                            paddingVertical: 1,
+                            marginRight: 6,
+                          }}
+                        >
+                          <Text style={{ fontSize: 10, fontWeight: '800', color: '#FFFFFF' }}>
+                            {item.zonecode}
+                          </Text>
+                        </View>
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: '#1C1917', flex: 1 }} numberOfLines={1}>
+                          {item.fullAddress}
+                        </Text>
+                      </View>
+                      {Boolean(item.jibunAddress) && (
+                        <Text style={{ fontSize: 10, color: '#78716C' }} numberOfLines={1}>
+                          지번: {item.jibunAddress}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
 
           <Text style={styles.formInputLabel}>배송지 기본 주소</Text>
           <TextInput

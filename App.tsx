@@ -176,6 +176,7 @@ export default function App() {
       try {
         const { data: { session: initialSession } } = await supabase.auth.getSession();
         if (initialSession) {
+          setSession(initialSession);
           await handleRealUserLogin(initialSession);
         }
       } catch (err) {
@@ -184,9 +185,10 @@ export default function App() {
         setAppLoading(false);
       }
 
-      // Auth change listener
+      // Auth change listener (INITIAL_SESSION 중복 실행 방지)
       const { data: { subscription } } = supabase.auth.onAuthStateChange(
         async (event, currentSession) => {
+          if (event === 'INITIAL_SESSION') return;
           if (currentSession) {
             setSession(currentSession);
             await handleRealUserLogin(currentSession);
@@ -220,7 +222,7 @@ export default function App() {
 
     const familyId = profile.family_id;
 
-    // Load initial data from DB
+    // Load initial data from DB (캐시 선반영 + 백그라운드 비동기 동기화)
     fetchRealDatabaseData(familyId);
 
     // Setup real-time postgres channels for family updates
@@ -349,7 +351,7 @@ export default function App() {
       supabase.removeChannel(petmongChannel);
       supabase.removeChannel(presenceChannel);
     };
-  }, [session, profile]);
+  }, [session?.user?.id, profile?.family_id]);
 
   // Push Notification Setup & Listeners
   useEffect(() => {
@@ -367,7 +369,7 @@ export default function App() {
         }
       });
     }
-  }, [session, profile]);
+  }, [session?.user?.id, profile?.family_id]);
 
   useEffect(() => {
     const subscription = Notifications.addNotificationResponseReceivedListener(response => {
@@ -400,8 +402,20 @@ export default function App() {
     }
   };
 
-  // Load Real Supabase Profile on Login
+  // Load Real Supabase Profile on Login (로컬 캐시 선반영으로 초기 대기 제거)
   const handleRealUserLogin = async (currentSession: Session) => {
+    const cacheKey = `@famlink_cached_profile_${currentSession.user.id}`;
+    try {
+      const cachedRaw = await AsyncStorage.getItem(cacheKey);
+      if (cachedRaw) {
+        const cachedProfile = JSON.parse(cachedRaw);
+        if (cachedProfile?.id) {
+          setProfile(cachedProfile);
+          setCurrentUser(cachedProfile.role || 'mom');
+        }
+      }
+    } catch (_) {}
+
     try {
       const { data: userProfile, error } = await supabase
         .from('profiles')
@@ -418,25 +432,57 @@ export default function App() {
       };
       setProfile(formatted);
       setCurrentUser(formatted.role || 'mom');
+      AsyncStorage.setItem(cacheKey, JSON.stringify(formatted)).catch(() => {});
     } catch (e) {
       console.log('Error fetching user profile from database', e);
     }
   };
 
-  // Real Database Query Functions
+  // Real Database Query Functions (로컬 캐시 0.1초 즉시 오픈 + 2단계 비동기 동기화)
   const fetchRealDatabaseData = async (familyId: string) => {
-    setAppLoading(true);
+    const fastCacheKey = `@famlink_fast_home_cache_${familyId}`;
+    let hasWarmCache = false;
+
+    try {
+      const cachedStr = await AsyncStorage.getItem(fastCacheKey);
+      if (cachedStr) {
+        const cached = JSON.parse(cachedStr);
+        if (cached && typeof cached === 'object') {
+          if (typeof cached.points === 'number') setPoints(cached.points);
+          if (Array.isArray(cached.familyMembersList) && cached.familyMembersList.length > 0) {
+            setFamilyMembersList(cached.familyMembersList);
+          }
+          if (Array.isArray(cached.events)) setEvents(cached.events);
+          if (Array.isArray(cached.shoppingItems)) setShoppingItems(cached.shoppingItems);
+          if (cached.smallTalk) setSmallTalk(cached.smallTalk);
+          hasWarmCache = true;
+          setAppLoading(false);
+        }
+      }
+    } catch (_) {}
+
+    if (!hasWarmCache) {
+      setAppLoading(true);
+    }
+
+    // 1단계: 홈 대시보드에 필요한 가벼운 필수 데이터만 먼저 병렬 조회 후 즉시 화면 오픈
     await Promise.all([
       fetchRealPoints(familyId),
-      fetchRealMessages(familyId),
-      fetchRealEvents(familyId),
-      fetchRealSmallTalk(familyId),
       fetchRealProfiles(familyId),
+      fetchRealEvents(familyId),
       fetchRealShoppingItems(familyId),
-      fetchRealPetmongCharacters(familyId, profile?.id),
-      fetchRealPetVitals(familyId),
     ]);
     setAppLoading(false);
+
+    // 2단계: 무거운 데이터(채팅 200개, 반려몽 Base64 이미지, 스몰톡 전체 목록)는 백그라운드에서 비동기 로드
+    Promise.all([
+      fetchRealSmallTalk(familyId),
+      fetchRealMessages(familyId),
+      fetchRealPetmongCharacters(familyId, profile?.id),
+      fetchRealPetVitals(familyId),
+    ]).catch((err) => {
+      console.warn('Background sync warning:', err);
+    });
   };
 
   const fetchRealPetmongCharacters = async (familyId: string, userId: string = profile?.id || '') => {
@@ -677,17 +723,11 @@ export default function App() {
     }
     const todayTopic = stripEmojis(getTopicForDateFromList(dbTopics, new Date()));
 
-    const [{ data: respData }, { count: memberCount }] = await Promise.all([
-      supabase
-        .from('small_talk_responses')
-        .select('*')
-        .eq('family_id', familyId)
-        .order('created_at', { ascending: true }),
-      supabase
-        .from('profiles')
-        .select('*', { count: 'exact', head: true })
-        .eq('family_id', familyId),
-    ]);
+    const { data: respData } = await supabase
+      .from('small_talk_responses')
+      .select('profile_id, topic, text')
+      .eq('family_id', familyId)
+      .order('created_at', { ascending: true });
 
     const responsesMap: Record<string, string> = {};
     if (respData) {
@@ -698,7 +738,7 @@ export default function App() {
       });
     }
 
-    const totalMembers = memberCount || familyMembersList.length || 4;
+    const totalMembers = familyMembersList.length || 4;
     const answeredCount = Object.keys(responsesMap).length;
     const complete = totalMembers > 0 && answeredCount >= totalMembers;
 
@@ -708,6 +748,26 @@ export default function App() {
       pointsAwarded: complete,
     });
   };
+
+  // 홈 대시보드 핵심 상태 변경 시 로컬 고속 캐시 자동 갱신 (다음 앱 실행 시 0.1초 즉시 오픈)
+  useEffect(() => {
+    const familyId = profile?.family_id;
+    if (!familyId || !isSupabaseReady) return;
+    const fastCacheKey = `@famlink_fast_home_cache_${familyId}`;
+    const timer = setTimeout(() => {
+      AsyncStorage.setItem(
+        fastCacheKey,
+        JSON.stringify({
+          points,
+          familyMembersList,
+          events,
+          shoppingItems,
+          smallTalk,
+        })
+      ).catch(() => {});
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [profile?.family_id, points, familyMembersList, events, shoppingItems, smallTalk]);
 
   // Local Offline Sandbox states loading
   const loadLocalMockState = async () => {

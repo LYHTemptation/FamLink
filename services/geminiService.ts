@@ -13,6 +13,7 @@ import {
   GeminiContentPart,
   GeminiGenerationConfig,
 } from '../lib/aiSystemPrompts';
+import { supabase, isSupabaseReady } from '../lib/supabase';
 
 export const GEMINI_TEXT_MODEL = 'gemini-2.5-flash';
 export const GEMINI_IMAGE_MODELS = [
@@ -30,7 +31,64 @@ export function getGeminiApiKey(): string {
 }
 
 export function isGeminiConfigured(): boolean {
-  return Boolean(getGeminiApiKey());
+  // 로컬 API 키가 있거나 Supabase 서버(gemini-proxy Edge Function)가 연결된 경우 활성화
+  return Boolean(getGeminiApiKey()) || Boolean(isSupabaseReady);
+}
+
+/**
+ * 보안 일원화 호출기:
+ * 1순위: 로컬 개발 키(EXPO_PUBLIC_GEMINI_API_KEY)가 없는 배포 환경에서는 Supabase Edge Function('gemini-proxy')을 통해 서버 측 비밀키로 안전하게 호출
+ * 2순위: 로컬 개발 환경(.env) 또는 프록시 미배포 시 클라이언트 키로 Fallback 호출
+ */
+async function callGeminiModel(model: string, payload: Record<string, any>): Promise<any | null> {
+  const localApiKey = getGeminiApiKey();
+
+  // 1. 배포 환경 (클라이언트에 키가 숨겨진 경우) -> Supabase Edge Function 호출
+  if (!localApiKey && isSupabaseReady) {
+    try {
+      const { data, error } = await supabase.functions.invoke('gemini-proxy', {
+        body: { model, payload },
+      });
+      if (!error && data && !data.error) {
+        return data;
+      }
+    } catch (proxyErr) {
+      console.warn('[geminiService] Edge Function proxy note:', proxyErr);
+    }
+    return null;
+  }
+
+  // 2. 로컬 개발 환경 키가 있는 경우 직접 호출 (실패 시 Edge Function 백업 시도)
+  if (localApiKey) {
+    try {
+      const resp = await fetch(
+        `${GEMINI_API_BASE}/${model}:generateContent?key=${localApiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }
+      );
+      if (resp.ok) {
+        return await resp.json();
+      }
+    } catch (err) {
+      console.warn('[geminiService] Direct fetch error, trying proxy fallback:', err);
+    }
+
+    if (isSupabaseReady) {
+      try {
+        const { data, error } = await supabase.functions.invoke('gemini-proxy', {
+          body: { model, payload },
+        });
+        if (!error && data && !data.error) {
+          return data;
+        }
+      } catch (_) {}
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -44,8 +102,7 @@ export async function generateGeminiText(
     model?: string;
   } = {}
 ): Promise<string | null> {
-  const apiKey = getGeminiApiKey();
-  if (!apiKey) return null;
+  if (!isGeminiConfigured()) return null;
 
   const model = options.model || GEMINI_TEXT_MODEL;
   const payload = buildGeminiPayload(
@@ -54,20 +111,9 @@ export async function generateGeminiText(
     { generationConfig: options.generationConfig }
   );
 
-  const resp = await fetch(
-    `${GEMINI_API_BASE}/${model}:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    }
-  );
+  const data = await callGeminiModel(model, payload);
+  if (!data) return null;
 
-  if (!resp.ok) {
-    return null;
-  }
-
-  const data = await resp.json();
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
   return text || null;
 }
@@ -80,32 +126,22 @@ export async function analyzeImageWithGeminiVision(
   mimeType: string = 'image/jpeg',
   promptText: string
 ): Promise<string> {
-  const apiKey = getGeminiApiKey();
-  if (!apiKey || !base64Data) return '';
+  if (!isGeminiConfigured() || !base64Data) return '';
 
   const normalizedMime = mimeType === 'image/svg+xml' ? 'image/png' : mimeType;
 
   try {
-    const resp = await fetch(
-      `${GEMINI_API_BASE}/${GEMINI_TEXT_MODEL}:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                { text: promptText },
-                { inlineData: { mimeType: normalizedMime, data: base64Data } },
-              ],
-            },
+    const vData = await callGeminiModel(GEMINI_TEXT_MODEL, {
+      contents: [
+        {
+          parts: [
+            { text: promptText },
+            { inlineData: { mimeType: normalizedMime, data: base64Data } },
           ],
-        }),
-      }
-    );
-
-    if (resp.ok) {
-      const vData = await resp.json();
+        },
+      ],
+    });
+    if (vData) {
       return vData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
     }
   } catch (err) {
@@ -121,22 +157,12 @@ export async function generateImageWithGeminiModels(
   parts: GeminiContentPart[],
   models: readonly string[] = GEMINI_IMAGE_MODELS
 ): Promise<string | null> {
-  const apiKey = getGeminiApiKey();
-  if (!apiKey) return null;
+  if (!isGeminiConfigured()) return null;
 
   for (const model of models) {
     try {
-      const imgResp = await fetch(
-        `${GEMINI_API_BASE}/${model}:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ parts }] }),
-        }
-      );
-
-      if (imgResp.ok) {
-        const imgData = await imgResp.json();
+      const imgData = await callGeminiModel(model, { contents: [{ parts }] });
+      if (imgData) {
         const respParts = imgData?.candidates?.[0]?.content?.parts || [];
         const imgPart = respParts.find((p: any) => p?.inlineData?.data);
         if (imgPart?.inlineData?.data) {
