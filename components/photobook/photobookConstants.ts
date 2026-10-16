@@ -54,6 +54,12 @@ export const TOTAL_PHOTOBOOK_PAGES = 16;
 export const TOTAL_PHOTOBOOK_SPREADS = 8;
 
 /**
+ * 100% 가족 활동 포인트 실물 도서 교환 토크노믹스 상수
+ */
+export const PHOTOBOOK_POINT_PRICE = 12000; // 실물 양장본 1권 기본 교환 포인트 (12,000 P)
+export const PHOTOBOOK_EXTRA_COPY_POINT = 12000; // 부모님/선물용 추가 1권 교환 포인트 (+12,000 P)
+
+/**
  * 16페이지 (8 양면 스프레드) 구성 명세
  * 150×210mm A5 세로형 (6×8인치) 클래식 양장 단행본
  */

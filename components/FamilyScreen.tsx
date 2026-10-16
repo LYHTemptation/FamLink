@@ -402,6 +402,17 @@ export default function FamilyScreen({
             <Text style={styles.accountDeleteBtnText}>회원 탈퇴</Text>
           </TouchableOpacity>
         </View>
+
+        {/* 4. 전자상거래 사업자 정보 및 POD 고지 푸터 */}
+        <View style={{ marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#F5F0E8' }}>
+          <Text style={{ fontSize: 11, fontWeight: '700', color: '#78716C', marginBottom: 2 }}>
+            팜링크 (FamLink) | 맞춤형 가족 포토북 & 라이프스타일
+          </Text>
+          <Text style={{ fontSize: 10, color: '#A8A29E', lineHeight: 15 }}>
+            업종: 전자상거래 소매업 (525101) | 고객센터: 카카오톡 @팸링크FamLink{'\n'}
+            실물 포토북은 1:1 주문 제작(POD) 상품으로 인쇄 착수 후 단순 변심 환불이 제한되며, 파본·불량 시 100% 무료 재제작됩니다.
+          </Text>
+        </View>
       </View>
 
       {/* Terms & Privacy Policy Dedicated Modal */}
@@ -504,11 +515,12 @@ export default function FamilyScreen({
                     2. 계정 정보는 본인이 직접 관리하여야 하며, 타인에게 양도하거나 대여할 수 없습니다.
                   </Text>
 
-                  <Text style={styles.policyArticleTitle}>제3조 (실물 양장본 포토북 POD 서비스)</Text>
+                  <Text style={styles.policyArticleTitle}>제3조 (실물 양장본 포토북 POD 주문 제작 및 청약철회·환불 규정)</Text>
                   <Text style={styles.policyBodyText}>
-                    1. 가족 스튜디오에서 편집한 150×210mm A5 하드커버 양장본은 주문 시 맞춤 POD 방식으로 실물 인쇄됩니다.{'\n'}
-                    2. 가족들이 모은 포인트는 주문 시 정가 대비 할인 혜택으로 차감 적용될 수 있습니다.{'\n'}
-                    3. 인쇄가 개시된 맞춤 주문 제작 상품의 특성상 단순 변심에 의한 취소는 제한될 수 있습니다.
+                    1. 가족 스튜디오에서 편집한 150×210mm A5 하드커버 양장본은 주문 시 1:1 맞춤 POD(Print on Demand) 방식으로 개별 생산됩니다.{'\n'}
+                    2. 가족들이 모은 포인트(12,000 P)로 100% 무료 교환하거나, 보유 포인트를 전액 할인 적용한 뒤 차액만 계좌이체로 결제할 수 있습니다.{'\n'}
+                    3. [청약철회 및 취소 기준] 주문 접수 후 '인쇄 준비중' 단계 이전(접수 후 1시간 이내)에는 100% 즉시 취소 및 차감 포인트·결제액 전액 복구가 가능합니다. 단, 전자상거래법 제17조 제2항 제6호에 따라 인쇄소 데이터 전송 및 제작이 착수된 이후에는 맞춤 제작 상품 특성상 단순 변심에 의한 취소·환불이 불가합니다.{'\n'}
+                    4. [품질 보증 및 무료 재제작] 파본, 제본 불량, 인쇄 결함 또는 배송 중 파손 발생 시 수령 후 7일 이내 접수하시면 당사 부담으로 100% 무료 재제작 및 재배송해 드립니다.
                   </Text>
 
                   <Text style={styles.policyArticleTitle}>제4조 (이용자의 의무)</Text>
@@ -518,7 +530,14 @@ export default function FamilyScreen({
 
                   <Text style={styles.policyArticleTitle}>제5조 (서비스 종료 및 회원 탈퇴)</Text>
                   <Text style={styles.policyBodyText}>
-                    이용자는 언제든지 앱 내 설정을 통해 회원 탈퇴를 진행할 수 있으며, 탈퇴 시 관련 데이터는 관련 법령이 정한 바에 따라 안전하게 즉시 파기 처리됩니다.
+                    이용자는 언제든지 앱 내 설정을 통해 회원 탈퇴를 진행할 수 있으며, 탈퇴 시 계정(auth.users) 및 프로필·대화 데이터는 관련 법령이 정한 바에 따라 즉시 영구 파기 처리됩니다.
+                  </Text>
+
+                  <Text style={styles.policyArticleTitle}>제6조 (사업자 정보 및 고객센터)</Text>
+                  <Text style={styles.policyBodyText}>
+                    • 상호명: 팜링크 (FamLink){'\n'}
+                    • 주요 종목: 전자상거래 소매업 / 맞춤형 포토북 제작{'\n'}
+                    • 고객센터: 카카오톡 채널 @팸링크FamLink / support@famlink.com (평일 10:00~18:00)
                   </Text>
                 </View>
               )}

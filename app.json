@@ -1,13 +1,19 @@
 {
   "expo": {
-    "name": "family-messenger",
+    "name": "FamLink",
     "slug": "family-messenger",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFFFFF"
+    },
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.yonknow.familymessenger",
       "infoPlist": {
         "NSCameraUsageDescription": "가족 채팅 및 맞춤 포토북 제작을 위해 사진을 촬영하고 업로드합니다.",
         "NSPhotoLibraryUsageDescription": "가족 앨범과 포토북에 추억 사진을 등록하기 위해 갤러리에 접근합니다."
@@ -15,10 +21,9 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#FF6B47",
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundImage": "./assets/android-icon-background.png"
       },
       "package": "com.yon_know.familymessenger"
     },

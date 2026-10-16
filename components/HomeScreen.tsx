@@ -439,6 +439,43 @@ export default function HomeScreen({
           </View>
         </View>
 
+        {/* 🎁 런칭 기념 선착순 10가족 한정 포토북 교환 프로모션 배지 */}
+        <View style={{ paddingHorizontal: 20, marginBottom: 12 }}>
+          <TouchableOpacity
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              backgroundColor: '#FFF5F2',
+              borderWidth: 1,
+              borderColor: '#FFE8E0',
+              borderRadius: 14,
+              paddingHorizontal: 14,
+              paddingVertical: 10,
+            }}
+            onPress={() => onNavigateScreen && onNavigateScreen('album')}
+            activeOpacity={0.85}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+              <View
+                style={{
+                  backgroundColor: '#FF6B47',
+                  borderRadius: 6,
+                  paddingHorizontal: 6,
+                  paddingVertical: 2,
+                  marginRight: 8,
+                }}
+              >
+                <Text style={{ fontSize: 10, fontWeight: '800', color: '#FFFFFF' }}>선착순 10가족</Text>
+              </View>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#1C1917', flex: 1 }} numberOfLines={1}>
+                가족 포인트 12,000P로 실물 양장본 무료 교환하기
+              </Text>
+            </View>
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#FF6B47', marginLeft: 6 }}>스튜디오 →</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* ========================================================= */}
         {/* ========================================================= */}
         {/* 2. 📅 오늘의 일정 (이미지 시안 스타일)                       */}

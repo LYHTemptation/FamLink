@@ -68,6 +68,7 @@ import {
   fetchFamilyPhotobookVolumes,
   createPhotobookOrderInDB,
 } from '../services/photobookService';
+import { openAddressSearch } from '../utils/daumPostcode';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -79,6 +80,8 @@ import {
   SPREAD_DEFINITIONS,
   MONTHLY_INTERVIEW_TOPICS_PRESET,
   CAPTION_PRESETS_POOL,
+  PHOTOBOOK_POINT_PRICE,
+  PHOTOBOOK_EXTRA_COPY_POINT,
 } from './photobook/photobookConstants';
 import PhotobookHudModals from './photobook/PhotobookHudModals';
 import styles from './photobook/PhotobookStyles';
@@ -390,19 +393,60 @@ export default function PhotobookStudioScreen({
   const [orderPhone, setOrderPhone] = useState(currentUserProfile?.phone || '');
   const [orderPostalCode, setOrderPostalCode] = useState('06234');
   const [orderAddress, setOrderAddress] = useState(currentUserProfile?.address || '');
+  const [orderDetailAddress, setOrderDetailAddress] = useState('');
   const [orderShippingMemo, setOrderShippingMemo] = useState('문 앞에 놓아주세요');
-  const [orderAddCopy, setOrderAddCopy] = useState(false); // 조부모님 선물용 추가 1권 (+14,000원 특가)
+  const [orderAddCopy, setOrderAddCopy] = useState(false); // 부모님/선물용 추가 1권 (+12,000원 또는 +12,000 P)
   const [isSubmittingOrder, setIsSubmittingOrder] = useState(false);
 
-  // 하이브리드 결제 토크노믹스 상태 (15×15cm 스퀘어북 정가 24,000원 중 최대 12,000P까지 1P=1원 할인 지원)
-  const [usePointsDiscount, setUsePointsDiscount] = useState(true);
-  const maxPointDiscount = 12000;
-  const availablePointsToUse = Math.min(points || 0, maxPointDiscount);
-  const appliedPoints = usePointsDiscount ? availablePointsToUse : 0;
+  // 카카오(다음) 공식 우편번호 및 주소 검색 연동
+  const handleSearchAddress = () => {
+    openAddressSearch(({ zonecode, fullAddress }) => {
+      setOrderPostalCode(zonecode);
+      setOrderAddress(fullAddress);
+    });
+  };
 
-  const basePrice = 24000;
-  const addPrice = orderAddCopy ? 14000 : 0;
-  const finalCashPrice = Math.max(0, basePrice - appliedPoints + addPrice);
+  // DB(family_points)에서 소속 가족의 실시간 포인트 직접 조회 (가족 그룹 단일 진실 공급원)
+  const [dbPoints, setDbPoints] = useState<number | null>(null);
+
+  const fetchLatestFamilyPoints = useCallback(async () => {
+    const famId = currentUserProfile?.family_id;
+    if (!famId || famId === 'default-family') return;
+    try {
+      const { data, error } = await supabase
+        .from('family_points')
+        .select('points')
+        .eq('family_id', famId)
+        .maybeSingle();
+
+      if (!error && data && typeof data.points === 'number') {
+        setDbPoints(data.points);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch latest family points from DB:', e);
+    }
+  }, [currentUserProfile?.family_id]);
+
+  useEffect(() => {
+    fetchLatestFamilyPoints();
+  }, [fetchLatestFamilyPoints]);
+
+  useEffect(() => {
+    if (orderModalVisible) {
+      fetchLatestFamilyPoints();
+    }
+  }, [orderModalVisible, fetchLatestFamilyPoints]);
+
+  // 하이브리드 유연 결제 토크노믹스 (12,000 P 전액 무료 교환 + 부족분 계좌이체)
+  const currentFamilyPoints = dbPoints !== null ? dbPoints : (points || 0);
+  const targetPoints = orderAddCopy ? PHOTOBOOK_POINT_PRICE + PHOTOBOOK_EXTRA_COPY_POINT : PHOTOBOOK_POINT_PRICE;
+  // 보유 포인트 중 최대 targetPoints까지 우선 전액 차감
+  const usedPoints = Math.min(currentFamilyPoints, targetPoints);
+  // 부족한 차액 (계좌이체 입금 필요 금액, 원 단위)
+  const cashDiff = Math.max(0, targetPoints - usedPoints);
+  const isFullyCovered = cashDiff === 0;
+  const appliedPoints = usedPoints;
+  const finalCashPrice = cashDiff;
 
   // =========================================================
   // 🌐 가족 간 실시간 공동 편집 및 동기화 (Supabase Realtime Sync)
@@ -1130,7 +1174,7 @@ export default function PhotobookStudioScreen({
     );
   };
 
-  // 10. 주문 완료 처리 (비즈니스 POD & 하이브리드 결제 연동)
+  // 10. 주문 완료 처리 (하이브리드: 12,000 P 무료 교환 또는 포인트 할인 + 차액 계좌이체)
   const handleExecuteOrder = async () => {
     if (!orderName.trim() || !orderPhone.trim() || !orderAddress.trim()) {
       Alert.alert('알림', '받는 분 성함, 연락처, 배송지 주소를 모두 입력해주세요.');
@@ -1164,54 +1208,74 @@ export default function PhotobookStudioScreen({
       ordered_at: new Date().toISOString(),
     };
 
-    const orderRecord = {
-      family_id: currentUserProfile?.family_id || null,
-      profile_id: currentUserProfile?.id || null,
-      volume_id: selectedVolume || 'vol-1',
-      order_number: orderNumber,
-      book_title: bookTitle || '우리 가족 이야기',
-      cover_type: coverStyle === 'hardcover' ? '하드커버 (양장본)' : (coverStyle === 'softcover' ? '소프트커버' : '양장본'),
-      page_count: TOTAL_PHOTOBOOK_PAGES || 16,
-      recipient_name: orderName.trim(),
-      recipient_phone: orderPhone.trim(),
-      postal_code: orderPostalCode.trim() || '06234',
-      shipping_address: orderAddress.trim(),
-      shipping_memo: orderShippingMemo.trim() || '문 앞 배송 부탁드립니다',
-      book_snapshot: bookSnapshot,
-      status: 'pending',
-    };
+      const fullShippingAddress = orderDetailAddress.trim()
+        ? `${orderAddress.trim()} ${orderDetailAddress.trim()}`
+        : orderAddress.trim();
 
-    // Supabase photobook_orders 테이블에 주문 데이터 INSERT (photobookService 위임)
-    await createPhotobookOrderInDB(orderRecord);
+      const isValidUUID = (val?: string | null) =>
+        typeof val === 'string' &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
 
-    setTimeout(() => {
-      setIsSubmittingOrder(false);
-      setOrderModalVisible(false);
+      const targetFamilyId = isValidUUID(currentUserProfile?.family_id) ? (currentUserProfile?.family_id ?? null) : null;
+      const targetProfileId = isValidUUID(currentUserProfile?.id) ? (currentUserProfile?.id ?? null) : null;
 
-      if (onDeductPoints && appliedPoints > 0) {
-        onDeductPoints(appliedPoints, '포토북 인쇄 주문 포인트 사용');
+      const orderRecord = {
+        family_id: targetFamilyId,
+        profile_id: targetProfileId,
+        volume_id: selectedVolume || 'vol-1',
+        order_number: orderNumber,
+        book_title: bookTitle || '우리 가족 이야기',
+        cover_type: coverStyle === 'hardcover' ? '하드커버 (양장본)' : (coverStyle === 'softcover' ? '소프트커버' : '양장본'),
+        page_count: TOTAL_PHOTOBOOK_PAGES || 16,
+        recipient_name: orderName.trim(),
+        recipient_phone: orderPhone.trim(),
+        postal_code: orderPostalCode.trim() || '06234',
+        shipping_address: fullShippingAddress,
+        shipping_memo: orderShippingMemo.trim() || '문 앞 배송 부탁드립니다',
+        book_snapshot: bookSnapshot,
+        status: isFullyCovered ? 'pending' : 'pending_payment',
+      };
+
+      // Supabase photobook_orders 테이블에 주문 데이터 INSERT (photobookService 위임)
+      await createPhotobookOrderInDB(orderRecord);
+
+      setTimeout(() => {
+        setIsSubmittingOrder(false);
+        setOrderModalVisible(false);
+
+        if (onDeductPoints && usedPoints > 0) {
+          onDeductPoints(usedPoints, `실물 포토북 ${orderAddCopy ? '2권' : '1권'} ${isFullyCovered ? '100% 무료 교환' : '포인트 차감 주문'}`);
+          setDbPoints((prev) => (prev !== null ? Math.max(0, prev - usedPoints) : null));
+        }
+
+        if (onSendOrderNotice) {
+          const orderPayload = {
+            orderNumber,
+            bookTitle,
+            volume: selectedVolume,
+            copies: orderAddCopy ? 2 : 1,
+            totalPrice: cashDiff,
+            pointsUsed: usedPoints,
+            recipient: orderName.trim(),
+            address: fullShippingAddress,
+            postalCode: orderPostalCode.trim() || '06234',
+          };
+          onSendOrderNotice(`[포토북카드] ${JSON.stringify(orderPayload)}`);
+        }
+
+      if (isFullyCovered) {
+        Alert.alert(
+          '양장본 실물 포토북 무료 교환 완료! 📦',
+          `[${bookTitle}] 총 ${orderAddCopy ? '2권 (선물용 1권 포함)' : '1권'}이 인쇄 제작에 들어갑니다.\n\n• 주문번호: ${orderNumber}\n• 가족 포인트 사용: -${usedPoints.toLocaleString()} P (100% 전액 교환)\n• 실결제 금액: 0원 (무료 배송)\n• 정밀 POD 인쇄 (150×210mm A5 클래식 16P 랑데뷰 160g 양장본)\n• 예상 배송일: 영업일 기준 3~4일 이내`,
+          [{ text: '확인' }]
+        );
+      } else {
+        Alert.alert(
+          '양장본 인쇄 주문 접수 완료 (입금 대기) 📦',
+          `[${bookTitle}] 총 ${orderAddCopy ? '2권 (선물용 1권 포함)' : '1권'} 주문이 접수되었습니다.\n\n• 주문번호: ${orderNumber}\n• 가족 포인트 할인: -${usedPoints.toLocaleString()} P\n• 입금하실 금액: ${cashDiff.toLocaleString()}원 (배송비 무료)\n• 입금 계좌: 카카오뱅크 3333-28-5683901 (예금주: FamLink)\n• 입금자명: ${orderName.trim()}\n\n입금 확인 즉시 정밀 POD 양장본 인쇄 제작이 시작됩니다! ✨`,
+          [{ text: '확인' }]
+        );
       }
-
-      if (onSendOrderNotice) {
-        const orderPayload = {
-          orderNumber,
-          bookTitle,
-          volume: selectedVolume,
-          copies: orderAddCopy ? 2 : 1,
-          totalPrice: finalCashPrice,
-          pointsUsed: appliedPoints,
-          recipient: orderName.trim(),
-          address: orderAddress.trim(),
-          postalCode: orderPostalCode.trim() || '06234',
-        };
-        onSendOrderNotice(`[포토북카드] ${JSON.stringify(orderPayload)}`);
-      }
-
-      Alert.alert(
-        '양장본 인쇄 주문 접수 완료! 📦',
-        `[${bookTitle}] 총 ${orderAddCopy ? '2권 (선물용 1권 포함)' : '1권'}이 인쇄 제작에 들어갑니다.\n\n• 주문번호: ${orderNumber}\n• 가족 포인트: -${appliedPoints.toLocaleString()} P 할인 적용\n• 최종 결제액: ${finalCashPrice.toLocaleString()}원\n• 정밀 POD 인쇄 (150×210mm A5 클래식 16P 랑데뷰 160g 양장본)\n• 예상 배송일: 영업일 기준 3~4일 이내`,
-        [{ text: '확인' }]
-      );
     }, 1000);
   };
 
@@ -2018,8 +2082,12 @@ export default function PhotobookStudioScreen({
       <View style={styles.orderSheetCard}>
         <View style={styles.sheetHeader}>
           <View style={{ flex: 1, marginRight: 12 }}>
-            <Text style={styles.sheetTitle}>양장 하드커버 실물 인쇄 발주</Text>
-            <Text style={styles.sheetSub}>6개월간의 소중한 기록을 영구 소장 도서로 제작합니다.</Text>
+            <Text style={styles.sheetTitle}>실물 양장 하드커버 도서 발주</Text>
+            <Text style={styles.sheetSub}>
+              {isFullyCovered
+                ? '온 가족이 모은 12,000 P로 소중한 기록을 100% 무료 제작합니다.'
+                : '보유 포인트를 전액 할인받고, 남은 차액만 계좌이체로 결제해 바로 제작합니다.'}
+            </Text>
           </View>
           <TouchableOpacity onPress={() => setOrderModalVisible(false)} style={styles.closeBtn}>
             <X size={20} color="#1C1917" />
@@ -2039,56 +2107,79 @@ export default function PhotobookStudioScreen({
             </Text>
             <View style={styles.priceDivider} />
             <View style={styles.priceRow}>
-              <Text style={styles.priceLabel}>기본 1권 인쇄비:</Text>
-              <Text style={styles.priceVal}>24,000원</Text>
+              <Text style={styles.priceLabel}>기본 1권 정가:</Text>
+              <Text style={[styles.priceVal, { color: colors.primary, fontWeight: '800' }]}>
+                {PHOTOBOOK_POINT_PRICE.toLocaleString()}원 (또는 {PHOTOBOOK_POINT_PRICE.toLocaleString()} P)
+              </Text>
             </View>
           </View>
 
-          {/* 🌟 하이브리드 토크노믹스: 가족 활동 포인트 차감 할인 카드 */}
+          {/* 🌟 가족 활동 포인트 현황 카드 (DB 실시간 동기화) */}
           <View style={styles.pointsDiscountCard}>
             <View style={styles.pointsHeaderRow}>
               <View style={styles.pointsTitleGroup}>
                 <Award size={16} color="#059669" style={{ marginRight: 6 }} />
-                <Text style={styles.pointsTitleText}>가족 활동 포인트 할인</Text>
+                <Text style={styles.pointsTitleText}>온 가족 활동 포인트 (DB 실시간)</Text>
               </View>
               <View style={styles.holdingPointsBadge}>
                 <Text style={styles.holdingPointsBadgeText}>
-                  보유 {(points || 0).toLocaleString()} P
+                  보유 {currentFamilyPoints.toLocaleString()} P
                 </Text>
               </View>
             </View>
 
-            {availablePointsToUse > 0 ? (
-              <TouchableOpacity
-                style={[styles.pointsApplyBtn, usePointsDiscount && styles.pointsApplyBtnActive]}
-                onPress={() => setUsePointsDiscount(!usePointsDiscount)}
-                activeOpacity={0.85}
+            {isFullyCovered ? (
+              <View
+                style={[
+                  styles.pointsApplyBtn,
+                  { borderColor: '#059669', backgroundColor: '#ECFDF5' },
+                ]}
               >
-                <View style={[styles.pointsCheckSquare, usePointsDiscount && styles.pointsCheckSquareActive]}>
-                  {usePointsDiscount && <Check size={12} color="#FFFFFF" strokeWidth={3} />}
+                <View
+                  style={[
+                    styles.pointsCheckSquare,
+                    { backgroundColor: '#059669', borderColor: '#059669' },
+                  ]}
+                >
+                  <Check size={12} color="#FFFFFF" strokeWidth={3} />
                 </View>
                 <View style={{ flex: 1, marginRight: 8 }}>
                   <Text style={styles.pointsApplyTitle}>
-                    포인트로 -{availablePointsToUse.toLocaleString()}원 즉시 할인
+                    100% 무료 교환 가능 ✨
                   </Text>
                   <Text style={styles.pointsApplySub}>
-                    지난 6개월간 매일 대화하며 모은 온기 포인트로 인쇄비를 지원해 드려요! (최대 12,000P)
+                    가족 포인트 -{usedPoints.toLocaleString()} P가 전액 적용되어 실결제 금액은 0원(무료 배송)입니다!
                   </Text>
                 </View>
-                <Text style={[styles.pointsDiscountAmt, usePointsDiscount && styles.pointsDiscountAmtActive]}>
-                  -{availablePointsToUse.toLocaleString()}원
+                <Text style={[styles.pointsDiscountAmt, { color: '#059669', fontWeight: '800' }]}>
+                  -{usedPoints.toLocaleString()} P
                 </Text>
-              </TouchableOpacity>
+              </View>
             ) : (
-              <View style={styles.noPointsNotice}>
-                <Text style={styles.noPointsNoticeText}>
-                  💡 매일 스몰톡과 집안일 미션으로 포인트를 모으면 다음 권 인쇄비를 최대 12,000원 할인받을 수 있어요!
-                </Text>
+              <View style={[styles.pointsApplyBtn, { borderColor: '#FDBA74', backgroundColor: '#FFF7ED' }]}>
+                <View style={[styles.pointsCheckSquare, { backgroundColor: '#EA580C', borderColor: '#EA580C' }]}>
+                  <Check size={12} color="#FFFFFF" strokeWidth={3} />
+                </View>
+                <View style={{ flex: 1, marginRight: 8 }}>
+                  <Text style={[styles.pointsApplyTitle, { color: '#C2410C' }]}>
+                    보유 {usedPoints.toLocaleString()} P 전액 할인 적용 ✨
+                  </Text>
+                  <Text style={[styles.pointsApplySub, { color: '#9A3412' }]}>
+                    {usedPoints > 0
+                      ? `보유한 포인트 ${usedPoints.toLocaleString()} P를 전액 할인받고, 남은 차액 ${cashDiff.toLocaleString()}원만 계좌이체로 결제하여 바로 제작할 수 있어요!`
+                      : `보유 포인트가 없어도 전액 계좌이체(${cashDiff.toLocaleString()}원)로 지금 바로 실물 책을 주문할 수 있어요!`}
+                  </Text>
+                </View>
+                {usedPoints > 0 && (
+                  <Text style={[styles.pointsDiscountAmt, { color: '#C2410C', fontWeight: '800' }]}>
+                    -{usedPoints.toLocaleString()}원
+                  </Text>
+                )}
               </View>
             )}
           </View>
 
-          {/* 추가 옵션: 조부모님 선물용 1권 추가 할인 (비즈니스 핵심 업셀링) */}
+          {/* 추가 옵션: 조부모님/선물용 1권 추가 (+12,000원 / +12,000 P) */}
           <TouchableOpacity
             style={[styles.addCopyBox, orderAddCopy && styles.addCopyBoxActive]}
             onPress={() => setOrderAddCopy(!orderAddCopy)}
@@ -2100,29 +2191,57 @@ export default function PhotobookStudioScreen({
             <View style={{ flex: 1, marginRight: 8 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
                 <Text style={styles.addCopyTitle}>부모님/조부모님 선물용 +1권 추가</Text>
-                <View style={styles.discountBadge}>
-                  <Text style={styles.discountBadgeText}>42% 파격 특가</Text>
+                <View style={[styles.discountBadge, { backgroundColor: '#FFF5F2', borderColor: '#FFE8E0', borderWidth: 1 }]}>
+                  <Text style={[styles.discountBadgeText, { color: colors.primary }]}>선물용</Text>
                 </View>
               </View>
-              <Text style={styles.addCopySub}>할인가 +14,000원에 한 권 더 제작해 선물하세요!</Text>
+              <Text style={styles.addCopySub}>
+                추가 1권도 동일하게 +{PHOTOBOOK_EXTRA_COPY_POINT.toLocaleString()}원(또는 포인트)으로 함께 제작합니다.
+              </Text>
             </View>
-            <Text style={styles.addCopyPriceText}>+14,000원</Text>
+            <Text style={[styles.addCopyPriceText, { color: colors.primary }]}>
+              +{PHOTOBOOK_EXTRA_COPY_POINT.toLocaleString()}원
+            </Text>
           </TouchableOpacity>
 
-          {/* 총 결제 예정 금액 (하이브리드 명세) */}
+          {/* 총 결제 예정 금액 배너 */}
           <View style={styles.totalPriceBanner}>
             <View style={{ flex: 1, marginRight: 10 }}>
-              <Text style={styles.totalPriceLabel}>최종 실결제 금액 (배송비 무료):</Text>
-              {appliedPoints > 0 && (
-                <Text style={styles.totalPriceSubNotice}>
-                  (가족 포인트 {appliedPoints.toLocaleString()}P 할인 적용됨 ✨)
-                </Text>
-              )}
+              <Text style={styles.totalPriceLabel}>
+                {isFullyCovered ? '총 교환 소모 포인트:' : '최종 실결제 금액 (배송비 무료):'}
+              </Text>
+              <Text style={styles.totalPriceSubNotice}>
+                {isFullyCovered
+                  ? '실제 결제할 현금: 0원 (전액 무료 교환 ✨)'
+                  : usedPoints > 0
+                  ? `(가족 포인트 -${usedPoints.toLocaleString()}P 전액 할인 적용됨 ✨)`
+                  : '(배송비 무료 포함)'}
+              </Text>
             </View>
-            <Text style={styles.totalPriceNumber}>
-              {finalCashPrice.toLocaleString()}원
+            <Text style={[styles.totalPriceNumber, { color: colors.primary }]}>
+              {isFullyCovered
+                ? `${usedPoints.toLocaleString()} P (0원)`
+                : `${cashDiff.toLocaleString()}원`}
             </Text>
           </View>
+
+          {/* 계좌이체 입금 안내 카드 (차액이 있을 경우에만 표시) */}
+          {cashDiff > 0 && (
+            <View style={{ backgroundColor: '#F8FAFC', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 14 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                <Info size={14} color="#475569" style={{ marginRight: 6 }} />
+                <Text style={{ fontSize: 12, fontWeight: '800', color: '#1E293B' }}>
+                  계좌이체 입금 안내 (인쇄비 지원)
+                </Text>
+              </View>
+              <Text style={{ fontSize: 12, color: '#334155', fontWeight: '700', marginTop: 2 }}>
+                카카오뱅크 3333-28-5683901 (FamLink)
+              </Text>
+              <Text style={{ fontSize: 11, color: '#64748B', marginTop: 3, lineHeight: 15 }}>
+                • 입금자명을 아래 받는 분 성함('{orderName.trim() || '홍길동'}')과 동일하게 입금해 주시면 확인 후 즉시 제작에 들어갑니다.
+              </Text>
+            </View>
+          )}
 
           {/* 배송지 입력 필드 */}
           <Text style={styles.formInputLabel}>받는 분 성함</Text>
@@ -2143,20 +2262,38 @@ export default function PhotobookStudioScreen({
           />
 
           <Text style={styles.formInputLabel}>우편번호</Text>
-          <TextInput
-            style={styles.formInput}
-            value={orderPostalCode}
-            onChangeText={setOrderPostalCode}
-            placeholder="우편번호 (예: 06234)"
-            keyboardType="numeric"
-          />
+          <View style={styles.addressRow}>
+            <TextInput
+              style={[styles.formInput, { flex: 1, marginBottom: 0 }]}
+              value={orderPostalCode}
+              onChangeText={setOrderPostalCode}
+              placeholder="우편번호 (예: 06234)"
+              keyboardType="numeric"
+            />
+            <TouchableOpacity
+              style={styles.addressSearchBtn}
+              onPress={handleSearchAddress}
+              activeOpacity={0.8}
+            >
+              <Search size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
+              <Text style={styles.addressSearchBtnText}>주소 검색</Text>
+            </TouchableOpacity>
+          </View>
 
-          <Text style={styles.formInputLabel}>배송지 주소</Text>
+          <Text style={styles.formInputLabel}>배송지 기본 주소</Text>
           <TextInput
             style={styles.formInput}
             value={orderAddress}
             onChangeText={setOrderAddress}
-            placeholder="상세 주소를 입력하세요"
+            placeholder="주소 검색 버튼을 눌러 주소를 선택하세요"
+          />
+
+          <Text style={styles.formInputLabel}>상세 주소 (동·호수 등)</Text>
+          <TextInput
+            style={styles.formInput}
+            value={orderDetailAddress}
+            onChangeText={setOrderDetailAddress}
+            placeholder="상세 주소를 입력하세요 (예: 101동 1204호)"
           />
 
           <Text style={styles.formInputLabel}>배송 요청사항</Text>
@@ -2167,17 +2304,42 @@ export default function PhotobookStudioScreen({
             placeholder="배송 요청사항 (예: 문 앞에 놓아주세요)"
           />
 
+          {/* POD 주문제작 청약철회(환불) 규정 및 사업자 고지 박스 */}
+          <View
+            style={{
+              backgroundColor: '#FAF8F3',
+              borderWidth: 1,
+              borderColor: '#E7E5E4',
+              borderRadius: 12,
+              padding: 12,
+              marginBottom: 10,
+            }}
+          >
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#44403C', marginBottom: 4 }}>
+              📦 맞춤 제작(POD) 청약철회 및 품질 보증 안내
+            </Text>
+            <Text style={{ fontSize: 11, color: '#78716C', lineHeight: 16 }}>
+              • 주문 접수 후 1시간 이내(인쇄 준비 전)에는 100% 즉시 취소 및 포인트·결제액 전액 복구가 가능합니다.{'\n'}
+              • 전자상거래법 제17조 제2항 제6호에 따라 인쇄소 제작 착수 이후에는 1:1 맞춤 도서 특성상 단순 변심 환불이 불가합니다.{'\n'}
+              • 파본·인쇄 불량·배송 파손 시 100% 무료 재제작 및 재배송해 드립니다. (상호: 팜링크 FamLink)
+            </Text>
+          </View>
+
           <TouchableOpacity
             style={styles.submitOrderBtn}
             onPress={handleExecuteOrder}
             disabled={isSubmittingOrder}
             activeOpacity={0.85}
           >
-            <ShoppingBag size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+            <Gift size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
             <Text style={styles.submitOrderBtnText}>
               {isSubmittingOrder
-                ? '주문 생성 중...'
-                : `${finalCashPrice.toLocaleString()}원 결제하고 총 ${orderAddCopy ? '2권' : '1권'} 제작 주문하기`}
+                ? '주문 신청 접수 중...'
+                : isFullyCovered
+                ? `🎉 100% 포인트로 총 ${orderAddCopy ? '2권' : '1권'} 무료 교환하기`
+                : usedPoints > 0
+                ? `${usedPoints.toLocaleString()}P 할인 + ${cashDiff.toLocaleString()}원 계좌이체 주문`
+                : `${cashDiff.toLocaleString()}원 계좌이체로 실물 주문하기`}
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -2807,6 +2969,32 @@ export default function PhotobookStudioScreen({
         </View>
       </View>
 
+      {/* 🎁 런칭 기념 선착순 10가족 한정 포토북 교환 이벤트 배너 */}
+      <TouchableOpacity
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          backgroundColor: '#FFF5F2',
+          borderBottomWidth: 1,
+          borderBottomColor: '#FFE8E0',
+          paddingHorizontal: 14,
+          paddingVertical: 7,
+        }}
+        onPress={() => setOrderModalVisible(true)}
+        activeOpacity={0.85}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+          <Gift size={13} color="#FF6B47" style={{ marginRight: 6 }} />
+          <Text style={{ fontSize: 11, fontWeight: '800', color: '#C2410C' }} numberOfLines={1}>
+            런칭 기념 선착순 10가족 한정! 12,000 P 실물 양장본 무료 교환 이벤트
+          </Text>
+        </View>
+        <Text style={{ fontSize: 11, fontWeight: '800', color: '#FF6B47', marginLeft: 8 }}>
+          신청하기 →
+        </Text>
+      </TouchableOpacity>
+
       {/* 🌐 다른 가족이 수정했을 때만 상단에 잠시 나타나는 실시간 변경 알림 플로팅 토스트 (옵션 A) */}
       {lastSyncNotice && (
         <View style={styles.floatingSyncNoticeOverlay} pointerEvents="none">
@@ -3218,15 +3406,19 @@ export default function PhotobookStudioScreen({
                 </>
               )}
 
-              {/* 실물 주문 메인 CTA 버튼 */}
+              {/* 실물 도서 포인트 교환/주문 메인 CTA 버튼 */}
               <TouchableOpacity
                 style={styles.dockMainOrderBtn}
                 onPress={() => setOrderModalVisible(true)}
                 activeOpacity={0.85}
               >
-                <ShoppingBag size={14} color="#FFFFFF" strokeWidth={2.4} style={{ marginRight: 5 }} />
+                <Gift size={14} color="#FFFFFF" strokeWidth={2.4} style={{ marginRight: 5 }} />
                 <Text style={styles.dockMainOrderBtnText}>
-                  {finalCashPrice.toLocaleString()}원 · 15×21cm A5 양장본 실물 주문
+                  {isFullyCovered
+                    ? '12,000 P · 100% 무료 실물 도서 교환'
+                    : usedPoints > 0
+                    ? `-${usedPoints.toLocaleString()}P 할인 + ${cashDiff.toLocaleString()}원 실물 주문`
+                    : '12,000원 · 15×21cm A5 양장본 실물 주문'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -3288,9 +3480,13 @@ export default function PhotobookStudioScreen({
               onPress={() => setOrderModalVisible(true)}
               activeOpacity={0.85}
             >
-              <ShoppingBag size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Gift size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
               <Text style={styles.previewBottomOrderBtnText}>
-                {finalCashPrice.toLocaleString()}원 결제하고 실물 주문하기 (포인트 최대 12,000P 할인)
+                {isFullyCovered
+                  ? '가족 포인트 12,000 P로 실물 양장본 도서 100% 무료 교환하기 🎁'
+                  : usedPoints > 0
+                  ? `가족 포인트 -${usedPoints.toLocaleString()}P 할인받고 ${cashDiff.toLocaleString()}원 주문하기 📦`
+                  : '12,000원에 실물 양장본 도서 주문하기 📦'}
               </Text>
             </TouchableOpacity>
           </View>

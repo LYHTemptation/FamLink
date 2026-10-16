@@ -80,6 +80,7 @@ export interface PetmongGameEngineProps {
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
+const MAX_DAILY_PETTING_EXP_COUNT = 3;
 
 export default function PetmongGameEngine({
   character,
@@ -133,7 +134,7 @@ export default function PetmongGameEngine({
     return Math.min(100, Math.max(20, chatScore + smallTalkScore));
   }, [todayMessages.length, todayResponsesCount]);
 
-  // 대화 온기 열매 일일 수확 상태 (AsyncStorage 영속화)
+  // 대화 온기 열매 일일 수확 상태 (크로스 디바이스 DB 조회 + AsyncStorage 영속화)
   const [hasHarvestedToday, setHasHarvestedToday] = useState(false);
   const harvestStorageKey = useMemo(
     () => `@famlink_warmth_harvest_${todayStr}_${character?.id || 'default'}`,
@@ -142,17 +143,47 @@ export default function PetmongGameEngine({
 
   useEffect(() => {
     let isMounted = true;
-    AsyncStorage.getItem(harvestStorageKey)
-      .then((val) => {
-        if (isMounted && val === 'true') {
-          setHasHarvestedToday(true);
+
+    const checkHarvestCompleted = async () => {
+      // 1. 크로스 디바이스 DB 조회 (가족 단위 및 캐릭터 단위)
+      const targetFamilyId = character?.family_id || owner?.family_id;
+      if (targetFamilyId) {
+        try {
+          const { data, error } = await supabase
+            .from('petmong_activities')
+            .select('id, action_type')
+            .eq('family_id', targetFamilyId)
+            .gte('created_at', todayStartIso)
+            .ilike('action_type', 'WARMTH_HARVEST%');
+
+          if (!error && Array.isArray(data) && data.length > 0) {
+            if (isMounted) {
+              setHasHarvestedToday(true);
+              AsyncStorage.setItem(harvestStorageKey, 'true').catch(() => {});
+            }
+            return;
+          }
+        } catch (e) {
+          console.warn('Warmth harvest db sync note:', e);
         }
-      })
-      .catch(() => {});
+      }
+
+      // 2. 오프라인 또는 DB 실패 시 로컬 스토리지 확인
+      AsyncStorage.getItem(harvestStorageKey)
+        .then((val) => {
+          if (!isMounted) return;
+          if (val === 'true') {
+            setHasHarvestedToday(true);
+          }
+        })
+        .catch(() => {});
+    };
+
+    checkHarvestCompleted();
     return () => {
       isMounted = false;
     };
-  }, [harvestStorageKey]);
+  }, [harvestStorageKey, character?.family_id, owner?.family_id, todayStartIso]);
 
   const canHarvestFruit =
     !hasHarvestedToday && (todayMessages.length > 0 || todayResponsesCount > 0);
@@ -174,6 +205,28 @@ export default function PetmongGameEngine({
 
   // 쓰다듬기 콤보 & 바닥 탭 물결 리플 상태
   const [pettingCombo, setPettingCombo] = useState(0);
+  // 쓰다듬기 일일 경험치 획득 횟수 (스마트폰 로컬 스토리지 기반 1일 최대 3회 = 15 EXP 제한)
+  const [dailyPettingExpCount, setDailyPettingExpCount] = useState(0);
+  const pettingExpStorageKey = useMemo(
+    () => `@famlink_petting_exp_${todayStr}_${character?.id || 'default'}`,
+    [todayStr, character?.id]
+  );
+
+  useEffect(() => {
+    let isMounted = true;
+    AsyncStorage.getItem(pettingExpStorageKey)
+      .then((val) => {
+        if (!isMounted) return;
+        if (val !== null) {
+          setDailyPettingExpCount(parseInt(val, 10) || 0);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, [pettingExpStorageKey]);
+
   const [floorRipples, setFloorRipples] = useState<FloorRipple[]>([]);
   const [floatingHearts, setFloatingHearts] = useState<FloatingHeart[]>([]);
   const comboResetTimerRef = useRef<any>(null);
@@ -612,7 +665,24 @@ export default function PetmongGameEngine({
 
     setHasHarvestedToday(true);
     AsyncStorage.setItem(harvestStorageKey, 'true').catch(() => {});
-    const expGain = 30;
+    const expGain = 25;
+
+    // 크로스 디바이스 1일 1회 잠금을 위해 Supabase petmong_activities에 영구 기록
+    const targetFamilyId = character?.family_id || owner?.family_id;
+    const targetActorId = character?.id || owner?.id;
+    if (targetFamilyId && targetActorId) {
+      supabase
+        .from('petmong_activities')
+        .insert({
+          family_id: targetFamilyId,
+          actor_id: targetActorId,
+          action_type: `WARMTH_HARVEST:${todayStr}`,
+        })
+        .then(
+          () => {},
+          (e) => console.warn('Warmth harvest log error:', e)
+        );
+    }
 
     if (onGainExp) onGainExp(expGain);
     if (onAwardPoints) onAwardPoints(30, '반려몽 대화 온기 열매 수확');
@@ -1049,11 +1119,22 @@ export default function PetmongGameEngine({
     ]).start();
 
     if (nextCombo % 5 === 0) {
-      if (onGainExp) onGainExp(5);
-      spawnHeartToast(`🔥 ${nextCombo}콤보 행복 폭발! +5 EXP 💖`);
-      setDialogue(
-        `${nextCombo}번 연속 쓰담쓰담이라니! 사랑이 넘쳐서 경험치(+5 EXP)가 쑥 올랐어요 몽 💖✨`
-      );
+      if (dailyPettingExpCount < MAX_DAILY_PETTING_EXP_COUNT) {
+        const nextCount = dailyPettingExpCount + 1;
+        setDailyPettingExpCount(nextCount);
+        AsyncStorage.setItem(pettingExpStorageKey, String(nextCount)).catch(() => {});
+
+        if (onGainExp) onGainExp(5);
+        spawnHeartToast(`🔥 ${nextCombo}콤보 행복 폭발! +5 EXP 💖 (${nextCount}/${MAX_DAILY_PETTING_EXP_COUNT}회)`);
+        setDialogue(
+          `${nextCombo}번 연속 쓰담쓰담이라니! 사랑이 넘쳐서 경험치(+5 EXP)가 쑥 올랐어요 몽 💖✨ (오늘 ${nextCount}/${MAX_DAILY_PETTING_EXP_COUNT}회 달성)`
+        );
+      } else {
+        spawnHeartToast(`🔥 ${nextCombo}콤보 사랑 폭발! 💕`);
+        setDialogue(
+          `${nextCombo}번 연속 쓰담쓰담! 오늘 쓰담쓰담 경험치는 모두 채웠지만 온기는 전해졌어요 몽 💕✨`
+        );
+      }
     } else {
       const msg =
         PETTING_DIALOGUES[(nextCombo - 1) % PETTING_DIALOGUES.length];

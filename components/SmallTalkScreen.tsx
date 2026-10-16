@@ -719,8 +719,8 @@ export default function SmallTalkScreen({
               </View>
 
               <View style={styles.choresProgressRight}>
-                <Text style={styles.choresScorePoints}>⭐ {todayEarnedScore}</Text>
-                <Text style={styles.choresScoreSub}>오늘 획득한 점수</Text>
+                <Text style={styles.choresScorePoints}>⭐ {todayEarnedScore}P</Text>
+                <Text style={styles.choresScoreSub}>오늘 획득한 포인트</Text>
               </View>
             </View>
 

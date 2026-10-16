@@ -2323,6 +2323,26 @@ const styles = StyleSheet.create({
     color: '#1C1917',
     marginBottom: 12,
   },
+  addressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  addressSearchBtn: {
+    height: 48,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: '#FF6B47',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
+  addressSearchBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+  },
   submitOrderBtn: {
     flexDirection: 'row',
     minHeight: 52,

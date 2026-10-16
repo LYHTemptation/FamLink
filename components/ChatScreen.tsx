@@ -1640,18 +1640,27 @@ export default function ChatScreen({
                   </View>
                   {photobookOrderData.pointsUsed > 0 && (
                     <View style={styles.photobookSpecRow}>
-                      <Text style={styles.photobookSpecLabel}>포인트 할인</Text>
-                      <Text style={[styles.photobookSpecValue, { color: '#FF6B47' }]}>
-                        -{photobookOrderData.pointsUsed.toLocaleString()} P
+                      <Text style={styles.photobookSpecLabel}>교환 포인트</Text>
+                      <Text style={[styles.photobookSpecValue, { color: '#FF6B47', fontWeight: '800' }]}>
+                        {photobookOrderData.pointsUsed.toLocaleString()} P (전액 교환)
                       </Text>
                     </View>
                   )}
-                  <View style={styles.photobookSpecRow}>
-                    <Text style={styles.photobookSpecLabel}>결제 금액</Text>
-                    <Text style={[styles.photobookSpecValue, { fontWeight: '800', color: '#1C1917' }]}>
-                      {photobookOrderData.totalPrice.toLocaleString()}원
-                    </Text>
-                  </View>
+                  {photobookOrderData.totalPrice > 0 ? (
+                    <View style={styles.photobookSpecRow}>
+                      <Text style={styles.photobookSpecLabel}>결제 금액</Text>
+                      <Text style={[styles.photobookSpecValue, { fontWeight: '800', color: '#1C1917' }]}>
+                        {photobookOrderData.totalPrice.toLocaleString()}원
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={styles.photobookSpecRow}>
+                      <Text style={styles.photobookSpecLabel}>실결제 금액</Text>
+                      <Text style={[styles.photobookSpecValue, { fontWeight: '800', color: '#16A34A' }]}>
+                        0원 (무료 배송)
+                      </Text>
+                    </View>
+                  )}
                   {photobookOrderData.address ? (
                     <View style={styles.photobookSpecRow}>
                       <Text style={styles.photobookSpecLabel}>배송지</Text>

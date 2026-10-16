@@ -508,7 +508,7 @@ export default function PetmongGrowthBookModal({
 
                 <View style={styles.warmthRewardHintRow}>
                   <Text style={styles.warmthRewardHintText}>
-                    🎁 <Text style={{ fontWeight: '800', color: '#FF6B47' }}>온기 수확 보상</Text>: 오늘 소통이 1건이라도 발생하면 거실에서 온기를 수확해 <Text style={{ fontWeight: '700', color: '#1C1917' }}>+30 EXP 성장 경험치</Text>와 <Text style={{ fontWeight: '700', color: '#1C1917' }}>행복도·에너지 100% 완충</Text>을 받으세요! (가족 포인트는 집안일·스몰톡에서 획득)
+                    🎁 <Text style={{ fontWeight: '800', color: '#FF6B47' }}>온기 수확 보상 (1일 1회)</Text>: 오늘 소통이 1건이라도 발생하면 거실에서 온기를 수확해 <Text style={{ fontWeight: '700', color: '#1C1917' }}>+25 EXP 성장 경험치</Text>, <Text style={{ fontWeight: '700', color: '#FF6B47' }}>+30 가족 활동 포인트(P)</Text>, <Text style={{ fontWeight: '700', color: '#1C1917' }}>행복도·에너지 100% 완충</Text>을 받으세요! ✨
                   </Text>
                 </View>
               </View>

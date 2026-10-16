@@ -13,14 +13,25 @@
         "buildType": "apk"
       },
       "ios": {
-        "simulator": true
+        "simulator": false
       },
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://qvzezgqwectcdoxhqvje.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_AtgVa7dKSOCMOvqB5vzEVw_vQCUHhI2"
       }
     },
-    "production": {}
+    "preview-simulator": {
+      "distribution": "internal",
+      "ios": {
+        "simulator": true
+      }
+    },
+    "production": {
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://qvzezgqwectcdoxhqvje.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_AtgVa7dKSOCMOvqB5vzEVw_vQCUHhI2"
+      }
+    }
   },
   "submit": {
     "production": {}

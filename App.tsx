@@ -848,7 +848,7 @@ export default function App() {
     }
   };
 
-  // Apple Guideline 5.1.1(v) 회원 탈퇴 (Account Deletion)
+  // Apple Guideline 5.1.1(v) 회원 탈퇴 (Account Deletion - auth.users & profiles 완전 삭제)
   const handleDeleteAccount = async () => {
     if (isSupabaseReady && profile?.id) {
       try {
@@ -863,8 +863,15 @@ export default function App() {
           console.warn('Profile delete error:', profileDelError.message);
         }
 
-        // 2. Auth 세션 로그아웃
+        // 2. auth.users 계정 자체 완전 삭제 RPC 호출 (동일 이메일 재가입 보장)
+        const { error: rpcError } = await supabase.rpc('delete_user_account');
+        if (rpcError) {
+          console.warn('delete_user_account RPC note (fallback to signOut):', rpcError.message);
+        }
+
+        // 3. Auth 세션 로그아웃 및 로컬 캐시 정리
         await supabase.auth.signOut();
+        await AsyncStorage.clear();
         setSession(null);
         setProfile(null);
         Alert.alert('탈퇴 완료', '회원 탈퇴 및 개인정보 삭제가 완료되었습니다. 그동안 FamLink를 이용해 주셔서 감사합니다.');
