@@ -201,16 +201,31 @@ export default function PhotoAlbumScreen({
 
   // Family creation date (lower bound for archive dates, start of creation month)
   const familyCreatedAt = useMemo<Date>(() => {
+    let earliestDate: Date | null = null;
     const raw =
       currentUserProfile?.family_created_at || currentUserProfile?.created_at;
     if (raw) {
       const d = new Date(raw);
       if (!isNaN(d.getTime())) {
-        return new Date(d.getFullYear(), d.getMonth(), 1);
+        earliestDate = d;
       }
     }
-    return new Date(2026, 8, 1);
-  }, [currentUserProfile?.family_created_at, currentUserProfile?.created_at]);
+    for (const r of (dbResponses || [])) {
+      if (r.created_at) {
+        const d = new Date(r.created_at);
+        if (!isNaN(d.getTime())) {
+          if (!earliestDate || d < earliestDate) {
+            earliestDate = d;
+          }
+        }
+      }
+    }
+
+    if (earliestDate) {
+      return new Date((earliestDate as Date).getFullYear(), (earliestDate as Date).getMonth(), 1);
+    }
+    return new Date(2026, 7, 1);
+  }, [currentUserProfile?.family_created_at, currentUserProfile?.created_at, dbResponses]);
 
   // All valid calendar months since the family group was created
   const allFamilyMonths = useMemo<FamilyMonthItem[]>(() => {
@@ -263,6 +278,35 @@ export default function PhotoAlbumScreen({
       });
     });
 
+    // DB 답변이 작성된 최초 일자 기준으로 날짜별 매핑 맵 구축 (답변 작성 날짜 우선 바인딩)
+    const dateToAnsweredTopicMap: Record<string, string[]> = {};
+    for (const [cleanKey, rows] of Object.entries(dbTopicMap)) {
+      let earliestDate: Date | null = null;
+      for (const r of rows) {
+        if (r.created_at) {
+          const d = new Date(r.created_at);
+          if (!isNaN(d.getTime())) {
+            if (!earliestDate || d < earliestDate) {
+              earliestDate = d;
+            }
+          }
+        }
+      }
+
+      if (earliestDate) {
+        const y = (earliestDate as Date).getFullYear();
+        const m = String((earliestDate as Date).getMonth() + 1).padStart(2, '0');
+        const d = String((earliestDate as Date).getDate()).padStart(2, '0');
+        const dateKey = `${y}-${m}-${d}`;
+        if (!dateToAnsweredTopicMap[dateKey]) {
+          dateToAnsweredTopicMap[dateKey] = [];
+        }
+        if (!dateToAnsweredTopicMap[dateKey].includes(cleanKey)) {
+          dateToAnsweredTopicMap[dateKey].push(cleanKey);
+        }
+      }
+    }
+
     const now = new Date();
     const todayYear = now.getFullYear();
     const todayMonth = now.getMonth();
@@ -278,13 +322,14 @@ export default function PhotoAlbumScreen({
     );
     const curCursor = new Date(todayYear, todayMonth, todayDate, 12, 0, 0);
 
-    const coveredTopics = new Set<string>();
+    const coveredAnsweredTopics = new Set<string>();
     let topicIdx = 0;
 
     while (curCursor >= startCursor) {
       const y = curCursor.getFullYear();
       const m = String(curCursor.getMonth() + 1).padStart(2, '0');
       const d = String(curCursor.getDate()).padStart(2, '0');
+      const dateKey = `${y}-${m}-${d}`;
       const yearMonth = `${y}-${m}`;
       const yearMonthLabel = `${y}년 ${parseInt(m, 10)}월`;
 
@@ -296,10 +341,22 @@ export default function PhotoAlbumScreen({
         typeof todayTopic === 'string'
           ? todayTopic
           : todayTopic?.text || todayTopic?.title || todayTopic?.topic || '';
-      const topic = isToday
-        ? stripEmojis(rawTodayTopic)
-        : stripEmojis(getTopicForDateFromList(dbTopics, curCursor));
-      coveredTopics.add(topic);
+
+      let topic = '';
+      if (isToday) {
+        topic = stripEmojis(rawTodayTopic);
+      } else {
+        // 1순위: 해당 날짜에 작성된 답변의 실제 토픽이 있으면 우선 채택 (중복 extra 생성 방지)
+        const answeredTopicsOnThisDate = (dateToAnsweredTopicMap[dateKey] || []).filter(
+          (t) => !coveredAnsweredTopics.has(t)
+        );
+        if (answeredTopicsOnThisDate.length > 0) {
+          topic = answeredTopicsOnThisDate[0];
+        } else {
+          // 2순위: 해당 일자의 순환 공식 질문
+          topic = stripEmojis(getTopicForDateFromList(dbTopics, curCursor));
+        }
+      }
 
       const answersList: SmallTalkArchiveAnswer[] = [];
 
@@ -333,6 +390,10 @@ export default function PhotoAlbumScreen({
         }
       });
 
+      if (answersList.length > 0) {
+        coveredAnsweredTopics.add(topic);
+      }
+
       const dateLabel = isToday
         ? '오늘의 질문 🌟'
         : `${parseInt(m, 10)}월 ${parseInt(d, 10)}일`;
@@ -364,8 +425,9 @@ export default function PhotoAlbumScreen({
       curCursor.setDate(curCursor.getDate() - 1);
     }
 
+    // 날짜 슬롯에 매핑되지 않고 남은 실제 DB 답변이 있는 경우에만 안전하게 추가 슬롯 생성
     Object.keys(dbTopicMap).forEach((topic) => {
-      if (coveredTopics.has(topic)) return;
+      if (coveredAnsweredTopics.has(topic)) return;
       const dbAnswers = dbTopicMap[topic] || [];
       if (dbAnswers.length === 0) return;
 
@@ -392,6 +454,8 @@ export default function PhotoAlbumScreen({
       const isInBook = includedSmallTalkTopics.some(
         (t) => stripEmojis(t) === topic
       );
+
+      coveredAnsweredTopics.add(topic);
 
       list.push({
         id: `topic-extra-${topicIdx}`,
