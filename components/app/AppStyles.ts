@@ -26,7 +26,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     backgroundColor: '#FAF8F3',
     borderBottomWidth: 1,
     borderBottomColor: '#F5F0E8',
@@ -34,6 +34,7 @@ const styles = StyleSheet.create({
   logoRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 0,
   },
   logoText: {
     fontSize: 20,
@@ -56,6 +57,8 @@ const styles = StyleSheet.create({
   topRightControls: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 1,
+    marginLeft: 8,
   },
   pointIndicator: {
     flexDirection: 'row',
@@ -66,7 +69,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 12,
-    marginRight: 10,
+    marginRight: 8,
+    flexShrink: 0,
   },
   pointIndicatorText: {
     fontSize: 11,
@@ -81,6 +85,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     backgroundColor: '#FFFFFF',
+    maxWidth: 140,
   },
   userBadge: {
     flexDirection: 'row',
@@ -90,6 +95,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     backgroundColor: '#FAF8F3',
+    maxWidth: 140,
   },
   switcherAvatar: {
     fontSize: 14,
@@ -99,6 +105,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: '#1C1C1E',
+    maxWidth: 96,
   },
   logoutButton: {
     padding: 8,

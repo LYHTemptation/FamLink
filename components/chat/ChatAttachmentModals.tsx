@@ -247,7 +247,7 @@ export default function ChatAttachmentModals({
         onRequestClose={handleCancelVoice}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
         >
           <TouchableOpacity
@@ -306,7 +306,7 @@ export default function ChatAttachmentModals({
         onRequestClose={() => setPollModalVisible(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
         >
           <TouchableOpacity
@@ -395,7 +395,7 @@ export default function ChatAttachmentModals({
         onRequestClose={() => setEventModalVisible(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
         >
           <TouchableOpacity
@@ -472,7 +472,7 @@ export default function ChatAttachmentModals({
         onRequestClose={() => setChoreModalVisible(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
         >
           <TouchableOpacity
@@ -557,7 +557,7 @@ export default function ChatAttachmentModals({
         onRequestClose={() => setLocationModalVisible(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
         >
           <TouchableOpacity

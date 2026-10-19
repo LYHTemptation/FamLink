@@ -406,10 +406,10 @@ export default function FamilyScreen({
         {/* 4. 전자상거래 사업자 정보 및 POD 고지 푸터 */}
         <View style={{ marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#F5F0E8' }}>
           <Text style={{ fontSize: 11, fontWeight: '700', color: '#78716C', marginBottom: 2 }}>
-            팜링크 (FamLink) | 맞춤형 가족 포토북 & 라이프스타일
+            팸링크(FamLink) | 맞춤형 가족 포토북 & 라이프스타일
           </Text>
           <Text style={{ fontSize: 10, color: '#A8A29E', lineHeight: 15 }}>
-            업종: 전자상거래 소매업 (525101) | 고객센터: 카카오톡 @팸링크FamLink{'\n'}
+            사업자등록번호: 302-42-01661 | 업종: 전자상거래 소매업 (525101) | 고객센터: 카카오톡 @팸링크FamLink{'\n'}
             실물 포토북은 1:1 주문 제작(POD) 상품으로 인쇄 착수 후 단순 변심 환불이 제한되며, 파본·불량 시 100% 무료 재제작됩니다.
           </Text>
         </View>
@@ -535,8 +535,9 @@ export default function FamilyScreen({
 
                   <Text style={styles.policyArticleTitle}>제6조 (사업자 정보 및 고객센터)</Text>
                   <Text style={styles.policyBodyText}>
-                    • 상호명: 팜링크 (FamLink){'\n'}
-                    • 주요 종목: 전자상거래 소매업 / 맞춤형 포토북 제작{'\n'}
+                    • 상호명: 팸링크(FamLink){'\n'}
+                    • 사업자등록번호: 302-42-01661{'\n'}
+                    • 주요 종목: 전자상거래 소매업 (525101) / 맞춤형 포토북 제작{'\n'}
                     • 고객센터: 카카오톡 채널 @팸링크FamLink / support@famlink.com (평일 10:00~18:00)
                   </Text>
                 </View>
@@ -563,7 +564,7 @@ export default function FamilyScreen({
         onRequestClose={() => setModalVisible(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
         >
           <View style={[styles.modalView, { maxHeight: '88%' }]}>

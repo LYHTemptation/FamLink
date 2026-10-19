@@ -63,7 +63,7 @@ export default function SmallTalkModals({
       {/* 모달 1: 대화 주제 답변 작성 모달 */}
       <Modal visible={answerModalVisible} transparent animationType="fade">
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalBackdrop}
         >
           <View style={styles.modalCard}>
@@ -178,7 +178,7 @@ export default function SmallTalkModals({
       {/* 모달 2: 새 집안일 추가 모달 */}
       <Modal visible={addChoreModalVisible} transparent animationType="fade">
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalBackdrop}
         >
           <View style={styles.modalCard}>

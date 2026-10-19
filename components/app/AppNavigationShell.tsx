@@ -65,7 +65,7 @@ export function AppTopNavbar({
               size={22}
               style={{ marginRight: 6 }}
             />
-            <Text style={styles.switcherName}>{activeMember.name} (시뮬)</Text>
+            <Text style={styles.switcherName} numberOfLines={1}>{activeMember.name} (시뮬)</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
@@ -81,7 +81,7 @@ export function AppTopNavbar({
               size={22}
               style={{ marginRight: 6 }}
             />
-            <Text style={styles.switcherName}>
+            <Text style={styles.switcherName} numberOfLines={1}>
               {profileName || activeMember.name}
             </Text>
           </TouchableOpacity>

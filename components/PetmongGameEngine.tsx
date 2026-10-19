@@ -9,6 +9,7 @@ import {
   Easing,
   Platform,
   Image,
+  useWindowDimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
@@ -252,10 +253,13 @@ export default function PetmongGameEngine({
   const [connectedStarIds, setConnectedStarIds] = useState([1]);
   const [dragCurrentPos, setDragCurrentPos] = useState<DragPos | null>(null);
   const [isConstCompleted, setIsConstCompleted] = useState(false);
+  const { width: windowWidth } = useWindowDimensions();
+  const activeRoomWidth = windowWidth || SCREEN_WIDTH;
   const [canvasLayout, setCanvasLayout] = useState({
-    width: SCREEN_WIDTH,
+    width: activeRoomWidth,
     height: 230,
   });
+  const roomWidth = canvasLayout.width || activeRoomWidth;
   const constGlowAnim = useRef(new Animated.Value(1.0)).current;
   const isMouseActiveRef = useRef(false);
 
@@ -313,7 +317,7 @@ export default function PetmongGameEngine({
   );
 
   // Main Pet Physics & Spring Animation Values
-  const INITIAL_PET_X = Math.round(SCREEN_WIDTH * 0.5 - 70);
+  const INITIAL_PET_X = Math.max(16, Math.round(roomWidth * 0.5 - 70));
   const petPosX = useRef(new Animated.Value(INITIAL_PET_X)).current;
   const petScaleX = useRef(new Animated.Value(1)).current;
   const petScaleY = useRef(new Animated.Value(1)).current;
@@ -331,7 +335,7 @@ export default function PetmongGameEngine({
 
   // Visitor Pet Autonomous Physics Animations
   const visitorPosX = useRef(
-    new Animated.Value(Math.round(SCREEN_WIDTH * 0.16))
+    new Animated.Value(Math.round(roomWidth * 0.16))
   ).current;
   const visitorHopY = useRef(new Animated.Value(0)).current;
   const visitorScaleX = useRef(new Animated.Value(1)).current;
@@ -398,7 +402,7 @@ export default function PetmongGameEngine({
 
     const wanderInterval = setInterval(() => {
       const nextX = Math.round(
-        SCREEN_WIDTH * (0.12 + Math.random() * 0.55)
+        roomWidth * (0.12 + Math.random() * 0.55)
       );
       Animated.parallel([
         Animated.timing(visitorScaleX, {
@@ -438,7 +442,7 @@ export default function PetmongGameEngine({
     }, 6500);
 
     return () => clearInterval(wanderInterval);
-  }, [isVisiting, visitorCharacter, visitorPosX, visitorHopY, visitorScaleX]);
+  }, [isVisiting, visitorCharacter, visitorPosX, visitorHopY, visitorScaleX, roomWidth]);
 
   // -------------------------------------------------------------
   // 4. Idle Breathing & Waddle Walk Physics
@@ -490,7 +494,7 @@ export default function PetmongGameEngine({
     (targetX: number, onFinish?: () => void, speedMultiplier = 1) => {
       const clampedTargetX = Math.max(
         16,
-        Math.min(SCREEN_WIDTH - 150, targetX)
+        Math.min(roomWidth - 150, targetX)
       );
       const startX = currentPetXRef.current;
       const distance = Math.abs(clampedTargetX - startX);
@@ -560,7 +564,7 @@ export default function PetmongGameEngine({
         }
       });
     },
-    [petPosX, petScaleX, petHopY, petRotate]
+    [petPosX, petScaleX, petHopY, petRotate, roomWidth]
   );
 
   // -------------------------------------------------------------
@@ -578,13 +582,13 @@ export default function PetmongGameEngine({
 
       let targetX = INITIAL_PET_X;
       if (nextRoutine === 'window') {
-        targetX = Math.round(SCREEN_WIDTH * 0.18);
+        targetX = Math.round(roomWidth * 0.18);
       } else if (nextRoutine === 'photo') {
-        targetX = Math.round(SCREEN_WIDTH * 0.65);
+        targetX = Math.round(roomWidth * 0.65);
       } else if (nextRoutine === 'reading') {
-        targetX = Math.round(SCREEN_WIDTH * 0.38);
+        targetX = Math.round(roomWidth * 0.38);
       } else if (nextRoutine === 'napping') {
-        targetX = Math.round(SCREEN_WIDTH * 0.5 - 70);
+        targetX = Math.round(roomWidth * 0.5 - 70);
       }
 
       walkToPosition(targetX, () => {
@@ -613,7 +617,7 @@ export default function PetmongGameEngine({
     }, 20000);
 
     return () => clearInterval(routineInterval);
-  }, [isLightsOff, walkToPosition, INITIAL_PET_X]);
+  }, [isLightsOff, walkToPosition, INITIAL_PET_X, roomWidth]);
 
   // -------------------------------------------------------------
   // 6. Particle Emitter (애니메이션 하트 파티클 & 바닥 물결 리플)
@@ -623,7 +627,7 @@ export default function PetmongGameEngine({
     const x = Math.max(
       20,
       Math.min(
-        SCREEN_WIDTH - 110,
+        roomWidth - 110,
         currentPetXRef.current + 45 + (Math.random() * 44 - 22)
       )
     );
@@ -633,7 +637,7 @@ export default function PetmongGameEngine({
       particleTimersRef.current.delete(timer);
     }, 1300);
     particleTimersRef.current.add(timer);
-  }, []);
+  }, [roomWidth]);
 
   const spawnFloorRipple = useCallback((x: number, y: number) => {
     const id = `ripple_${Date.now()}_${Math.random()}`;
@@ -751,7 +755,7 @@ export default function PetmongGameEngine({
 
     const nativeEv = e?.nativeEvent;
     const tapX =
-      nativeEv?.locationX ?? nativeEv?.pageX ?? SCREEN_WIDTH * 0.5;
+      nativeEv?.locationX ?? nativeEv?.pageX ?? roomWidth * 0.5;
     const tapY =
       nativeEv?.locationY ?? nativeEv?.pageY ?? 420;
 
@@ -1172,7 +1176,7 @@ export default function PetmongGameEngine({
       {/* 🌟 밤 시간대 / 야간 모드: 인룸 천장 수호 별자리 캔버스 */}
       {isNightMode && (
         <View
-          style={[styles.inRoomConstellationCanvas, { width: SCREEN_WIDTH }]}
+          style={[styles.inRoomConstellationCanvas, { width: '100%' }]}
           onLayout={(e) => {
             const { width, height } = e.nativeEvent.layout;
             if (width > 0 && height > 0) {
