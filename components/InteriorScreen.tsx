@@ -87,6 +87,45 @@ const ROOM_THEMES = [
 
 const PERSONALITY_OPTIONS = ['다정한', '장난꾸러기', '잠꾸러기', '애교쟁이', '호기심많은'];
 
+export interface PetmongStyleItem {
+  id: PetmongStylePreset;
+  title: string;
+  emoji: string;
+  tag: string;
+  desc: string;
+}
+
+export const STYLE_PRESET_OPTIONS: PetmongStyleItem[] = [
+  {
+    id: 'cozy_creature',
+    title: '포근한 동물 요정',
+    emoji: '🐾',
+    tag: 'Sumone풍 2D',
+    desc: '동글동글 사랑스러운 2D 동물 마스코트',
+  },
+  {
+    id: 'chibi_family',
+    title: '귀여운 웹툰 인물',
+    emoji: '👦',
+    tag: '치비 캐리커처',
+    desc: '헤어·안경·표정을 쏙 빼닮은 캐릭터',
+  },
+  {
+    id: 'warm_watercolor',
+    title: '동화책 수채화',
+    emoji: '🎨',
+    tag: '따뜻한 감성',
+    desc: '색연필과 수채화로 그린 따뜻한 동화 삽화',
+  },
+  {
+    id: 'comic_caricature',
+    title: '유쾌한 코미디 카툰',
+    emoji: '🤪',
+    tag: '익살 명랑 만화',
+    desc: '과장된 표정과 재치 있는 짤방 감성',
+  },
+];
+
 const PETMONG_DIALOGUES = {
   '다정한': [
     '오늘 하루도 우리 가족 모두 행복했으면 좋겠어요! ❤️',
@@ -141,6 +180,7 @@ import {
   ChatMessage,
   SmallTalkState,
   PetmongCharacter,
+  PetmongStylePreset,
 } from '../types/domain';
 
 export interface PetVitals {
@@ -252,6 +292,7 @@ export default function InteriorScreen({
   const [newName, setNewName] = useState('');
   const [newEmoji, setNewEmoji] = useState('🐶');
   const [newPersonality, setNewPersonality] = useState('다정한');
+  const [selectedStylePreset, setSelectedStylePreset] = useState<PetmongStylePreset>('cozy_creature');
 
   // Compatibility helpers
   const setCreateModalVisible = (val: boolean) => {
@@ -975,6 +1016,7 @@ export default function InteriorScreen({
         base64Photo: result.assets[0].base64,
         personality: newPersonality,
         targetStageNum,
+        stylePreset: selectedStylePreset,
       });
 
       let generatedImageUrl = aiResult.generatedImageUrl;
@@ -1020,24 +1062,39 @@ export default function InteriorScreen({
               await onDeductPoints(500, '반려몽 외형 변경/환생');
             }
 
-            const updateData = {
+            const updateData: any = {
               name: newName.trim(),
               emoji: matchedEmoji,
               image_url: generatedImageUrl,
               personality: newPersonality,
+              style_preset: selectedStylePreset,
               level: 1,
               exp: 0,
               family_id: familyId,
             };
 
-            const { data: updatedChar, error: updateError } = await supabase
+            let { data: updatedChar, error: updateError } = await supabase
               .from('petmong_characters')
               .update(updateData)
               .eq('id', familyPetmong.id)
               .select()
               .single();
 
+            // DB에 style_preset 컬럼이 아직 없는 경우(PGRST204) 키를 제거하고 즉시 재시도
+            if (updateError && (updateError.message?.includes('style_preset') || (updateError as any).code === 'PGRST204')) {
+              delete updateData.style_preset;
+              const retry = await supabase
+                .from('petmong_characters')
+                .update(updateData)
+                .eq('id', familyPetmong.id)
+                .select()
+                .single();
+              updatedChar = retry.data;
+              updateError = retry.error;
+            }
+
             if (updateError) throw updateError;
+            if (updatedChar) updatedChar.style_preset = selectedStylePreset;
 
             if (currentUserProfile?.id) {
               try {
@@ -1067,30 +1124,44 @@ export default function InteriorScreen({
               await savePetmongStageImage(updatedChar.id, 1, updatedChar.image_url);
               startBackgroundStagePreGeneration(updatedChar, (stage, url) => {
                 console.log(`[Stage Pre-Gen] Stage ${stage} completed for ${updatedChar.name}`);
-              });
+              }, true);
             }
             return;
           } else {
             // Initial Creation: Free
             if (!currentUserProfile?.id) return;
-            const newCharData = {
+            const newCharData: any = {
               user_id: currentUserProfile.id,
               family_id: familyId,
               name: newName.trim(),
               emoji: matchedEmoji,
               image_url: generatedImageUrl,
               personality: newPersonality,
+              style_preset: selectedStylePreset,
               level: 1,
               exp: 0,
             };
 
-            const { data: insertedChar, error: insertError } = await supabase
+            let { data: insertedChar, error: insertError } = await supabase
               .from('petmong_characters')
               .insert(newCharData)
               .select()
               .single();
 
+            // DB에 style_preset 컬럼이 아직 없는 경우(PGRST204) 키를 제거하고 즉시 재시도
+            if (insertError && (insertError.message?.includes('style_preset') || (insertError as any).code === 'PGRST204')) {
+              delete newCharData.style_preset;
+              const retry = await supabase
+                .from('petmong_characters')
+                .insert(newCharData)
+                .select()
+                .single();
+              insertedChar = retry.data;
+              insertError = retry.error;
+            }
+
             if (insertError) throw insertError;
+            if (insertedChar) insertedChar.style_preset = selectedStylePreset;
 
             setIsGenerating(false);
             setMyCharacter(insertedChar);
@@ -1101,10 +1172,11 @@ export default function InteriorScreen({
             Alert.alert('탄생 완료! 🎉', '나를 똑닮은 귀여운 우리 가족 수호 반려몽이 부화했어요!');
 
             if (insertedChar.id && insertedChar.image_url) {
-              savePetmongStageImage(insertedChar.id, 1, insertedChar.image_url);
+              await resetPetmongStageImages(insertedChar.id);
+              await savePetmongStageImage(insertedChar.id, 1, insertedChar.image_url);
               startBackgroundStagePreGeneration(insertedChar, (stage, url) => {
                 console.log(`[Stage Pre-Gen] Stage ${stage} completed for ${insertedChar.name}`);
-              });
+              }, true);
             }
             return;
           }
@@ -1661,7 +1733,56 @@ export default function InteriorScreen({
                     ))}
                   </ScrollView>
 
-                  <Text style={styles.modalLabel}>캐릭터 선택 (기본 캐릭터 또는 AI 사진 생성)</Text>
+                  <Text style={styles.modalLabel}>AI 그림 스타일 선택 (사진 생성 시 적용)</Text>
+                  <View style={styles.stylePickerGrid}>
+                    {STYLE_PRESET_OPTIONS.map((st) => {
+                      const isSelected = selectedStylePreset === st.id;
+                      return (
+                        <TouchableOpacity
+                          key={st.id}
+                          style={[
+                            styles.styleCard,
+                            isSelected && styles.styleCardActive,
+                          ]}
+                          onPress={() => setSelectedStylePreset(st.id)}
+                          activeOpacity={0.8}
+                        >
+                          <View style={styles.styleCardTop}>
+                            <Text style={styles.styleCardEmoji}>{st.emoji}</Text>
+                            <Text
+                              style={[
+                                styles.styleCardTitle,
+                                isSelected && styles.styleCardTitleActive,
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {st.title}
+                            </Text>
+                          </View>
+                          <Text style={styles.styleCardDesc} numberOfLines={2}>
+                            {st.desc}
+                          </Text>
+                          <View
+                            style={[
+                              styles.styleCardBadge,
+                              isSelected && styles.styleCardBadgeActive,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.styleCardBadgeText,
+                                isSelected && styles.styleCardBadgeTextActive,
+                              ]}
+                            >
+                              {st.tag}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  <Text style={styles.modalLabel}>기본 캐릭터 선택 (즉시 입주)</Text>
                   <View style={styles.emojiPickerRow}>
                     {['🐶', '🐱', '🐰', '🐻', '🦊', '🐥', '🐼', '🐨'].map((em) => (
                       <TouchableOpacity
@@ -1690,7 +1811,7 @@ export default function InteriorScreen({
 
                     <View style={styles.orDividerRow}>
                       <View style={styles.dividerLine} />
-                      <Text style={styles.dividerText}>또는 AI로 특별하게</Text>
+                      <Text style={styles.dividerText}>또는 AI 사진으로 그리기</Text>
                       <View style={styles.dividerLine} />
                     </View>
 
@@ -1701,7 +1822,9 @@ export default function InteriorScreen({
                     >
                       <Camera size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
                       <Text style={styles.modalConfirmBtnText}>
-                        {displayedCharacter ? '내 사진으로 AI 외형 변경 (500P)' : '내 사진으로 AI 반려몽 그리기'}
+                        {displayedCharacter
+                          ? `[${STYLE_PRESET_OPTIONS.find((s) => s.id === selectedStylePreset)?.title || 'AI'}] 사진으로 외형 변경 (500P)`
+                          : `[${STYLE_PRESET_OPTIONS.find((s) => s.id === selectedStylePreset)?.title || 'AI'}] 사진으로 반려몽 그리기`}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -1715,8 +1838,8 @@ export default function InteriorScreen({
                 <ActivityIndicator size="large" color="#FF6B47" />
                 <Text style={styles.generatingText}>
                   {displayedCharacter
-                    ? `AI가 사진을 분석하여 우리 반려몽을\n멋지게 새 단장하고 있습니다... 🪄`
-                    : `AI가 나를 닮은 귀여운 반려몽을\n정성껏 그리는 중입니다... 🎨`}
+                    ? `AI가 사진을 분석하여 [${STYLE_PRESET_OPTIONS.find((s) => s.id === selectedStylePreset)?.title || '새로운 스타일'}]으로\n멋지게 새 단장하고 있습니다... 🪄`
+                    : `AI가 사진을 분석하여 [${STYLE_PRESET_OPTIONS.find((s) => s.id === selectedStylePreset)?.title || '특별한 스타일'}]의\n사랑스러운 반려몽을 그리는 중입니다... 🎨`}
                 </Text>
               </View>
             )}

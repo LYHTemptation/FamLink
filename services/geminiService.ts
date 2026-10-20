@@ -14,6 +14,7 @@ import {
   GeminiGenerationConfig,
 } from '../lib/aiSystemPrompts';
 import { supabase, isSupabaseReady } from '../lib/supabase';
+import { PetmongStylePreset } from '../types/domain';
 
 export const GEMINI_TEXT_MODEL = 'gemini-2.5-flash';
 export const GEMINI_IMAGE_MODELS = [
@@ -241,13 +242,14 @@ export async function generatePetmongMascotFromPhoto(params: {
   base64Photo: string;
   personality: string;
   targetStageNum: number;
+  stylePreset?: PetmongStylePreset;
 }): Promise<{
   generatedImageUrl: string | null;
   detectedSpecies: string;
   detectedColor: string;
   detailedError: string | null;
 }> {
-  const { base64Photo, personality, targetStageNum } = params;
+  const { base64Photo, personality, targetStageNum, stylePreset = 'cozy_creature' } = params;
   let generatedImageUrl: string | null = null;
   let detailedError: string | null = null;
   const detectedColor = '#FFAAA6';
@@ -260,11 +262,11 @@ export async function generatePetmongMascotFromPhoto(params: {
   try {
     const cleanBase64 = base64Photo.replace(/^data:image\/\w+;base64,/, '');
 
-    // Step 1: Vision 분석으로 피사체 특징 및 동물상 추론
+    // Step 1: Vision 분석 - 피사체(인물, 아기, 반려동물)의 매력과 본질을 객관적·생생하게 추출
     const visualFeatureDescription = await analyzeImageWithGeminiVision(
       cleanBase64,
       'image/jpeg',
-      "Analyze this photo in depth. What are the subject's most charming and distinctive visual features (facial expression, eye sparkle and shape, warm smile, hairstyle or ears/fur texture, signature accessories, and overall lovely energy)? Describe them in 2-3 vivid sentences so they can be captured as an irresistibly cute, lovable 2D pet creature mascot."
+      "Analyze this photo in depth. Identify the subject (person, child, or pet) and capture their most distinctive and charming visual essence: facial expression, eye sparkle and shape, warm smile, hairstyle or ears/fur texture, signature accessories (like glasses, hats), and overall emotional aura. Describe them in 2-3 vivid sentences so they can be faithfully and artistically transformed into a stylized character."
     );
 
     if (visualFeatureDescription) {
@@ -278,7 +280,7 @@ export async function generatePetmongMascotFromPhoto(params: {
       else if (lower.includes('hamster') || lower.includes('rodent')) detectedSpecies = 'rodent';
     }
 
-    // Step 2: 멀티모달 Image-to-Image 캐릭터 생성
+    // Step 2: 멀티모달 Image-to-Image 캐릭터 생성 (스타일 프리셋 분기)
     const personalityTraitMap: Record<string, string> = {
       '다정한': 'affectionate, gentle and warm smiling expression with loving eyes',
       '장난꾸러기': 'playful, mischievous expression with a cheeky grin and lively sparkle',
@@ -287,16 +289,39 @@ export async function generatePetmongMascotFromPhoto(params: {
       '호기심많은': 'curious, wide-eyed inquisitive expression tilted with wonder',
     };
     const trait = personalityTraitMap[personality] || `${personality} expression`;
-    const finalPrompt = `IMAGE-TO-IMAGE CREATURE MASCOT GENERATION:
-Transform the uploaded photo into an irresistibly cute, lovable 2D flat kawaii pet creature mascot (Stage ${targetStageNum}) in the charming 'Sumone' app art style.
+
+    // 4대 스타일 프리셋별 아트 디렉션 정의
+    const STYLE_PROMPTS: Record<PetmongStylePreset, { title: string; prompt: string }> = {
+      cozy_creature: {
+        title: '포근한 동물 요정',
+        prompt: `Art Style: Charming 'Sumone' app aesthetic, minimalist 2D flat kawaii vector creature mascot. Clean bold outlines, soft gentle pastel tones, rounded cuddly silhouette, iconic proportions, zero photorealism.`,
+      },
+      chibi_family: {
+        title: '귀여운 웹툰 인물',
+        prompt: `Art Style: Adorable 2.5-head chibi family webtoon illustration. Faithfully preserve the human subject's signature hairstyle, glasses, outfit, and facial expressions in a clean, heartwarming Korean webtoon aesthetic with smooth linework and cozy coloring.`,
+      },
+      warm_watercolor: {
+        title: '따뜻한 그림책 수채화',
+        prompt: `Art Style: Warm classic storybook illustration with soft watercolor wash and colored pencil outlines. Gentle pastel palette, hand-drawn warmth, nostalgic and heartwarming bedtime story aesthetic.`,
+      },
+      comic_caricature: {
+        title: '유쾌한 코미디 카툰',
+        prompt: `Art Style: Hilarious, witty and charming cartoon caricature (playful comic strip style). Expressive exaggerated cute expressions, dynamic humorous cartoon energy, bold lively linework, vibrant playful colors, heartwarming family comedy vibe that brings an instant laugh.`,
+      },
+    };
+
+    const styleInfo = STYLE_PROMPTS[stylePreset] || STYLE_PROMPTS.cozy_creature;
+
+    const finalPrompt = `IMAGE-TO-IMAGE CHARACTER MASCOT GENERATION:
+Transform the uploaded photo into an irresistibly charming, lovable family character (Stage ${targetStageNum}).
 
 Visual Analysis of the Photo:
 ${visualFeatureDescription || 'Faithfully capture the cheerful facial expression, sweet eyes, and lovely aura from the provided photo.'}
 
 Core Design Instructions:
-1. Reinterpret the Subject: Seamlessly translate the subject's distinct facial expression, eye characteristics, lovely smile, and unique charm from the photo into an endearing creature face.
+1. Reinterpret the Subject: Seamlessly translate the subject's distinct facial expression, eye characteristics, lovely smile, and unique charm from the photo into an endearing character.
 2. Personality & Mood: Radiate an adorable ${trait}.
-3. Aesthetics: Minimalist 2D flat kawaii vector art, clean bold outlines, soft gentle pastel tones, rounded cuddly silhouette, iconic and lovable proportions, zero realistic human skin photorealism.
+3. Aesthetics: ${styleInfo.prompt}
 4. Plain solid pure white background (#FFFFFF) only: Zero background elements, no scenery, no borders, NEVER draw checkerboard grid, NEVER draw checkered tiles or fake transparency squares. Centered standalone character on clean pure white canvas.`;
 
     generatedImageUrl = await generateImageWithGeminiModels([

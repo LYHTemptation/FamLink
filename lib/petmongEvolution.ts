@@ -1,3 +1,5 @@
+import { PetmongStylePreset } from '../types/domain';
+
 export interface EvolutionStageSpec {
   stage: number;
   minLevel: number;
@@ -21,10 +23,10 @@ export interface PetmongSpeciesSpec {
 }
 
 // Family Companion Growth Milestones & System
-// Stage 1: Lv.1 ~ 4   (아기 시절 / Baby)
-// Stage 2: Lv.5 ~ 9   (개구쟁이 단짝 / Playful Friend)
-// Stage 3: Lv.10 ~ 19 (든든한 짝꿍 / Loyal Companion)
-// Stage 4: Lv.20+     (평생 식구 / Lifelong Family)
+// Stage 1: Lv.1 ~ 4   (꼬물이 시절 / Baby Bean)
+// Stage 2: Lv.5 ~ 9   (총총이 시절 / Playful Little)
+// Stage 3: Lv.10 ~ 19 (포근이 시절 / Plush Companion)
+// Stage 4: Lv.20+     (지킴이 시절 / Cherished Guardian)
 
 export const EVOLUTION_MILESTONES = [1, 5, 10, 20];
 
@@ -68,10 +70,10 @@ export const EVOLUTION_STAGES: Record<number, EvolutionStageSpec> = {
     stage: 1,
     minLevel: 1,
     maxLevel: 4,
-    name: '아기 시절',
-    stageTitle: '1단계: 아기 시절 (Baby)',
+    name: '꼬물이',
+    stageTitle: '1단계: 꼬물이 시절 (Baby Bean)',
     scale: 0.88,
-    desc: '가족의 품에 갓 안긴 작고 보송보송한 친구! 호기심 어린 눈망울로 온 가족을 바라봐요.',
+    desc: '한 손에 쏙 들어오는 작고 동글동글한 콩알! 호기심 어린 눈망울로 온 가족을 바라봐요.',
     badgeColor: '#FFA39E',
     targetPeriod: '시작 (Day 1)',
     requiredExp: '0 EXP',
@@ -81,10 +83,10 @@ export const EVOLUTION_STAGES: Record<number, EvolutionStageSpec> = {
     stage: 2,
     minLevel: 5,
     maxLevel: 9,
-    name: '개구쟁이 단짝',
-    stageTitle: '2단계: 개구쟁이 단짝 (Playful Friend)',
+    name: '총총이',
+    stageTitle: '2단계: 총총이 시절 (Playful Little)',
     scale: 1.0,
-    desc: '온 집안을 총총 뛰어다니며 가족의 하루를 환하게 밝혀주는 사랑스러운 활력소예요.',
+    desc: '아장아장 총총 뛰놀며 온 집안에 생기발랄한 웃음과 활력을 선물하는 사랑스러운 꼬마예요.',
     badgeColor: '#52C41A',
     targetPeriod: '약 2~3주차',
     requiredExp: '누적 2,000 EXP (Lv.5)',
@@ -94,10 +96,10 @@ export const EVOLUTION_STAGES: Record<number, EvolutionStageSpec> = {
     stage: 3,
     minLevel: 10,
     maxLevel: 19,
-    name: '든든한 짝꿍',
-    stageTitle: '3단계: 든든한 짝꿍 (Loyal Companion)',
+    name: '포근이',
+    stageTitle: '3단계: 포근이 시절 (Plush Companion)',
     scale: 1.18,
-    desc: '가족의 기쁨과 지친 마음을 조용히 곁에서 보듬어주는 듬직하고 다정한 단짝 친구예요.',
+    desc: '두 팔로 와락 안아주고 싶을 만큼 듬직하고 포근한 찹쌀떡 체형! 가족의 지친 하루를 따스하게 감싸줘요.',
     badgeColor: '#1890FF',
     targetPeriod: '약 2개월차',
     requiredExp: '누적 7,000 EXP (Lv.10)',
@@ -107,10 +109,10 @@ export const EVOLUTION_STAGES: Record<number, EvolutionStageSpec> = {
     stage: 4,
     minLevel: 20,
     maxLevel: 999,
-    name: '평생 식구',
-    stageTitle: '4단계: 평생 식구 (Lifelong Family)',
+    name: '지킴이',
+    stageTitle: '4단계: 지킴이 시절 (Cherished Guardian)',
     scale: 1.35,
-    desc: '온 가족의 소중한 시간과 추억을 함께 나누어온 대체할 수 없는 진짜 가족이에요.',
+    desc: '온 가족의 사랑을 듬뿍 받아 완성된 영원한 수호신! 언제나 곁을 든든하게 지켜주는 평생 한식구예요.',
     badgeColor: '#FAAD14',
     targetPeriod: '약 4개월차 (최종)',
     requiredExp: '누적 14,000 EXP (Lv.20)',
@@ -122,13 +124,13 @@ export const getStageNameWithPet = (stageNum: number = 1, petName: string = '반
   const name = petName || '반려친구';
   switch (Number(stageNum)) {
     case 1:
-      return `아기 ${name}`;
+      return `꼬물이 ${name}`;
     case 2:
-      return `개구쟁이 ${name}`;
+      return `총총이 ${name}`;
     case 3:
-      return `든든한 짝꿍 ${name}`;
+      return `포근이 ${name}`;
     case 4:
-      return `평생 식구 ${name}`;
+      return `지킴이 ${name}`;
     default:
       return name;
   }
@@ -259,34 +261,62 @@ export const getEvolvedEmoji = (baseEmoji: string | number = '🐶', level: numb
   return genericChain[index] || actualEmoji;
 };
 
-// Image-to-Image Stage Prompts for AI Evolution (Warm Family Companionship - Sumone Style)
-export const getStageEvolutionPrompt = (targetStage: number, characterTraits: string = '', personalityTrait: string = ''): string => {
-  const baseInstruction = `IMAGE-TO-IMAGE CHARACTER GROWTH & EVOLUTION:
+// Physical Proportion & Scale Growth Prompts for AI Evolution (Multi-Style Compatible)
+const STYLE_AESTHETICS: Record<PetmongStylePreset, string> = {
+  cozy_creature: "Charming 'Sumone' app aesthetic, minimalist 2D flat kawaii vector creature mascot, clean bold lines, soft pastel tones, rounded cuddly silhouette, zero photorealism.",
+  chibi_family: "Adorable 2.5D/2D chibi family webtoon illustration, clean heartwarming line art, cozy gentle coloring, faithful likeness of human facial features, zero uncanny realism.",
+  warm_watercolor: "Warm classic storybook illustration, soft watercolor washes and colored pencil outlines, gentle pastel palette, hand-drawn warmth.",
+  comic_caricature: "Hilarious, witty and charming cartoon caricature (playful comic strip style), expressive and humorous cartoon energy, bold lively linework, vibrant playful colors.",
+};
+
+export const getStageEvolutionPrompt = (
+  targetStage: number,
+  characterTraits: string = '',
+  personalityTrait: string = '',
+  stylePreset: PetmongStylePreset = 'cozy_creature'
+): string => {
+  const chosenStyle = STYLE_AESTHETICS[stylePreset] || STYLE_AESTHETICS.cozy_creature;
+
+  const baseInstruction = `IMAGE-TO-IMAGE CHARACTER PHYSICAL GROWTH & EVOLUTION:
 Reference character: ${characterTraits}.
-CRITICAL IDENTITY LOCK: Look at the provided input image. This is the exact character at an earlier stage. You MUST maintain 100% of the character's facial features, exact eye shape, expression, smile, ear/tail style, and lovely color palette from the reference image.
-Art Style: Consistent 'Sumone' app art style, minimalist 2D flat kawaii vector creature mascot, clean bold lines, soft pastel tones, rounded cuddly silhouette, zero photorealistic human textures.
-Requirements: Plain solid pure white background (#FFFFFF) only. Zero background elements, no borders, no scenery, NEVER draw checkerboard grid, NEVER draw checkered tiles or fake transparency squares. Centered character on clean solid white canvas.`;
+CRITICAL IDENTITY & STYLE LOCK:
+Look carefully at the provided input image. This is the exact character at an earlier growth stage.
+You MUST maintain 100% of the character's facial features, exact eye shape, warm expression, smile, hairstyle or head features, signature colors, and charm from the reference image.
+Preserve the exact same art style and drawing medium: ${chosenStyle}
+CRITICAL CUTE MASCOT RATIO:
+NEVER make the character tall, realistic, or elongated with long limbs. Strictly maintain an ultra-cute, rounded kawaii chibi proportion (maximum 2.0 to 2.3 heads tall) across all stages. Keep the character cuddly, plush, chubby, and lovable like a plush doll or mascot, whether human chibi, animal, or mythical creature.
+Requirements: Plain solid pure white background (#FFFFFF) only. Zero background elements, no borders, no scenery, NEVER draw checkerboard grid, NEVER draw checkered tiles or fake transparency squares. Centered standalone character on clean pure white canvas.`;
 
   if (targetStage === 2) {
     return `${baseInstruction}
-Growth Stage 2 (개구쟁이 단짝):
-The tiny baby creature has grown into a slightly bigger, energetic juvenile companion!
-Standing happily on two cute little feet, perked-up cheerful ears, lively tail, expressing ${personalityTrait}. Chubby, playful, and full of curious energy.`;
+Growth Stage 2 (총총이 시절 - Playful Little Mascot):
+- Proportions & Build: 1.8 to 2.0 heads tall. A slight growth spurt from Stage 1 into a lively little toddler/kid chibi doll silhouette.
+- Cute Physical Details: Rounded chubby tummy, slightly more agile short limbs, cheerful rosy cheeks.
+- Posture & Movement: Hopping with lighthearted springy energy, arms/paws happily open to welcome the family, expressing ${personalityTrait}.
+- Presence: Spreading delightful giggles, bouncy curiosity, and playful vitality throughout the entire home.`;
   }
 
   if (targetStage === 3) {
     return `${baseInstruction}
-Growth Stage 3 (든든한 짝꿍):
-The creature has matured into a dependable, warm, and loyal adult family companion!
-Slightly larger, comforting and cuddly body, wearing an adorable cute small scarf, collar, or cape. Expressing ${personalityTrait} with gentle, loving eyes that warmly protect the home.`;
+Growth Stage 3 (포근이 시절 - Plush & Huggable Companion):
+- Proportions & Build: 2.0 to 2.2 heads tall. Filled out into a wonderfully plump, huggable, plush mochi-doll silhouette (wide, cuddly, and comforting volume without losing cuteness).
+- Cute Physical Details: Soft, full, and comforting round body that looks deeply cuddly and soothing to hold in both arms.
+- Posture & Movement: Sitting or standing tall with steady, heartwarming composure, gently tilting their head with a warm loving smile, expressing ${personalityTrait}.
+- Presence: A dependable, comforting emotional anchor that warmly embraces tired family members after a long day.`;
   }
 
   if (targetStage === 4) {
     return `${baseInstruction}
-Growth Stage 4 (평생 식구):
-The ultimate cherished form representing eternal family love and togetherness!
-Adorned with an adorable tiny golden crown or floating celestial stars above its head, radiating a soft gentle warm aura. Deeply happy, serene, and beloved guardian companion expressing ${personalityTrait}.`;
+Growth Stage 4 (지킴이 시절 - Cherished Family Guardian):
+- Proportions & Build: 2.2 to 2.3 heads tall (the ultimate peak of plush chibi perfection).
+- Cute Physical Details: Majestic yet endlessly adorable silhouette; full, soft, and dignified presence radiating quiet warmth and profound belonging.
+- Posture & Movement: Proud, serene, and deeply peaceful posture, radiating unconditional love and contentment, expressing ${personalityTrait}.
+- Presence: The eternal, irreplaceable guardian mascot of the family, surrounded by a subtle, heartwarming glow of family love.`;
   }
 
-  return `${baseInstruction}\nGrowth Stage 1 (아기 시절): Tiny adorable baby creature hatched from an egg.`;
+  return `${baseInstruction}
+Growth Stage 1 (꼬물이 시절 - Tiny Bean Baby):
+- Proportions & Build: Ultra-tiny 1.2 to 1.5 heads tall (an adorable palm-sized baby bean / soft puff).
+- Cute Physical Details: Round dumpling-like body with tiny stubby limbs and chubby cheeks.
+- Posture & Movement: Curled up or toddling with innocent, wide-eyed wonder, looking up with sweet, curious eyes.`;
 };

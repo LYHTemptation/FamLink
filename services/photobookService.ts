@@ -43,6 +43,8 @@ export function mapPhotobookRowToState(row: Record<string, any>): PhotobookSyncP
     epilogueEssay: row.epilogue_essay || '',
     updatedBy: row.updated_by || '가족',
     updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
+    isLocked: Boolean(row.is_locked),
+    orderStatus: row.order_status || undefined,
   };
 }
 
@@ -57,6 +59,7 @@ export async function saveFamilyPhotobookToDB(params: {
 }): Promise<void> {
   const { familyId, volumeId, payload, updatedBy } = params;
   if (!familyId || familyId === 'default-family') return;
+  if (payload.isLocked) return;
 
   Promise.resolve(
     supabase
@@ -163,7 +166,30 @@ export async function fetchFamilyPhotobookVolumes(
 }
 
 /**
- * 실물 양장본 도서 주문(`photobook_orders`) 생성
+ * 특정 가족의 주문 완료(발간/인쇄 중)되어 잠금 처리된 volume_id 목록 조회
+ */
+export async function fetchOrderedVolumeIds(
+  familyId: string
+): Promise<string[]> {
+  if (!familyId || familyId === 'default-family') return [];
+  try {
+    const { data, error } = await supabase
+      .from('photobook_orders')
+      .select('volume_id, status')
+      .eq('family_id', familyId)
+      .not('status', 'eq', 'cancelled');
+
+    if (!error && Array.isArray(data)) {
+      return Array.from(new Set(data.map((r: any) => r.volume_id).filter(Boolean)));
+    }
+  } catch (err) {
+    console.warn('[photobookService] fetchOrderedVolumeIds error:', err);
+  }
+  return [];
+}
+
+/**
+ * 실물 양장본 도서 주문(`photobook_orders`) 생성 및 해당 권차 잠금(is_locked) 동기화
  */
 export async function createPhotobookOrderInDB(
   orderRecord: PhotobookOrderRecord
@@ -183,6 +209,23 @@ export async function createPhotobookOrderInDB(
       'Successfully inserted photobook order:',
       insertedOrder?.order_number
     );
+
+    // 주문 성공 시 해당 권차를 발간 완료(is_locked: true)로 갱신 (가능한 경우)
+    if (orderRecord.family_id && orderRecord.volume_id) {
+      Promise.resolve(
+        supabase
+          .from('family_photobooks')
+          .update({
+            is_locked: true,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('family_id', orderRecord.family_id)
+          .eq('volume_id', orderRecord.volume_id)
+      )
+        .then(() => {})
+        .catch(() => {});
+    }
+
     return insertedOrder;
   } catch (err) {
     console.warn('Exception during photobook order insert:', err);

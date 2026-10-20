@@ -124,7 +124,14 @@ export interface PetmongCharacter {
   stage_images?: Record<string, string>;
   animal_type?: string;
   personality?: string;
+  style_preset?: PetmongStylePreset;
 }
+
+export type PetmongStylePreset =
+  | 'cozy_creature'
+  | 'chibi_family'
+  | 'warm_watercolor'
+  | 'comic_caricature';
 
 export interface KoreanHolidayInfo {
   name: string;
@@ -174,6 +181,8 @@ export interface PhotobookSyncPayload {
   epilogueEssay?: string;
   updatedBy?: string;
   updatedAt?: number | string;
+  isLocked?: boolean;
+  orderStatus?: string;
 }
 
 export interface PhotobookOrderRecord {

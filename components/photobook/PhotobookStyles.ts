@@ -3434,6 +3434,69 @@ const styles = StyleSheet.create({
     color: '#1C1917',
     marginBottom: 10,
   },
+  lockedNoticeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 8,
+  },
+  lockedIconBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lockedNoticeTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#166534',
+  },
+  lockedNoticeSub: {
+    fontSize: 10.5,
+    color: '#15803D',
+    marginTop: 1,
+  },
+  lockedNoticeBtn: {
+    backgroundColor: '#16A34A',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  lockedNoticeBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  lockedCtaRow: {
+    flexDirection: 'row',
+    gap: 8,
+    width: '100%',
+  },
+  lockedOrderDoneBtn: {
+    backgroundColor: '#DCFCE7',
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+    flex: 1,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  lockedOrderDoneText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#166534',
+  },
+  startNextVolBtn: {
+    backgroundColor: '#FF6B47',
+    flex: 1,
+  },
 });
 
 

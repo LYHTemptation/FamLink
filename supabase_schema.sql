@@ -228,6 +228,7 @@ CREATE TABLE IF NOT EXISTS petmong_characters (
 );
 ALTER TABLE petmong_characters ADD COLUMN IF NOT EXISTS vitals JSONB DEFAULT '{"hunger":80,"happiness":85,"cleanliness":90,"energy":95}'::jsonb;
 ALTER TABLE petmong_characters ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now());
+ALTER TABLE petmong_characters ADD COLUMN IF NOT EXISTS style_preset TEXT DEFAULT 'cozy_creature';
 ALTER TABLE petmong_characters DISABLE ROW LEVEL SECURITY;
 
 -- 17. 반려몽 활동 및 상호작용 기록 (petmong_activities)
@@ -302,10 +303,12 @@ CREATE TABLE IF NOT EXISTS family_photobooks (
   custom_gallery_photos JSONB DEFAULT '[]'::jsonb,
   prologue_essay TEXT,
   epilogue_essay TEXT,
+  is_locked BOOLEAN DEFAULT false,
   updated_by TEXT,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
   UNIQUE(family_id, volume_id)
 );
+ALTER TABLE family_photobooks ADD COLUMN IF NOT EXISTS is_locked BOOLEAN DEFAULT false;
 ALTER TABLE family_photobooks DISABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Allow all access to family_photobooks" ON family_photobooks;
 CREATE POLICY "Allow all access to family_photobooks" ON family_photobooks

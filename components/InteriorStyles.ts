@@ -738,6 +738,66 @@ const styles = StyleSheet.create({
   traitSelectTextActive: {
     color: '#FFFFFF',
   },
+  stylePickerGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+  },
+  styleCard: {
+    width: '48.5%',
+    backgroundColor: '#FAF8F3',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#E7E5E4',
+    padding: 10,
+  },
+  styleCardActive: {
+    backgroundColor: '#FFF5F2',
+    borderColor: colors.primary,
+  },
+  styleCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  styleCardEmoji: {
+    fontSize: 16,
+  },
+  styleCardTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#1C1C1E',
+    flexShrink: 1,
+  },
+  styleCardTitleActive: {
+    color: colors.primary,
+  },
+  styleCardDesc: {
+    fontSize: 10,
+    color: '#78716C',
+    lineHeight: 14,
+    marginBottom: 6,
+  },
+  styleCardBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#E7E5E4',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  styleCardBadgeActive: {
+    backgroundColor: '#FFE8E0',
+  },
+  styleCardBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '700',
+    color: '#78716C',
+  },
+  styleCardBadgeTextActive: {
+    color: colors.primary,
+  },
   modalConfirmBtn: {
     backgroundColor: colors.primary,
     padding: 14,

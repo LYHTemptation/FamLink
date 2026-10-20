@@ -55,6 +55,7 @@ import {
   Wifi,
   QrCode,
   Smartphone,
+  Lock,
 } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
 import { colors, typography, commonStyles } from '../theme';
@@ -66,6 +67,7 @@ import {
   saveFamilyPhotobookToDB,
   fetchFamilyPhotobookVolume,
   fetchFamilyPhotobookVolumes,
+  fetchOrderedVolumeIds,
   createPhotobookOrderInDB,
 } from '../services/photobookService';
 import {
@@ -140,6 +142,10 @@ export default function PhotobookStudioScreen({
   const [volumePickerModalVisible, setVolumePickerModalVisible] = useState(false);
   const currentVolObj = volumeList.find(v => v.id === selectedVolume) || volumeList[0] || VOLUME_OPTIONS[0];
 
+  // 실물 주문 완료(발간/인쇄 중)되어 수정 잠금 처리된 권차 목록
+  const [orderedVolumeIds, setOrderedVolumeIds] = useState<string[]>([]);
+  const isVolumeLocked = useMemo(() => orderedVolumeIds.includes(selectedVolume), [orderedVolumeIds, selectedVolume]);
+
   const [selectedThemeId, setSelectedThemeId] = useState('linen');
   const currentTheme = STUDIO_THEMES.find(t => t.id === selectedThemeId) || STUDIO_THEMES[0];
   const [themePickerModalVisible, setThemePickerModalVisible] = useState(false);
@@ -199,13 +205,6 @@ export default function PhotobookStudioScreen({
   const [tempTitle, setTempTitle] = useState(bookTitle);
   const [tempSubtitle, setTempSubtitle] = useState(bookSubtitle);
   const [tempSignature, setTempSignature] = useState('우리 가족의 따뜻한 이야기');
-
-  const handleOpenEditTitleModal = useCallback(() => {
-    setTempTitle(bookTitle);
-    setTempSubtitle(bookSubtitle);
-    setTempSignature(coverSignature);
-    setEditTitleModalVisible(true);
-  }, [bookTitle, bookSubtitle, coverSignature]);
 
   // 3. 15×21cm A5 세로형 단행본 1:1 낱장 포커스 페이징 체계 (0: 겉표지, 1..16: P.1~P.16)
   const [currentPageNum, setCurrentPageNum] = useState(0); // 0 = 겉표지, 1~16 = P.1 ~ P.16
@@ -540,6 +539,8 @@ export default function PhotobookStudioScreen({
   // 내 화면 변경 사항을 가족 채널로 실시간 브로드캐스트 + AsyncStorage 백업
   const broadcastPhotobookChange = useCallback((updatedPartial?: any) => {
     if (isApplyingRemoteRef.current) return;
+    const currentVol = updatedPartial?.selectedVolume || selectedVolume || 'vol-1';
+    if (orderedVolumeIds.includes(currentVol)) return;
     const fullPayload = {
       selectedVolume,
       selectedThemeId,
@@ -564,7 +565,6 @@ export default function PhotobookStudioScreen({
     };
 
     // 로컬 캐시 즉시 저장 (권차별 분리 캐싱으로 다권 데이터 오염 방지)
-    const currentVol = updatedPartial?.selectedVolume || selectedVolume || 'vol-1';
     AsyncStorage.setItem(`FAMLINK_PHOTOBOOK_SYNC_${effectiveFamilyId}_${currentVol}`, JSON.stringify(fullPayload)).catch(() => {});
 
     // Supabase Realtime Broadcast 전송 (가족 기기들에 0.1초 내 실시간 전송)
@@ -578,7 +578,6 @@ export default function PhotobookStudioScreen({
 
     // 4. Supabase DB (family_photobooks) 영구 저장 및 활동 백업 (photobookService 위임)
     if (effectiveFamilyId && effectiveFamilyId !== 'default-family') {
-      const currentVol = updatedPartial?.selectedVolume || selectedVolume || 'vol-1';
       saveFamilyPhotobookToDB({
         familyId: effectiveFamilyId,
         volumeId: currentVol,
@@ -606,6 +605,7 @@ export default function PhotobookStudioScreen({
     prologueEssay,
     epilogueEssay,
     customGalleryPhotos,
+    orderedVolumeIds,
   ]);
 
   // 특정 권차의 기본 상태 리셋
@@ -670,7 +670,7 @@ export default function PhotobookStudioScreen({
   }, [effectiveFamilyId, selectedVolume, applyRemotePhotobookUpdate, resetVolumeToDefaults]);
 
   // 새로운 이야기책(권차) 무한 추가
-  const handleAddNewVolume = () => {
+  const handleAddNewVolume = useCallback(() => {
     const nextNum = volumeList.length + 1;
     const newVolId = `vol-${nextNum}`;
     const newVolObj = {
@@ -682,13 +682,63 @@ export default function PhotobookStudioScreen({
     };
     setVolumeList(prev => [...prev, newVolObj]);
     handleSwitchVolume(newVolId, newVolObj);
-  };
+  }, [volumeList, handleSwitchVolume]);
+
+  // 다음 권차(이야기책) 시작하기 핸들러
+  const handleStartNextVolume = useCallback(() => {
+    const nextNumMatch = (selectedVolume || '').match(/\d+/);
+    const currentNum = nextNumMatch ? parseInt(nextNumMatch[0], 10) : 1;
+    const nextVolId = `vol-${currentNum + 1}`;
+    const existingNext = volumeList.find(v => v.id === nextVolId);
+    if (existingNext) {
+      handleSwitchVolume(existingNext.id, existingNext);
+    } else {
+      handleAddNewVolume();
+    }
+  }, [selectedVolume, volumeList, handleSwitchVolume, handleAddNewVolume]);
+
+  // 발간 완료(주문 완료)된 권차 수정 제한 안내 모달
+  const showLockedAlert = useCallback(() => {
+    const nextNumMatch = (selectedVolume || '').match(/\d+/);
+    const currentNum = nextNumMatch ? parseInt(nextNumMatch[0], 10) : 1;
+    Alert.alert(
+      '발간 완료된 권차입니다 🔒',
+      `[${bookTitle}]은(는) 이미 실물 양장본 인쇄 제작에 들어간 권차로, 인쇄물과의 일치를 위해 내용 수정이 제한됩니다.\n\n새로운 가족 이야기는 다음 권차(Vol. ${currentNum + 1})에서 계속 만들어보세요! ✨`,
+      [
+        { text: '닫기', style: 'cancel' },
+        {
+          text: `Vol. ${currentNum + 1} 시작하기`,
+          onPress: handleStartNextVolume,
+        },
+      ]
+    );
+  }, [selectedVolume, bookTitle, handleStartNextVolume]);
+
+  const handleOpenEditTitleModal = useCallback(() => {
+    if (isVolumeLocked) {
+      showLockedAlert();
+      return;
+    }
+    setTempTitle(bookTitle);
+    setTempSubtitle(bookSubtitle);
+    setTempSignature(coverSignature);
+    setEditTitleModalVisible(true);
+  }, [bookTitle, bookSubtitle, coverSignature, isVolumeLocked, showLockedAlert]);
+
+  const handleOpenTopicPicker = useCallback((slotIdx: number = 0) => {
+    if (isVolumeLocked) {
+      showLockedAlert();
+      return;
+    }
+    setSelectedTopicSlot(slotIdx);
+    setTopicPickerModalVisible(true);
+  }, [isVolumeLocked, showLockedAlert]);
 
   // 실시간 Supabase 채널 구독 및 초기 캐시 로드
   useEffect(() => {
     if (!effectiveFamilyId) return;
 
-    // 0. 가족이 작성해 둔 모든 권차 목록 조회하여 volumeList에 동적 병합
+    // 0. 가족이 작성해 둔 모든 권차 목록 및 주문 완료(잠금) 목록 조회하여 volumeList에 동적 병합
     if (effectiveFamilyId !== 'default-family') {
       fetchFamilyPhotobookVolumes(effectiveFamilyId).then((rows) => {
         if (rows.length > 0) {
@@ -710,6 +760,12 @@ export default function PhotobookStudioScreen({
             });
             return additions.length > 0 ? [...prev, ...additions] : prev;
           });
+        }
+      });
+
+      fetchOrderedVolumeIds(effectiveFamilyId).then((ids) => {
+        if (ids.length > 0) {
+          setOrderedVolumeIds(ids);
         }
       });
     }
@@ -1028,6 +1084,10 @@ export default function PhotobookStudioScreen({
   };
 
   const handleOpenAiEssayModal = (type: 'prologue' | 'epilogue') => {
+    if (isVolumeLocked) {
+      showLockedAlert();
+      return;
+    }
     setTargetEssayType(type);
     if (type === 'prologue') {
       setCustomEssayInput(prologueEssay);
@@ -1055,6 +1115,10 @@ export default function PhotobookStudioScreen({
 
   // 9. 사진 선택 슬롯 열기
   const handleOpenPhotoPicker = (slotIdx: number | 'cover') => {
+    if (isVolumeLocked) {
+      showLockedAlert();
+      return;
+    }
     setActivePhotoSlotIndex(slotIdx);
     setPhotoPickerVisible(true);
   };
@@ -1204,12 +1268,7 @@ export default function PhotobookStudioScreen({
   };
 
   // 10. 주문 완료 처리 (하이브리드: 12,000 P 무료 교환 또는 포인트 할인 + 차액 계좌이체)
-  const handleExecuteOrder = async () => {
-    if (!orderName.trim() || !orderPhone.trim() || !orderAddress.trim()) {
-      Alert.alert('알림', '받는 분 성함, 연락처, 배송지 주소를 모두 입력해주세요.');
-      return;
-    }
-
+  const processOrderSubmission = async () => {
     setIsSubmittingOrder(true);
 
     const orderDateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -1267,6 +1326,7 @@ export default function PhotobookStudioScreen({
 
       // Supabase photobook_orders 테이블에 주문 데이터 INSERT (photobookService 위임)
       await createPhotobookOrderInDB(orderRecord);
+      setOrderedVolumeIds((prev) => Array.from(new Set([...prev, selectedVolume])));
 
       setTimeout(() => {
         setIsSubmittingOrder(false);
@@ -1292,21 +1352,46 @@ export default function PhotobookStudioScreen({
           onSendOrderNotice(`[포토북카드] ${JSON.stringify(orderPayload)}`);
         }
 
-      if (isFullyCovered) {
-        Alert.alert(
-          '양장본 실물 포토북 무료 교환 완료! 📦',
-          `[${bookTitle}] 총 ${orderAddCopy ? '2권 (선물용 1권 포함)' : '1권'}이 인쇄 제작에 들어갑니다.\n\n• 주문번호: ${orderNumber}\n• 가족 포인트 사용: -${usedPoints.toLocaleString()} P (100% 전액 교환)\n• 실결제 금액: 0원 (무료 배송)\n• 정밀 POD 인쇄 (150×210mm A5 클래식 16P 랑데뷰 160g 양장본)\n• 예상 배송일: 영업일 기준 3~4일 이내`,
-          [{ text: '확인' }]
-        );
-      } else {
-        Alert.alert(
-          '양장본 인쇄 주문 접수 완료 (입금 대기) 📦',
-          `[${bookTitle}] 총 ${orderAddCopy ? '2권 (선물용 1권 포함)' : '1권'} 주문이 접수되었습니다.\n\n• 주문번호: ${orderNumber}\n• 가족 포인트 할인: -${usedPoints.toLocaleString()} P\n• 입금하실 금액: ${cashDiff.toLocaleString()}원 (배송비 무료)\n• 입금 계좌: 카카오뱅크 3333-28-5683901 (예금주: FamLink)\n• 입금자명: ${orderName.trim()}\n\n입금 확인 즉시 정밀 POD 양장본 인쇄 제작이 시작됩니다! ✨`,
-          [{ text: '확인' }]
-        );
+        if (isFullyCovered) {
+          Alert.alert(
+            '양장본 실물 포토북 무료 교환 완료! 📦',
+            `[${bookTitle}] 총 ${orderAddCopy ? '2권 (선물용 1권 포함)' : '1권'}이 인쇄 제작에 들어갑니다.\n\n• 주문번호: ${orderNumber}\n• 가족 포인트 사용: -${usedPoints.toLocaleString()} P (100% 전액 교환)\n• 실결제 금액: 0원 (무료 배송)\n• 정밀 POD 인쇄 (150×210mm A5 클래식 16P 랑데뷰 160g 양장본)\n• 예상 배송일: 영업일 기준 3~4일 이내\n\n이 권차는 발간 완료되어 원본이 안전하게 보존되며, 다음 권차에서 새로운 이야기를 담아보세요! ✨`,
+            [
+              { text: '소장본 감상하기', style: 'cancel' },
+              { text: '다음 권차 시작하기 ✨', onPress: handleStartNextVolume },
+            ]
+          );
+        } else {
+          Alert.alert(
+            '양장본 인쇄 주문 접수 완료 (입금 대기) 📦',
+            `[${bookTitle}] 총 ${orderAddCopy ? '2권 (선물용 1권 포함)' : '1권'} 주문이 접수되었습니다.\n\n• 주문번호: ${orderNumber}\n• 가족 포인트 할인: -${usedPoints.toLocaleString()} P\n• 입금하실 금액: ${cashDiff.toLocaleString()}원 (배송비 무료)\n• 입금 계좌: 카카오뱅크 3333-28-5683901 (예금주: FamLink)\n• 입금자명: ${orderName.trim()}\n\n입금 확인 즉시 정밀 POD 양장본 인쇄 제작이 시작됩니다! ✨\n\n이 권차는 발간 완료되어 원본이 보존되며, 다음 권차에서 새로운 이야기를 이어갈 수 있습니다!`,
+            [
+              { text: '소장본 감상하기', style: 'cancel' },
+              { text: '다음 권차 시작하기 ✨', onPress: handleStartNextVolume },
+            ]
+          );
+        }
+      }, 1000);
+    };
+
+    const handleExecuteOrder = async () => {
+      if (!orderName.trim() || !orderPhone.trim() || !orderAddress.trim()) {
+        Alert.alert('알림', '받는 분 성함, 연락처, 배송지 주소를 모두 입력해주세요.');
+        return;
       }
-    }, 1000);
-  };
+
+      Alert.alert(
+        '실물 양장본 주문 확정 📦',
+        `[${bookTitle}] 총 ${orderAddCopy ? '2권' : '1권'}을 주문 발주하시겠습니까?\n\n⚠️ 필수 확인 사항:\n주문이 접수되면 인쇄소 맞춤 제작이 즉시 시작되므로, 현재 권차(${currentVolObj.label})는 발간 완료되어 더 이상 사진과 글을 수정할 수 없습니다 (소장 모드 전환).\n\n완성된 내용에 이상이 없는지 확인하셨다면 주문을 확정해 주세요.`,
+        [
+          { text: '다시 확인하기', style: 'cancel' },
+          {
+            text: '주문 확정하기',
+            onPress: processOrderSubmission,
+          },
+        ]
+      );
+    };
 
   // =========================================================
   // 📘 겉표지 렌더러 (3대 표지 스타일: classic, full, minimal)
@@ -1778,8 +1863,7 @@ export default function PhotobookStudioScreen({
                 ]}
                 onPress={() => {
                   setCurrentPageNum(pageNum);
-                  setSelectedTopicSlot(qIdx);
-                  setTopicPickerModalVisible(true);
+                  handleOpenTopicPicker(qIdx);
                 }}
                 activeOpacity={0.78}
               >
@@ -1885,8 +1969,7 @@ export default function PhotobookStudioScreen({
           style={styles.hybridTalkBox}
           onPress={() => {
             setCurrentPageNum(pageNum);
-            setSelectedTopicSlot(0);
-            setTopicPickerModalVisible(true);
+            handleOpenTopicPicker(0);
           }}
           activeOpacity={0.8}
         >
@@ -2073,11 +2156,16 @@ export default function PhotobookStudioScreen({
                     <Text style={[styles.volumeOptionTitle, isSelected && styles.volumeOptionTitleActive]}>
                       {v.label} · {v.period}
                     </Text>
-                    {idx === 0 && (
-                      <View style={styles.activeVolTag}>
-                        <Text style={styles.activeVolTagText}>완간 수록</Text>
+                    {orderedVolumeIds.includes(v.id) ? (
+                      <View style={{ backgroundColor: '#DCFCE7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                        <Lock size={10} color="#15803D" strokeWidth={2.5} />
+                        <Text style={{ fontSize: 10, fontWeight: '800', color: '#15803D' }}>발간 완료</Text>
                       </View>
-                    )}
+                    ) : idx === 0 ? (
+                      <View style={styles.activeVolTag}>
+                        <Text style={styles.activeVolTagText}>집필 중</Text>
+                      </View>
+                    ) : null}
                   </View>
                   <Text style={styles.volumeOptionDesc}>{v.desc}</Text>
                 </View>
@@ -2130,7 +2218,13 @@ export default function PhotobookStudioScreen({
         >
           {/* 도서 명세 요약 */}
           <View style={styles.orderSummaryCard}>
-            <Text style={styles.orderBookTitle}>{bookTitle}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <Text style={[styles.orderBookTitle, { flex: 1, marginRight: 8 }]} numberOfLines={1}>{bookTitle}</Text>
+              <View style={{ backgroundColor: '#FFEDD5', paddingHorizontal: 6, paddingVertical: 2.5, borderRadius: 6, flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                <Lock size={10} color="#EA580C" strokeWidth={2.4} />
+                <Text style={{ fontSize: 10, fontWeight: '800', color: '#C2410C' }}>주문 시 수정 잠금</Text>
+              </View>
+            </View>
             <Text style={styles.orderBookSub}>
               150×210mm A5 세로형 · 16페이지 · 무광 하드커버 양장제본 · 세네카 책등 4mm 인쇄
             </Text>
@@ -2443,6 +2537,30 @@ export default function PhotobookStudioScreen({
               • 주문 접수 후 1시간 이내(인쇄 준비 전)에는 100% 즉시 취소 및 포인트·결제액 전액 복구가 가능합니다.{'\n'}
               • 전자상거래법 제17조 제2항 제6호에 따라 인쇄소 제작 착수 이후에는 1:1 맞춤 도서 특성상 단순 변심 환불이 불가합니다.{'\n'}
               • 파본·인쇄 불량·배송 파손 시 100% 무료 재제작 및 재배송해 드립니다. (상호: 팸링크(FamLink) | 사업자등록번호: 302-42-01661)
+            </Text>
+          </View>
+
+          {/* 🔒 실물 주문 시 권차 발간 완료(수정 불가) 사전 안내 배너 */}
+          <View
+            style={{
+              backgroundColor: '#FFF7ED',
+              borderWidth: 1,
+              borderColor: '#FED7AA',
+              borderRadius: 12,
+              padding: 12,
+              marginBottom: 10,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 5, gap: 6 }}>
+              <Lock size={14} color="#EA580C" strokeWidth={2.4} />
+              <Text style={{ fontSize: 12, fontWeight: '800', color: '#9A3412' }}>
+                주문 전 확인: 실물 주문 시 내용 수정이 제한됩니다
+              </Text>
+            </View>
+            <Text style={{ fontSize: 11, color: '#C2410C', lineHeight: 16 }}>
+              • 실물 도서 주문이 접수되면 인쇄소 제작 공정에 즉시 전달되므로, <Text style={{ fontWeight: '800' }}>현재 권차({currentVolObj.label})는 발간 완료되어 더 이상 사진과 글을 수정할 수 없습니다 (소장 모드 전환)</Text>.{'\n'}
+              • 오탈자나 사진 배치가 올바른지 마지막으로 꼼꼼히 확인하신 후 주문해 주세요.{'\n'}
+              • 주문 완료 후에는 새로운 추억을 담을 수 있는 <Text style={{ fontWeight: '800' }}>다음 권차(Vol. 2, Vol. 3...)</Text>가 자동으로 활성화됩니다.
             </Text>
           </View>
 
@@ -3056,11 +3174,20 @@ export default function PhotobookStudioScreen({
           onPress={() => setVolumePickerModalVisible(true)}
           activeOpacity={0.7}
         >
-          <View style={styles.headerTitleIconCircle}>
-            <Bookmark size={12} color="#FF6B47" strokeWidth={2.6} />
+          <View style={[styles.headerTitleIconCircle, isVolumeLocked && { backgroundColor: '#DCFCE7' }]}>
+            {isVolumeLocked ? (
+              <Lock size={12} color="#16A34A" strokeWidth={2.6} />
+            ) : (
+              <Bookmark size={12} color="#FF6B47" strokeWidth={2.6} />
+            )}
           </View>
           <Text style={styles.headerBookTitle}>{currentVolObj.label}</Text>
           <Text style={styles.headerBookPeriod}>({currentVolObj.period})</Text>
+          {isVolumeLocked && (
+            <View style={{ backgroundColor: '#DCFCE7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginLeft: 4 }}>
+              <Text style={{ fontSize: 10, fontWeight: '800', color: '#15803D' }}>발간 완료</Text>
+            </View>
+          )}
           <ChevronDown size={13} color="#78716C" style={{ marginLeft: 3 }} />
         </TouchableOpacity>
 
@@ -3144,7 +3271,7 @@ export default function PhotobookStudioScreen({
               {/* A. 테마 선택 칩 */}
               <TouchableOpacity
                 style={styles.hudChip}
-                onPress={() => setThemePickerModalVisible(true)}
+                onPress={() => (isVolumeLocked ? showLockedAlert() : setThemePickerModalVisible(true))}
                 activeOpacity={0.8}
               >
                 <Palette size={12} color={currentTheme.accent} style={{ marginRight: 4 }} />
@@ -3155,7 +3282,7 @@ export default function PhotobookStudioScreen({
               {/* B. 폰트 & 크기 선택 칩 */}
               <TouchableOpacity
                 style={styles.hudChip}
-                onPress={() => setFontPickerModalVisible(true)}
+                onPress={() => (isVolumeLocked ? showLockedAlert() : setFontPickerModalVisible(true))}
                 activeOpacity={0.8}
               >
                 <Type size={12} color="#FF6B47" style={{ marginRight: 4 }} />
@@ -3309,7 +3436,31 @@ export default function PhotobookStudioScreen({
             {/* 3. 하단 콘텐츠 에디팅 덱 (겉표지 모드 vs 내지 3대 포맷)    */}
             {/* ========================================================= */}
             <View style={styles.bottomActionDock}>
-              {isEditingCover ? (
+              {isVolumeLocked ? (
+                /* 🔒 발간 완료 (소장 뷰어 모드) 전용 안내 카드 */
+                <View style={styles.lockedNoticeCard}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10 }}>
+                    <View style={styles.lockedIconBadge}>
+                      <Lock size={15} color="#16A34A" strokeWidth={2.5} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.lockedNoticeTitle}>
+                        실물 양장본 발간 완료 · 소장 뷰어 모드
+                      </Text>
+                      <Text style={styles.lockedNoticeSub}>
+                        인쇄 제작 중인 권차로, 원본 보존을 위해 내용 수정이 잠겨 있습니다.
+                      </Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.lockedNoticeBtn}
+                    onPress={showLockedAlert}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.lockedNoticeBtnText}>안내</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : isEditingCover ? (
                 /* 📘 겉표지 전용 커스텀 덱 */
                 <View style={styles.formatSegmentSection}>
                   <Text style={[styles.formatSectionLabel, { marginBottom: 8 }]}>표지 디자인 스타일:</Text>
@@ -3528,20 +3679,41 @@ export default function PhotobookStudioScreen({
               )}
 
               {/* 실물 도서 포인트 교환/주문 메인 CTA 버튼 */}
-              <TouchableOpacity
-                style={styles.dockMainOrderBtn}
-                onPress={() => setOrderModalVisible(true)}
-                activeOpacity={0.85}
-              >
-                <Gift size={14} color="#FFFFFF" strokeWidth={2.4} style={{ marginRight: 5 }} />
-                <Text style={styles.dockMainOrderBtnText}>
-                  {isFullyCovered
-                    ? '12,000 P · 100% 무료 실물 도서 교환'
-                    : usedPoints > 0
-                    ? `-${usedPoints.toLocaleString()}P 할인 + ${cashDiff.toLocaleString()}원 실물 주문`
-                    : '12,000원 · 15×21cm A5 양장본 실물 주문'}
-                </Text>
-              </TouchableOpacity>
+              {isVolumeLocked ? (
+                <View style={styles.lockedCtaRow}>
+                  <View style={[styles.dockMainOrderBtn, styles.lockedOrderDoneBtn]}>
+                    <CheckCircle2 size={14} color="#166534" strokeWidth={2.4} style={{ marginRight: 5 }} />
+                    <Text style={styles.lockedOrderDoneText}>
+                      발간 완료 (인쇄 제작 중) 📦
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.dockMainOrderBtn, styles.startNextVolBtn]}
+                    onPress={handleStartNextVolume}
+                    activeOpacity={0.85}
+                  >
+                    <BookOpen size={14} color="#FFFFFF" strokeWidth={2.4} style={{ marginRight: 5 }} />
+                    <Text style={styles.dockMainOrderBtnText}>
+                      다음 권차 시작하기 ✨
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={styles.dockMainOrderBtn}
+                  onPress={() => setOrderModalVisible(true)}
+                  activeOpacity={0.85}
+                >
+                  <Gift size={14} color="#FFFFFF" strokeWidth={2.4} style={{ marginRight: 5 }} />
+                  <Text style={styles.dockMainOrderBtnText}>
+                    {isFullyCovered
+                      ? '12,000 P · 100% 무료 실물 도서 교환'
+                      : usedPoints > 0
+                      ? `-${usedPoints.toLocaleString()}P 할인 + ${cashDiff.toLocaleString()}원 실물 주문`
+                      : '12,000원 · 15×21cm A5 양장본 실물 주문'}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           </ScrollView>
         </>
@@ -3592,24 +3764,41 @@ export default function PhotobookStudioScreen({
 
           {/* 하단 주문 발주 유도 카드 */}
           <View style={styles.previewBottomCtaCard}>
-            <Text style={styles.previewBottomCtaTitle}>우리 가족만의 15×21cm A5 이야기책 📖</Text>
-            <Text style={styles.previewBottomCtaSub}>
-              매일 나눈 스몰톡과 소중한 사진이 영구 보존용 양장 하드커버 도서로 완성됩니다.
+            <Text style={styles.previewBottomCtaTitle}>
+              {isVolumeLocked ? '우리 가족의 소중한 완성본 도서 📖' : '우리 가족만의 15×21cm A5 이야기책 📖'}
             </Text>
-            <TouchableOpacity
-              style={styles.previewBottomOrderBtn}
-              onPress={() => setOrderModalVisible(true)}
-              activeOpacity={0.85}
-            >
-              <Gift size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.previewBottomOrderBtnText}>
-                {isFullyCovered
-                  ? '가족 포인트 12,000 P로 실물 양장본 도서 100% 무료 교환하기 🎁'
-                  : usedPoints > 0
-                  ? `가족 포인트 -${usedPoints.toLocaleString()}P 할인받고 ${cashDiff.toLocaleString()}원 주문하기 📦`
-                  : '12,000원에 실물 양장본 도서 주문하기 📦'}
-              </Text>
-            </TouchableOpacity>
+            <Text style={styles.previewBottomCtaSub}>
+              {isVolumeLocked
+                ? '이 책은 실물 양장본 발간 및 인쇄 주문이 완료되어 영구 보존 모드로 열람됩니다.\n새로운 가족의 추억은 다음 권차에서 계속 만들어보세요!'
+                : '매일 나눈 스몰톡과 소중한 사진이 영구 보존용 양장 하드커버 도서로 완성됩니다.'}
+            </Text>
+            {isVolumeLocked ? (
+              <TouchableOpacity
+                style={[styles.previewBottomOrderBtn, { backgroundColor: '#FF6B47' }]}
+                onPress={handleStartNextVolume}
+                activeOpacity={0.85}
+              >
+                <BookOpen size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.previewBottomOrderBtnText}>
+                  다음 권차(이야기책) 시작하기 ✨
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.previewBottomOrderBtn}
+                onPress={() => setOrderModalVisible(true)}
+                activeOpacity={0.85}
+              >
+                <Gift size={15} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.previewBottomOrderBtnText}>
+                  {isFullyCovered
+                    ? '가족 포인트 12,000 P로 실물 양장본 도서 100% 무료 교환하기 🎁'
+                    : usedPoints > 0
+                    ? `가족 포인트 -${usedPoints.toLocaleString()}P 할인받고 ${cashDiff.toLocaleString()}원 주문하기 📦`
+                    : '12,000원에 실물 양장본 도서 주문하기 📦'}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </ScrollView>
       )}

@@ -781,7 +781,7 @@ export async function generateStageAiImage(character: any, targetStage: number):
     const txt = await analyzeImageWithGeminiVision(
       refBase64Data.data,
       refBase64Data.mimeType,
-      'Analyze this creature mascot in detail. Describe its species, primary body color (hex code), facial features (eyes shape, expression, blush, smile), body shape, ears/horns/tail, and any unique accessories in 2-3 sentences. Focus strictly on visual identity so it can be evolved consistently.'
+      'Analyze this character in detail. Describe its visual identity: whether person, baby, or animal mascot, art medium (webtoon, 2D vector, watercolor, or cartoon), primary body/outfit colors (hex code), facial features (eyes, expression, smile), hair or ears, and signature accessories in 2-3 sentences. Focus strictly on visual identity so its proportions can be physically evolved consistently.'
     );
     if (txt) {
       characterTraits = txt;
@@ -795,7 +795,8 @@ export async function generateStageAiImage(character: any, targetStage: number):
     const stagePrompt = getStageEvolutionPrompt(
       targetStage,
       `Character Visual Identity: ${characterTraits}`,
-      character.personality || '다정한'
+      character.personality || '다정한',
+      character.style_preset || character.stylePreset || 'cozy_creature'
     );
 
     const parts: GeminiContentPart[] = [];
@@ -833,14 +834,27 @@ export async function generateStageAiImage(character: any, targetStage: number):
 // 4. Background Queue Manager for Stages 2, 3, 4 (Sequential Lineage Growth)
 const runningJobs = new Set<string>();
 
-export async function startBackgroundStagePreGeneration(character: any, onStageUpdated?: (stage: number, url: string) => void): Promise<void> {
+export async function startBackgroundStagePreGeneration(
+  character: any,
+  onStageUpdated?: (stage: number, url: string) => void,
+  forceRegenerate: boolean = false
+): Promise<void> {
   if (!character?.id || !character?.image_url) return;
   if (runningJobs.has(character.id)) return;
 
   runningJobs.add(character.id);
 
   try {
-    const existing = await getPetmongStageImages(character.id);
+    let existing = await getPetmongStageImages(character.id);
+
+    // If forceRegenerate is true OR if the current base image (character.image_url) is different from the cached Stage 1 image:
+    // This means the character's base appearance has changed! All old stages 2, 3, 4 are stale and MUST be reset!
+    const isBaseImageChanged = existing[1] && character.image_url && existing[1] !== character.image_url;
+    if (forceRegenerate || isBaseImageChanged) {
+      console.log(`[Background Stage Generator] Base image changed or forceRegenerate requested for ${character.name}. Resetting stages 2~4...`);
+      await resetPetmongStageImages(character.id);
+      existing = {};
+    }
 
     // Save Stage 1 as the original image if not yet saved
     if (!existing[1] && character.image_url) {
@@ -849,6 +863,7 @@ export async function startBackgroundStagePreGeneration(character: any, onStageU
         stage1Img = await makeBackgroundTransparentOnDevice(stage1Img);
       } catch (_) {}
       await savePetmongStageImage(character.id, 1, stage1Img);
+      existing[1] = stage1Img;
       if (onStageUpdated) onStageUpdated(1, stage1Img);
     }
 
