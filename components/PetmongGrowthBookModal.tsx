@@ -43,6 +43,8 @@ import {
   savePetmongStageImage,
   generateStageAiImage,
   startBackgroundStagePreGeneration,
+  subscribePetmongStageUpdates,
+  isStageGenerationRunning,
   detectSpecies,
 } from '../lib/petmongEvolutionService';
 import { colors, typography, commonStyles } from '../theme';
@@ -83,12 +85,14 @@ export default function PetmongGrowthBookModal({
   // Active family petmong
   const activeChar = character || null;
 
-  const currentStageImageUrl = stageImages[selectedStageNum] || (selectedStageNum === 1 ? activeChar?.image_url : null);
-
   // Current real stage of the petmong
   const currentCharStage = useMemo(() => {
     return getEvolutionStage(activeChar?.level || 1);
   }, [activeChar?.level]);
+
+  const currentStageImageUrl =
+    stageImages[selectedStageNum] ||
+    (selectedStageNum === currentCharStage.stage ? activeChar?.image_url : null);
 
   // Sync selected stage with pet's stage when opening
   useEffect(() => {
@@ -97,24 +101,51 @@ export default function PetmongGrowthBookModal({
     }
   }, [activeChar?.id, visible]);
 
+  // Real-time subscription to background stage generation events (fixes stale modal when opened right after creation)
+  useEffect(() => {
+    if (!visible || !activeChar?.id) return;
+    const unsub = subscribePetmongStageUpdates(activeChar.id, evt => {
+      if (evt.stage && evt.url) {
+        setStageImages(prev => ({ ...prev, [evt.stage as number]: evt.url as string }));
+        setGeneratingStages(prev => ({ ...prev, [evt.stage as number]: false }));
+      }
+      if (evt.isRunning === false) {
+        setGeneratingStages({});
+      }
+    });
+    return () => {
+      unsub();
+    };
+  }, [visible, activeChar?.id]);
+
   // Load cached stage images for activeChar and generate any missing stages
   const loadStageImages = useCallback(async () => {
     if (!activeChar?.id) return;
+    if (!activeChar.image_url) {
+      // Emoji-only character: clear any leftover stage images
+      setStageImages({});
+      setGeneratingStages({});
+      return;
+    }
     try {
-      const cached = await getPetmongStageImages(activeChar.id);
-      // Ensure Stage 1 has the base image
-      if (!cached[1] && activeChar.image_url) {
+      const cached = await getPetmongStageImages(activeChar.id, activeChar.image_url);
+      // Only seed Stage 1 with activeChar.image_url if the pet is currently at Stage 1 (prevents evolved Lv.5+ image overwriting Stage 1)
+      if (!cached[1] && activeChar.image_url && currentCharStage.stage === 1) {
         cached[1] = activeChar.image_url;
         await savePetmongStageImage(activeChar.id, 1, activeChar.image_url);
+      } else if (!cached[currentCharStage.stage] && activeChar.image_url) {
+        cached[currentCharStage.stage] = activeChar.image_url;
       }
-      setStageImages(cached);
+      setStageImages({ ...cached });
 
-      // If any stages (2, 3, 4) are missing, trigger sequential generation
-      if (activeChar.image_url && (!cached[2] || !cached[3] || !cached[4])) {
-        const missing = [2, 3, 4].filter(s => !cached[s]);
+      // If any stages (2, 3, 4) are missing, reflect generating state and ensure sequential background queue runs
+      const missing = [2, 3, 4].filter(s => !cached[s]);
+      if (missing.length > 0) {
         setGeneratingStages(prev => {
           const next = { ...prev };
-          missing.forEach(s => { next[s] = true; });
+          missing.forEach(s => {
+            next[s] = true;
+          });
           return next;
         });
 
@@ -122,44 +153,44 @@ export default function PetmongGrowthBookModal({
           setStageImages(prev => ({ ...prev, [stage]: url }));
           setGeneratingStages(prev => ({ ...prev, [stage]: false }));
         }).finally(() => {
-          setGeneratingStages({});
+          if (!isStageGenerationRunning(activeChar.id)) {
+            setGeneratingStages({});
+          }
         });
+      } else {
+        setGeneratingStages({});
       }
     } catch (err) {
       console.warn('loadStageImages error:', err);
     }
-  }, [activeChar]);
+  }, [activeChar, currentCharStage.stage]);
 
   useEffect(() => {
     if (visible && activeChar?.id) {
       loadStageImages();
     }
-  }, [visible, activeChar?.id, loadStageImages]);
+  }, [visible, activeChar?.id, activeChar?.image_url, loadStageImages]);
 
   const handleSelectStage = useCallback((sNum: number) => {
     // 1. Instant 0ms synchronous state switch: Tab button highlights immediately!
     setSelectedStageNum(sNum);
 
-    // 2. If stage image is not yet cached and not currently being generated, fetch/generate in background without blocking UI thread
-    if (!stageImages[sNum] && activeChar?.id && activeChar?.image_url && !generatingStages[sNum]) {
+    // 2. If stage image is missing and character has an AI image:
+    // Never fire a competing standalone call if the background queue is already running (preserves 2->3->4 lineage chaining & prevents 429)
+    if (!stageImages[sNum] && activeChar?.id && activeChar?.image_url) {
       setGeneratingStages(prev => ({ ...prev, [sNum]: true }));
-      // Run asynchronously on next tick so UI thread never freezes
-      setTimeout(() => {
-        generateStageAiImage(activeChar, sNum)
-          .then(url => {
-            if (url) {
-              setStageImages(prev => ({ ...prev, [sNum]: url }));
-            }
-          })
-          .catch(e => {
-            console.warn(`On-demand stage ${sNum} generation error:`, e);
-          })
-          .finally(() => {
-            setGeneratingStages(prev => ({ ...prev, [sNum]: false }));
-          });
-      }, 50);
+      if (!isStageGenerationRunning(activeChar.id)) {
+        startBackgroundStagePreGeneration(activeChar, (stage, url) => {
+          setStageImages(prev => ({ ...prev, [stage]: url }));
+          setGeneratingStages(prev => ({ ...prev, [stage]: false }));
+        }).finally(() => {
+          if (!isStageGenerationRunning(activeChar.id)) {
+            setGeneratingStages({});
+          }
+        });
+      }
     }
-  }, [stageImages, activeChar, generatingStages]);
+  }, [stageImages, activeChar]);
 
   if (!visible) return null;
 
@@ -168,9 +199,12 @@ export default function PetmongGrowthBookModal({
   const isCurrentStage = currentCharStage.stage === selectedStageNum;
   const isFutureStage = currentCharStage.stage < selectedStageNum;
 
-  // Next level milestone calculation
-  const nextMilestoneLevel = selectedStageNum < 4 ? EVOLUTION_STAGES[selectedStageNum + 1]?.minLevel : null;
-  const levelsLeftForNext = nextMilestoneLevel ? Math.max(0, nextMilestoneLevel - (activeChar?.level || 1)) : 0;
+  // Next level milestone calculation (Always based on pet's ACTUAL current stage, not the preview tab)
+  const nextMilestoneLevel =
+    currentCharStage.stage < 4 ? EVOLUTION_STAGES[currentCharStage.stage + 1]?.minLevel : null;
+  const levelsLeftForNext = nextMilestoneLevel
+    ? Math.max(0, nextMilestoneLevel - (activeChar?.level || 1))
+    : 0;
 
   // Detect animal species badge
   const detectedAnimalBadge = (() => {
@@ -350,8 +384,8 @@ export default function PetmongGrowthBookModal({
                         src={currentStageImageUrl}
                         alt="petmong stage"
                         style={{
-                          width: 116,
-                          height: 116,
+                          width: 156,
+                          height: 156,
                           objectFit: 'contain',
                           mixBlendMode: 'multiply',
                           display: 'block',
@@ -366,36 +400,19 @@ export default function PetmongGrowthBookModal({
                         resizeMode="contain"
                       />
                     )
-                  ) : generatingStages[selectedStageNum] ? (
-                    <View style={styles.stageLoadingWrap}>
+                  ) : activeChar?.image_url ? (
+                    <TouchableOpacity
+                      style={styles.stageLoadingWrap}
+                      activeOpacity={0.8}
+                      onPress={() => handleSelectStage(selectedStageNum)}
+                    >
                       <ActivityIndicator size="small" color="#FF6B47" />
                       <Text style={styles.stageLoadingText}>
-                        {selectedStageNum}단계 AI 생성 중... ✨
+                        {generatingStages[selectedStageNum] || isStageGenerationRunning(activeChar?.id)
+                          ? `${selectedStageNum}단계 AI 성장 모습 그리는 중... ✨`
+                          : `터치하여 ${selectedStageNum}단계 모습 불러오기 ✨`}
                       </Text>
-                    </View>
-                  ) : activeChar?.image_url ? (
-                    Platform.OS === 'web' ? (
-                      <img
-                        src={activeChar.image_url}
-                        alt="petmong stage"
-                        style={{
-                          width: 116,
-                          height: 116,
-                          objectFit: 'contain',
-                          mixBlendMode: 'multiply',
-                          display: 'block',
-                          opacity: selectedStageNum === 1 ? 1 : 0.65,
-                          pointerEvents: 'none',
-                          userSelect: 'none',
-                        }}
-                      />
-                    ) : (
-                      <Image
-                        source={{ uri: activeChar.image_url }}
-                        style={[styles.petShowcaseImage, { opacity: selectedStageNum === 1 ? 1 : 0.65 }]}
-                        resizeMode="contain"
-                      />
-                    )
+                    </TouchableOpacity>
                   ) : (
                     <Text style={styles.petShowcaseEmoji}>
                       {getEvolvedEmoji(activeChar?.emoji || '🐶', selectedStageData.minLevel)}
@@ -752,22 +769,22 @@ const styles = StyleSheet.create({
     marginVertical: 4,
   },
   petSpriteBox: {
-    width: 124,
-    height: 124,
+    width: 164,
+    height: 164,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
     mixBlendMode: 'multiply',
   },
   petShowcaseImage: {
-    width: 116,
-    height: 116,
+    width: 156,
+    height: 156,
     mixBlendMode: 'multiply',
   },
   petShowcaseEmoji: {
-    fontSize: 72,
+    fontSize: 88,
     textAlign: 'center',
-    lineHeight: 80,
+    lineHeight: 96,
   },
   stageLoadingWrap: {
     width: 120,

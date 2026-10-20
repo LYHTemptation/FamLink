@@ -1470,8 +1470,8 @@ export default function PetmongGameEngine({
                         src={transparentCharImageUrl || character.image_url}
                         alt={character.name}
                         style={{
-                          width: 104,
-                          height: 104,
+                          width: 132,
+                          height: 132,
                           objectFit: 'contain',
                           mixBlendMode: 'multiply',
                           display: 'block',

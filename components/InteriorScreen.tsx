@@ -50,6 +50,8 @@ import {
   generateStageAiImage,
   startBackgroundStagePreGeneration,
   createPetmongSvg,
+  savePetmongMeta,
+  computeImageSignature,
 } from '../lib/petmongEvolutionService';
 import { makeBackgroundTransparentOnDevice } from '../lib/imageTransparencyService';
 import { generatePetmongMascotFromPhoto } from '../services/geminiService';
@@ -777,7 +779,11 @@ export default function InteriorScreen({
 
       // 1. Check if the stage image was already pre-generated in the background!
       try {
-        const cachedStages = await getPetmongStageImages(char.id);
+        const cachedStages = await getPetmongStageImages(char.id, char.image_url);
+        // Ensure Stage 1 original appearance is safely persisted before evolving DB image_url
+        if (!cachedStages[1] && char.image_url) {
+          await savePetmongStageImage(char.id, 1, char.image_url);
+        }
         if (cachedStages && cachedStages[stage.stage]) {
           evolvedImageUrl = cachedStages[stage.stage];
           console.log(`[Instant Evolution] Using pre-generated Stage ${stage.stage} image!`);
@@ -801,6 +807,7 @@ export default function InteriorScreen({
           .update({ image_url: evolvedImageUrl, family_id: familyId })
           .eq('id', char.id);
 
+        setActiveStageImageUrl(evolvedImageUrl);
         setMyCharacter(prev => prev ? ({ ...prev, image_url: evolvedImageUrl } as PetmongCharacter) : null);
         if (setPetmongCharacters) {
           setPetmongCharacters((prev: any[]) => prev.map(c => c.id === char.id ? { ...c, image_url: evolvedImageUrl } : c));
@@ -1062,12 +1069,23 @@ export default function InteriorScreen({
               await onDeductPoints(500, '반려몽 외형 변경/환생');
             }
 
+            const mergedVitals = {
+              ...((familyPetmong as any)?.vitals || {
+                hunger: 80,
+                happiness: 85,
+                cleanliness: 90,
+                energy: 95,
+              }),
+              style_preset: selectedStylePreset,
+            };
+
             const updateData: any = {
               name: newName.trim(),
               emoji: matchedEmoji,
               image_url: generatedImageUrl,
               personality: newPersonality,
               style_preset: selectedStylePreset,
+              vitals: mergedVitals,
               level: 1,
               exp: 0,
               family_id: familyId,
@@ -1080,7 +1098,7 @@ export default function InteriorScreen({
               .select()
               .single();
 
-            // DB에 style_preset 컬럼이 아직 없는 경우(PGRST204) 키를 제거하고 즉시 재시도
+            // DB에 style_preset 컬럼이 아직 없는 경우(PGRST204) 키를 제거하고 즉시 재시도 (vitals JSONB 내에 style_preset은 안전하게 보존됨)
             if (updateError && (updateError.message?.includes('style_preset') || (updateError as any).code === 'PGRST204')) {
               delete updateData.style_preset;
               const retry = await supabase
@@ -1110,6 +1128,16 @@ export default function InteriorScreen({
               }
             }
 
+            // Reset old stage cache & save Stage 1 + metadata BEFORE triggering React state effects (eliminates race condition)
+            if (updatedChar?.id && updatedChar?.image_url) {
+              await resetPetmongStageImages(updatedChar.id);
+              await savePetmongMeta(updatedChar.id, {
+                baseSignature: computeImageSignature(updatedChar.image_url),
+                stylePreset: selectedStylePreset,
+              });
+              await savePetmongStageImage(updatedChar.id, 1, updatedChar.image_url);
+            }
+
             setIsGenerating(false);
             setMyCharacter(updatedChar);
             setActiveStageImageUrl(updatedChar.image_url);
@@ -1117,11 +1145,9 @@ export default function InteriorScreen({
             if (setPetmongCharacters) {
               setPetmongCharacters((prev: any[]) => prev.map(c => c.id === updatedChar.id ? updatedChar : c));
             }
-            Alert.alert('외형 환생 완료! ✨', `500 P를 사용하여 ${newName.trim()}(이)가 새로운 외형으로 환생했습니다! 1단계 아기몽부터 새로운 성장이 시작됩니다 🌱`);
+            Alert.alert('외형 환생 완료! ✨', `500 P를 사용하여 ${newName.trim()}(이)가 새로운 외형으로 환생했습니다! 1단계 꼬물이부터 새로운 성장이 시작됩니다 🌱`);
 
-            if (updatedChar.id && updatedChar.image_url) {
-              await resetPetmongStageImages(updatedChar.id);
-              await savePetmongStageImage(updatedChar.id, 1, updatedChar.image_url);
+            if (updatedChar?.id && updatedChar?.image_url) {
               startBackgroundStagePreGeneration(updatedChar, (stage, url) => {
                 console.log(`[Stage Pre-Gen] Stage ${stage} completed for ${updatedChar.name}`);
               }, true);
@@ -1130,6 +1156,14 @@ export default function InteriorScreen({
           } else {
             // Initial Creation: Free
             if (!currentUserProfile?.id) return;
+            const initialVitals = {
+              hunger: 80,
+              happiness: 85,
+              cleanliness: 90,
+              energy: 95,
+              style_preset: selectedStylePreset,
+            };
+
             const newCharData: any = {
               user_id: currentUserProfile.id,
               family_id: familyId,
@@ -1138,6 +1172,7 @@ export default function InteriorScreen({
               image_url: generatedImageUrl,
               personality: newPersonality,
               style_preset: selectedStylePreset,
+              vitals: initialVitals,
               level: 1,
               exp: 0,
             };
@@ -1148,7 +1183,7 @@ export default function InteriorScreen({
               .select()
               .single();
 
-            // DB에 style_preset 컬럼이 아직 없는 경우(PGRST204) 키를 제거하고 즉시 재시도
+            // DB에 style_preset 컬럼이 아직 없는 경우(PGRST204) 키를 제거하고 즉시 재시도 (vitals JSONB 내에 style_preset은 안전하게 보존됨)
             if (insertError && (insertError.message?.includes('style_preset') || (insertError as any).code === 'PGRST204')) {
               delete newCharData.style_preset;
               const retry = await supabase
@@ -1163,17 +1198,26 @@ export default function InteriorScreen({
             if (insertError) throw insertError;
             if (insertedChar) insertedChar.style_preset = selectedStylePreset;
 
+            // Reset & save Stage 1 + metadata BEFORE triggering React state effects
+            if (insertedChar?.id && insertedChar?.image_url) {
+              await resetPetmongStageImages(insertedChar.id);
+              await savePetmongMeta(insertedChar.id, {
+                baseSignature: computeImageSignature(insertedChar.image_url),
+                stylePreset: selectedStylePreset,
+              });
+              await savePetmongStageImage(insertedChar.id, 1, insertedChar.image_url);
+            }
+
             setIsGenerating(false);
             setMyCharacter(insertedChar);
+            setActiveStageImageUrl(insertedChar.image_url);
             setCreateModalVisible(false);
             if (setPetmongCharacters) {
               setPetmongCharacters((prev: any[]) => [...prev, insertedChar]);
             }
             Alert.alert('탄생 완료! 🎉', '나를 똑닮은 귀여운 우리 가족 수호 반려몽이 부화했어요!');
 
-            if (insertedChar.id && insertedChar.image_url) {
-              await resetPetmongStageImages(insertedChar.id);
-              await savePetmongStageImage(insertedChar.id, 1, insertedChar.image_url);
+            if (insertedChar?.id && insertedChar?.image_url) {
               startBackgroundStagePreGeneration(insertedChar, (stage, url) => {
                 console.log(`[Stage Pre-Gen] Stage ${stage} completed for ${insertedChar.name}`);
               }, true);
@@ -1353,14 +1397,19 @@ export default function InteriorScreen({
             }
           }
 
+          if (updatedChar?.id) {
+            await resetPetmongStageImages(updatedChar.id);
+          }
+
           setIsGenerating(false);
           setMyCharacter(updatedChar);
+          setGrowthBookTargetChar(updatedChar);
           setActiveStageImageUrl(null);
           setCreateModalVisible(false);
           if (setPetmongCharacters) {
             setPetmongCharacters((prev: any[]) => prev.map(c => c.id === updatedChar.id ? updatedChar : c));
           }
-          Alert.alert('외형 환생 완료! ✨', `500 P를 사용하여 ${newName.trim()}(이)의 외형이 새롭게 환생했습니다! 1단계 아기몽부터 새롭게 성장합니다 🌱`);
+          Alert.alert('외형 환생 완료! ✨', `500 P를 사용하여 ${newName.trim()}(이)의 외형이 새롭게 환생했습니다! 1단계 꼬물이부터 새롭게 성장합니다 🌱`);
           return;
         }
 
@@ -1971,7 +2020,7 @@ export default function InteriorScreen({
       <PetmongGrowthBookModal
         visible={familyBookModalVisible}
         onClose={() => setFamilyBookModalVisible(false)}
-        character={growthBookTargetChar || displayedCharacter || myCharacter}
+        character={displayedCharacter || myCharacter || growthBookTargetChar}
         allCharacters={petmongCharacters}
         familyMembers={familyMembers}
         currentUserProfile={currentUserProfile}

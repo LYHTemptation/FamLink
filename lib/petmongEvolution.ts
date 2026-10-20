@@ -72,7 +72,7 @@ export const EVOLUTION_STAGES: Record<number, EvolutionStageSpec> = {
     maxLevel: 4,
     name: '꼬물이',
     stageTitle: '1단계: 꼬물이 시절 (Baby Bean)',
-    scale: 0.88,
+    scale: 1.0,
     desc: '한 손에 쏙 들어오는 작고 동글동글한 콩알! 호기심 어린 눈망울로 온 가족을 바라봐요.',
     badgeColor: '#FFA39E',
     targetPeriod: '시작 (Day 1)',
@@ -85,7 +85,7 @@ export const EVOLUTION_STAGES: Record<number, EvolutionStageSpec> = {
     maxLevel: 9,
     name: '총총이',
     stageTitle: '2단계: 총총이 시절 (Playful Little)',
-    scale: 1.0,
+    scale: 1.08,
     desc: '아장아장 총총 뛰놀며 온 집안에 생기발랄한 웃음과 활력을 선물하는 사랑스러운 꼬마예요.',
     badgeColor: '#52C41A',
     targetPeriod: '약 2~3주차',
@@ -111,7 +111,7 @@ export const EVOLUTION_STAGES: Record<number, EvolutionStageSpec> = {
     maxLevel: 999,
     name: '지킴이',
     stageTitle: '4단계: 지킴이 시절 (Cherished Guardian)',
-    scale: 1.35,
+    scale: 1.28,
     desc: '온 가족의 사랑을 듬뿍 받아 완성된 영원한 수호신! 언제나 곁을 든든하게 지켜주는 평생 한식구예요.',
     badgeColor: '#FAAD14',
     targetPeriod: '약 4개월차 (최종)',
@@ -285,6 +285,7 @@ You MUST maintain 100% of the character's facial features, exact eye shape, warm
 Preserve the exact same art style and drawing medium: ${chosenStyle}
 CRITICAL CUTE MASCOT RATIO:
 NEVER make the character tall, realistic, or elongated with long limbs. Strictly maintain an ultra-cute, rounded kawaii chibi proportion (maximum 2.0 to 2.3 heads tall) across all stages. Keep the character cuddly, plush, chubby, and lovable like a plush doll or mascot, whether human chibi, animal, or mythical creature.
+Framing & Composition: Prominent close-up full-body framing. The character must fill 85% to 90% of the canvas frame with minimal padding, beautifully centered and clearly visible without excessive empty margins.
 Requirements: Plain solid pure white background (#FFFFFF) only. Zero background elements, no borders, no scenery, NEVER draw checkerboard grid, NEVER draw checkered tiles or fake transparency squares. Centered standalone character on clean pure white canvas.`;
 
   if (targetStage === 2) {

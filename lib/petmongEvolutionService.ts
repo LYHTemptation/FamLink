@@ -11,9 +11,32 @@ import type { GeminiContentPart } from './aiSystemPrompts';
 
 const STAGE_IMAGES_PREFIX = '@famlink_petmong_stages_';
 const STAGE_SINGLE_PREFIX = '@famlink_petmong_stage_';
+const STAGE_META_PREFIX = '@famlink_petmong_meta_';
+
+export interface PetmongStageMeta {
+  baseSignature?: string;
+  stylePreset?: string;
+  updatedAt?: number;
+}
 
 // High-speed RAM Memory Cache for multi-megabyte base64 stage images
 const stageMemoryCache = new Map<string, Record<number, string>>();
+// Preserves raw data:image/... base64 strings in RAM for 0ms, loss-free Stage 1->2->3->4 chaining
+const stageBase64MemoryCache = new Map<string, Record<number, string>>();
+const stageMetaMemoryCache = new Map<string, PetmongStageMeta>();
+
+// Compute a fast, deterministic signature of a base image URL/base64 so we only reset stages when the source photo genuinely changes
+export function computeImageSignature(imgUrl?: string | null): string {
+  if (!imgUrl) return '';
+  if (imgUrl.startsWith('http://') || imgUrl.startsWith('https://')) {
+    return imgUrl.split('?')[0];
+  }
+  const len = imgUrl.length;
+  const head = imgUrl.slice(0, 64);
+  const mid = imgUrl.slice(Math.floor(len / 2), Math.floor(len / 2) + 64);
+  const tail = imgUrl.slice(Math.max(0, len - 64));
+  return `b64:${len}:${head}:${mid}:${tail}`;
+}
 
 // Helper: Convert base64 data URI to Uint8Array for cross-platform upload
 function base64ToUint8Array(base64: string): Uint8Array {
@@ -57,7 +80,7 @@ async function uploadStageImageToStorage(characterId: string, stageNum: number, 
         .from('family-photos')
         .getPublicUrl(filePath);
       if (pubData?.publicUrl) {
-        return pubData.publicUrl;
+        return `${pubData.publicUrl}?v=${Date.now()}`;
       }
     }
   } catch (err) {
@@ -137,6 +160,50 @@ async function removeIdbItem(key: string): Promise<boolean> {
   });
 }
 
+// Persist & retrieve stage metadata (baseSignature, stylePreset) across sessions
+export async function getPetmongMeta(characterId?: string | null): Promise<PetmongStageMeta> {
+  if (!characterId) return {};
+  const mem = stageMetaMemoryCache.get(characterId);
+  if (mem) return mem;
+
+  try {
+    const idbVal = await getIdbItem(`${STAGE_META_PREFIX}${characterId}`);
+    if (idbVal && typeof idbVal === 'object') {
+      stageMetaMemoryCache.set(characterId, idbVal);
+      return idbVal;
+    }
+  } catch (_) {}
+
+  try {
+    const raw = await AsyncStorage.getItem(`${STAGE_META_PREFIX}${characterId}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      stageMetaMemoryCache.set(characterId, parsed);
+      return parsed;
+    }
+  } catch (_) {}
+
+  return {};
+}
+
+export async function savePetmongMeta(characterId: string, metaUpdate: Partial<PetmongStageMeta>): Promise<PetmongStageMeta> {
+  if (!characterId) return {};
+  const existing = await getPetmongMeta(characterId);
+  const merged: PetmongStageMeta = {
+    ...existing,
+    ...metaUpdate,
+    updatedAt: Date.now(),
+  };
+  stageMetaMemoryCache.set(characterId, merged);
+  try {
+    await setIdbItem(`${STAGE_META_PREFIX}${characterId}`, merged);
+  } catch (_) {}
+  try {
+    await AsyncStorage.setItem(`${STAGE_META_PREFIX}${characterId}`, JSON.stringify(merged));
+  } catch (_) {}
+  return merged;
+}
+
 // 1. Get cached stage images for a character: { 1: url, 2: url, 3: url, 4: url }
 export async function getPetmongStageImages(characterId?: string | null, expectedBaseImageUrl: string | null = null): Promise<Record<number, string>> {
   if (!characterId) return {};
@@ -147,7 +214,7 @@ export async function getPetmongStageImages(characterId?: string | null, expecte
     try {
       const fromIdb = await getIdbItem(`${STAGE_IMAGES_PREFIX}${characterId}`);
       if (fromIdb && typeof fromIdb === 'object' && Object.keys(fromIdb).length > 0) {
-        stages = fromIdb;
+        stages = { ...fromIdb };
       }
     } catch (_) {}
 
@@ -190,7 +257,8 @@ export async function getPetmongStageImages(characterId?: string | null, expecte
                 .from('family-photos')
                 .getPublicUrl(`petmong_stages/${f.name}`);
               if (pubData?.publicUrl) {
-                stages[sNum] = pubData.publicUrl;
+                const ver = f.updated_at ? new Date(f.updated_at).getTime() : Date.now();
+                stages[sNum] = `${pubData.publicUrl}?v=${ver}`;
               }
             }
           }
@@ -204,8 +272,8 @@ export async function getPetmongStageImages(characterId?: string | null, expecte
     stageMemoryCache.set(characterId, stages);
   }
 
-  // Synchronize Stage 1 base image gracefully without wiping other stages!
-  if (expectedBaseImageUrl && (!stages[1] || stages[1] !== expectedBaseImageUrl)) {
+  // Only populate Stage 1 if missing (never blindly overwrite an uploaded Storage URL or transparent PNG)
+  if (expectedBaseImageUrl && !stages[1]) {
     stages[1] = expectedBaseImageUrl;
     stageMemoryCache.set(characterId, stages);
     savePetmongStageImage(characterId, 1, expectedBaseImageUrl).catch(() => {});
@@ -218,11 +286,19 @@ export async function getPetmongStageImages(characterId?: string | null, expecte
 export async function savePetmongStageImage(characterId: string, stageNum: number, imageUrl: string): Promise<Record<number, string>> {
   if (!characterId || !stageNum || !imageUrl) return {};
   try {
-    const current = (await getPetmongStageImages(characterId)) || {};
+    const current = { ...((await getPetmongStageImages(characterId)) || {}) };
     current[stageNum] = imageUrl;
+
+    // Preserve raw data:image/... in dedicated RAM cache so Stage 1->2->3->4 chaining never needs to re-download over HTTP
+    if (imageUrl.startsWith('data:image/')) {
+      const b64Map = stageBase64MemoryCache.get(characterId) || {};
+      b64Map[stageNum] = imageUrl;
+      stageBase64MemoryCache.set(characterId, b64Map);
+    }
 
     // 1. Always keep in high-speed RAM memory cache (unlimited size, 0ms latency)
     stageMemoryCache.set(characterId, current);
+    notifyStageUpdateListeners(characterId, stageNum, imageUrl);
 
     // 2. Persist to Web IndexedDB (Unlimited quota, completely immune to localStorage limits)
     try {
@@ -245,10 +321,14 @@ export async function savePetmongStageImage(characterId: string, stageNum: numbe
     // 5. 🚀 CLOUD SYNC: Asynchronously upload to Supabase Storage so ALL family devices (PC & Mobile) share it!
     uploadStageImageToStorage(characterId, stageNum, imageUrl).then(publicUrl => {
       if (publicUrl && publicUrl !== imageUrl) {
-        current[stageNum] = publicUrl;
-        stageMemoryCache.set(characterId, current);
-        setIdbItem(`${STAGE_IMAGES_PREFIX}${characterId}`, current).catch(() => {});
-        AsyncStorage.setItem(`${STAGE_SINGLE_PREFIX}${characterId}_${stageNum}`, publicUrl).catch(() => {});
+        const latest = stageMemoryCache.get(characterId);
+        // Only update if this stage hasn't been reset or replaced in the meantime
+        if (latest && latest[stageNum] === imageUrl) {
+          const updated = { ...latest, [stageNum]: publicUrl };
+          stageMemoryCache.set(characterId, updated);
+          setIdbItem(`${STAGE_IMAGES_PREFIX}${characterId}`, updated).catch(() => {});
+          AsyncStorage.setItem(`${STAGE_SINGLE_PREFIX}${characterId}_${stageNum}`, publicUrl).catch(() => {});
+        }
       }
     }).catch(() => {});
 
@@ -263,11 +343,15 @@ export async function savePetmongStageImage(characterId: string, stageNum: numbe
 export async function resetPetmongStageImages(characterId?: string | null): Promise<boolean> {
   if (!characterId) return false;
   stageMemoryCache.delete(characterId);
+  stageBase64MemoryCache.delete(characterId);
+  stageMetaMemoryCache.delete(characterId);
   try {
     await removeIdbItem(`${STAGE_IMAGES_PREFIX}${characterId}`);
+    await removeIdbItem(`${STAGE_META_PREFIX}${characterId}`);
   } catch (_) {}
   try {
     await AsyncStorage.removeItem(`${STAGE_IMAGES_PREFIX}${characterId}`);
+    await AsyncStorage.removeItem(`${STAGE_META_PREFIX}${characterId}`);
     for (const s of [1, 2, 3, 4]) {
       await AsyncStorage.removeItem(`${STAGE_SINGLE_PREFIX}${characterId}_${s}`).catch(() => {});
     }
@@ -278,7 +362,7 @@ export async function resetPetmongStageImages(characterId?: string | null): Prom
       .from('family-photos')
       .list('petmong_stages', { search: characterId });
     if (remoteFiles && remoteFiles.length > 0) {
-      const pathsToDelete = remoteFiles.map(f => `petmong_stages/${f.name}`);
+      const pathsToDelete = remoteFiles.map((f: any) => `petmong_stages/${f.name}`);
       await supabase.storage.from('family-photos').remove(pathsToDelete);
     }
   } catch (_) {}
@@ -720,18 +804,38 @@ export async function getImageBase64Data(imgSource?: string | null): Promise<{ m
 }
 
 // 3. Generate a specific stage image for a petmong using AI (Strict Lineage Chaining)
-export async function generateStageAiImage(character: any, targetStage: number): Promise<string> {
+export async function generateStageAiImage(
+  character: any,
+  targetStage: number,
+  options?: { allowSvgFallback?: boolean; explicitRefImage?: string }
+): Promise<string> {
   if (!character) throw new Error('No character to evolve');
 
   // Chaining: Stage 2 builds on Stage 1; Stage 3 builds on Stage 2; Stage 4 builds on Stage 3
+  // Prefer in-memory Base64 first (0ms latency, immune to CDN/Storage caching delays)
+  const memMap = character.id ? stageBase64MemoryCache.get(character.id) : undefined;
   const cachedStages = await getPetmongStageImages(character.id);
-  let refImage = null;
-  if (targetStage === 4) {
-    refImage = cachedStages[3] || cachedStages[2] || cachedStages[1] || character.image_url;
-  } else if (targetStage === 3) {
-    refImage = cachedStages[2] || cachedStages[1] || character.image_url;
-  } else {
-    refImage = cachedStages[1] || character.image_url;
+  let refImage: string | null = options?.explicitRefImage || null;
+  if (!refImage) {
+    if (targetStage === 4) {
+      refImage =
+        memMap?.[3] ||
+        cachedStages[3] ||
+        memMap?.[2] ||
+        cachedStages[2] ||
+        memMap?.[1] ||
+        cachedStages[1] ||
+        character.image_url;
+    } else if (targetStage === 3) {
+      refImage =
+        memMap?.[2] ||
+        cachedStages[2] ||
+        memMap?.[1] ||
+        cachedStages[1] ||
+        character.image_url;
+    } else {
+      refImage = memMap?.[1] || cachedStages[1] || character.image_url;
+    }
   }
 
   const hasGeminiKey = isGeminiConfigured();
@@ -739,6 +843,15 @@ export async function generateStageAiImage(character: any, targetStage: number):
   let detectedColor = '#FFAAA6';
   const detectedSpecies = detectSpecies(character.emoji, character.name);
   let characterTraits = `${character.name} (${detectedSpecies})`;
+
+  // Resolve persisted style_preset across memory, DB vitals JSONB, and local metadata
+  const meta = character.id ? await getPetmongMeta(character.id) : {};
+  const resolvedStylePreset =
+    character.style_preset ||
+    character.stylePreset ||
+    character.vitals?.style_preset ||
+    meta.stylePreset ||
+    'cozy_creature';
 
   // Extract visual DNA from previous stage reference image (SVG or Raster)
   let refBase64Data: { mimeType: string; data: string } | null = null;
@@ -790,13 +903,13 @@ export async function generateStageAiImage(character: any, targetStage: number):
     }
   }
 
-  // Multimodal Image-to-Image via unified geminiService
+  // Multimodal Image-to-Image via unified geminiService (with 1 automatic retry on transient timeout/429)
   if (!evolvedImageUrl && hasGeminiKey) {
     const stagePrompt = getStageEvolutionPrompt(
       targetStage,
       `Character Visual Identity: ${characterTraits}`,
       character.personality || '다정한',
-      character.style_preset || character.stylePreset || 'cozy_creature'
+      resolvedStylePreset
     );
 
     const parts: GeminiContentPart[] = [];
@@ -811,16 +924,25 @@ export async function generateStageAiImage(character: any, targetStage: number):
     parts.push({ text: stagePrompt });
 
     evolvedImageUrl = await generateImageWithGeminiModels(parts);
+    if (!evolvedImageUrl) {
+      console.warn(`[petmongEvolutionService] Stage ${targetStage} AI image call returned null; retrying once after 2.5s...`);
+      await new Promise(r => setTimeout(r, 2500));
+      evolvedImageUrl = await generateImageWithGeminiModels(parts);
+    }
   }
 
-  // 3. True Physical & Lineage Growth Vector SVG Fallback (instant & guaranteed)
-  if (!evolvedImageUrl) {
+  // 3. True Physical & Lineage Growth Vector SVG Fallback
+  // Only use SVG fallback when explicitly allowed (e.g. manual instant fallback or no Gemini key configured).
+  // In background pre-generation, we do NOT want a temporary network hiccup to permanently overwrite a stage with a generic SVG!
+  const shouldAllowSvgFallback = options?.allowSvgFallback !== false || !hasGeminiKey;
+  if (!evolvedImageUrl && shouldAllowSvgFallback) {
     evolvedImageUrl = createPetmongSvg(targetStage, detectedColor, character.personality || '다정한', detectedSpecies);
   }
 
   if (evolvedImageUrl) {
     try {
-      evolvedImageUrl = await makeBackgroundTransparentOnDevice(evolvedImageUrl);
+      const transparent = await makeBackgroundTransparentOnDevice(evolvedImageUrl);
+      if (transparent) evolvedImageUrl = transparent;
     } catch (e) {
       console.warn('[petmongEvolutionService] Transparency error:', e);
     }
@@ -828,11 +950,54 @@ export async function generateStageAiImage(character: any, targetStage: number):
     return evolvedImageUrl;
   }
 
-  throw new Error('Failed to generate evolved image');
+  throw new Error(`Stage ${targetStage} AI image generation temporarily unavailable`);
 }
 
-// 4. Background Queue Manager for Stages 2, 3, 4 (Sequential Lineage Growth)
+// 4. Background Queue Manager & Real-Time Stage Subscriber Bus for Stages 2, 3, 4
 const runningJobs = new Set<string>();
+const jobEpochs = new Map<string, number>();
+
+type StageUpdateListener = (event: {
+  stage?: number;
+  url?: string;
+  isRunning?: boolean;
+}) => void;
+const stageListeners = new Map<string, Set<StageUpdateListener>>();
+
+function notifyStageUpdateListeners(characterId: string, stage?: number, url?: string, isRunning?: boolean) {
+  const listeners = stageListeners.get(characterId);
+  if (!listeners || listeners.size === 0) return;
+  listeners.forEach(fn => {
+    try {
+      fn({ stage, url, isRunning });
+    } catch (_) {}
+  });
+}
+
+export function isStageGenerationRunning(characterId?: string | null): boolean {
+  if (!characterId) return false;
+  return runningJobs.has(characterId);
+}
+
+export function subscribePetmongStageUpdates(
+  characterId: string,
+  listener: StageUpdateListener
+): () => void {
+  if (!characterId) return () => {};
+  let set = stageListeners.get(characterId);
+  if (!set) {
+    set = new Set<StageUpdateListener>();
+    stageListeners.set(characterId, set);
+  }
+  set.add(listener);
+  return () => {
+    const currentSet = stageListeners.get(characterId);
+    if (currentSet) {
+      currentSet.delete(listener);
+      if (currentSet.size === 0) stageListeners.delete(characterId);
+    }
+  };
+}
 
 export async function startBackgroundStagePreGeneration(
   character: any,
@@ -840,55 +1005,122 @@ export async function startBackgroundStagePreGeneration(
   forceRegenerate: boolean = false
 ): Promise<void> {
   if (!character?.id || !character?.image_url) return;
-  if (runningJobs.has(character.id)) return;
 
+  // If a job is already running and this is NOT a forced regeneration:
+  // Attach onStageUpdated to the active subscriber bus so the caller (e.g. Growth Book Modal) still gets real-time updates!
+  if (runningJobs.has(character.id) && !forceRegenerate) {
+    if (onStageUpdated) {
+      await new Promise<void>(resolve => {
+        const unsub = subscribePetmongStageUpdates(character.id, evt => {
+          if (evt.stage && evt.url) {
+            onStageUpdated(evt.stage, evt.url);
+          }
+          if (evt.isRunning === false) {
+            unsub();
+            resolve();
+          }
+        });
+      });
+    }
+    return;
+  }
+
+  // Bump epoch so any older in-flight background job for this character stops immediately
+  const myEpoch = (jobEpochs.get(character.id) || 0) + 1;
+  jobEpochs.set(character.id, myEpoch);
   runningJobs.add(character.id);
+  notifyStageUpdateListeners(character.id, undefined, undefined, true);
+
+  const isStaleEpoch = () => jobEpochs.get(character.id) !== myEpoch;
 
   try {
     let existing = await getPetmongStageImages(character.id);
+    const meta = await getPetmongMeta(character.id);
+    const currentSig = computeImageSignature(character.image_url);
+    const resolvedStyle =
+      character.style_preset ||
+      character.stylePreset ||
+      character.vitals?.style_preset ||
+      meta.stylePreset ||
+      'cozy_creature';
 
-    // If forceRegenerate is true OR if the current base image (character.image_url) is different from the cached Stage 1 image:
-    // This means the character's base appearance has changed! All old stages 2, 3, 4 are stale and MUST be reset!
-    const isBaseImageChanged = existing[1] && character.image_url && existing[1] !== character.image_url;
+    // Compare deterministic baseSignature rather than comparing a Storage URL against a Base64 string
+    const isBaseImageChanged = Boolean(
+      meta.baseSignature && currentSig && meta.baseSignature !== currentSig
+    );
+
     if (forceRegenerate || isBaseImageChanged) {
-      console.log(`[Background Stage Generator] Base image changed or forceRegenerate requested for ${character.name}. Resetting stages 2~4...`);
+      console.log(
+        `[Background Stage Generator] Base image changed or forceRegenerate requested for ${character.name}. Resetting stages 2~4...`
+      );
       await resetPetmongStageImages(character.id);
       existing = {};
     }
 
+    if (isStaleEpoch()) return;
+
+    // Persist metadata (baseSignature + stylePreset) so refreshes never trigger false resets
+    await savePetmongMeta(character.id, {
+      baseSignature: currentSig || meta.baseSignature,
+      stylePreset: resolvedStyle,
+    });
+
     // Save Stage 1 as the original image if not yet saved
+    let lastStageBase64: string | null = character.image_url;
     if (!existing[1] && character.image_url) {
-      let stage1Img = character.image_url;
+      let stage1Img: string = character.image_url;
       try {
-        stage1Img = await makeBackgroundTransparentOnDevice(stage1Img);
+        const transparent1 = await makeBackgroundTransparentOnDevice(stage1Img);
+        if (transparent1) stage1Img = transparent1;
       } catch (_) {}
+      if (isStaleEpoch()) return;
       await savePetmongStageImage(character.id, 1, stage1Img);
       existing[1] = stage1Img;
+      lastStageBase64 = stage1Img;
       if (onStageUpdated) onStageUpdated(1, stage1Img);
     }
 
     // Stages to generate sequentially: 2, 3, 4
     const stagesToGenerate = [2, 3, 4].filter(s => !existing[s]);
     if (stagesToGenerate.length === 0) {
-      console.log(`[Background Stage Generator] All stages (1~4) already cached for ${character.name}. Skipping generation.`);
+      console.log(
+        `[Background Stage Generator] All stages (1~4) already cached for ${character.name}. Skipping generation.`
+      );
       return;
     }
 
     for (const stage of stagesToGenerate) {
+      if (isStaleEpoch()) {
+        console.log(`[Background Stage Generator] Preempted by newer job for ${character.name}.`);
+        return;
+      }
       try {
         console.log(`[Background Stage Generator] Starting Stage ${stage} generation for ${character.name}...`);
-        const evolvedUrl = await generateStageAiImage(character, stage);
-        if (evolvedUrl && onStageUpdated) {
-          onStageUpdated(stage, evolvedUrl);
+        const memStages = stageBase64MemoryCache.get(character.id);
+        const explicitRef = memStages?.[stage - 1] || lastStageBase64 || undefined;
+        const evolvedUrl = await generateStageAiImage(
+          { ...character, style_preset: resolvedStyle },
+          stage,
+          { allowSvgFallback: false, explicitRefImage: explicitRef }
+        );
+        if (isStaleEpoch()) return;
+        if (evolvedUrl) {
+          lastStageBase64 = evolvedUrl;
+          if (onStageUpdated) {
+            onStageUpdated(stage, evolvedUrl);
+          }
         }
-        // Graceful pause between AI calls
-        await new Promise(r => setTimeout(r, 1500));
+        // Graceful 2.5s pause between sequential AI calls to avoid rate-limit bursts
+        await new Promise(r => setTimeout(r, 2500));
       } catch (stageErr) {
-        console.warn(`[Background Stage Generator] Stage ${stage} generation paused:`, stageErr);
-        break; // Pause if network or rate limit happens
+        console.warn(`[Background Stage Generator] Stage ${stage} generation paused (will retry next session):`, stageErr);
+        break; // Pause cleanly without locking in a fallback SVG
       }
     }
   } finally {
-    runningJobs.delete(character.id);
+    if (!isStaleEpoch()) {
+      runningJobs.delete(character.id);
+      notifyStageUpdateListeners(character.id, undefined, undefined, false);
+    }
   }
 }

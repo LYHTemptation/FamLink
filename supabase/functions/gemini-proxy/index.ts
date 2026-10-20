@@ -29,7 +29,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const body = await req.json();
-    const model = body?.model || 'gemini-2.5-flash';
+    const model = body?.model || 'gemini-3.8-flash';
     const payload = body?.payload;
 
     if (!payload || typeof payload !== 'object') {

@@ -16,7 +16,10 @@ import {
 import { supabase, isSupabaseReady } from '../lib/supabase';
 import { PetmongStylePreset } from '../types/domain';
 
-export const GEMINI_TEXT_MODEL = 'gemini-2.5-flash';
+export const GEMINI_TEXT_MODEL = 'gemini-3.8-flash';
+export const GEMINI_TEXT_FALLBACK_MODELS = [
+  'gemini-3.8-flash',
+] as const;
 export const GEMINI_IMAGE_MODELS = [
   'gemini-2.5-flash-image',
   'gemini-3.1-flash-image',
@@ -131,22 +134,24 @@ export async function analyzeImageWithGeminiVision(
 
   const normalizedMime = mimeType === 'image/svg+xml' ? 'image/png' : mimeType;
 
-  try {
-    const vData = await callGeminiModel(GEMINI_TEXT_MODEL, {
-      contents: [
-        {
-          parts: [
-            { text: promptText },
-            { inlineData: { mimeType: normalizedMime, data: base64Data } },
-          ],
-        },
-      ],
-    });
-    if (vData) {
-      return vData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+  for (const model of GEMINI_TEXT_FALLBACK_MODELS) {
+    try {
+      const vData = await callGeminiModel(model, {
+        contents: [
+          {
+            parts: [
+              { text: promptText },
+              { inlineData: { mimeType: normalizedMime, data: base64Data } },
+            ],
+          },
+        ],
+      });
+      if (vData?.candidates?.[0]?.content?.parts?.[0]?.text) {
+        return vData.candidates[0].content.parts[0].text.trim();
+      }
+    } catch (err) {
+      console.warn(`[geminiService] Vision analysis attempt on ${model} failed, trying next:`, err);
     }
-  } catch (err) {
-    console.warn('[geminiService] Vision analysis fallback:', err);
   }
   return '';
 }
@@ -322,7 +327,8 @@ Core Design Instructions:
 1. Reinterpret the Subject: Seamlessly translate the subject's distinct facial expression, eye characteristics, lovely smile, and unique charm from the photo into an endearing character.
 2. Personality & Mood: Radiate an adorable ${trait}.
 3. Aesthetics: ${styleInfo.prompt}
-4. Plain solid pure white background (#FFFFFF) only: Zero background elements, no scenery, no borders, NEVER draw checkerboard grid, NEVER draw checkered tiles or fake transparency squares. Centered standalone character on clean pure white canvas.`;
+4. Framing & Composition: Prominent close-up full-body framing. The character must fill 85% to 90% of the canvas frame with minimal padding, beautifully centered and clearly visible without excessive empty margins.
+5. Plain solid pure white background (#FFFFFF) only: Zero background elements, no scenery, no borders, NEVER draw checkerboard grid, NEVER draw checkered tiles or fake transparency squares. Centered standalone character on clean pure white canvas.`;
 
     generatedImageUrl = await generateImageWithGeminiModels([
       { text: finalPrompt },
