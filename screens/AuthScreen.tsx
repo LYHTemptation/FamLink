@@ -45,6 +45,18 @@ export default function AuthScreen({ onAuthComplete }: AuthScreenProps) {
   const [selectedColor, setSelectedColor] = useState('#FF6B47');
   const [familyOption, setFamilyOption] = useState('create'); // 'create' or 'join'
   const [familyCode, setFamilyCode] = useState('');
+  const [logoTapCount, setLogoTapCount] = useState(0);
+  const [showReviewerQuickLogin, setShowReviewerQuickLogin] = useState(false);
+
+  const handleLogoSecretTap = () => {
+    const next = logoTapCount + 1;
+    if (next >= 5) {
+      setShowReviewerQuickLogin(prev => !prev);
+      setLogoTapCount(0);
+    } else {
+      setLogoTapCount(next);
+    }
+  };
 
   // Local/Developer Mock signup helper
   const handleLocalMockAuth = () => {
@@ -239,12 +251,16 @@ export default function AuthScreen({ onAuthComplete }: AuthScreenProps) {
       style={styles.container}
     >
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        {/* App Logo/Header */}
-        <View style={styles.headerBox}>
+        {/* App Logo/Header (5회 연속 탭 시 심사/QA용 퀵 로그인 패널 토글) */}
+        <TouchableOpacity
+          style={styles.headerBox}
+          activeOpacity={0.9}
+          onPress={handleLogoSecretTap}
+        >
           <Heart size={44} color="#FF6B47" fill="#FF6B47" style={{ marginBottom: 12 }} />
           <Text style={styles.logoTitle}>FamLink</Text>
           <Text style={styles.logoSub}>사랑하는 우리 가족을 위한 프라이빗 소통 공간</Text>
-        </View>
+        </TouchableOpacity>
 
         {/* Warning Banner if Supabase not ready */}
         {!isSupabaseReady && (
@@ -432,34 +448,36 @@ export default function AuthScreen({ onAuthComplete }: AuthScreenProps) {
             </Text>
           </TouchableOpacity>
 
-          {/* 1.4 심사위원(App Reviewer) 전용 테스트 계정 퀵 버튼 */}
-          <View style={styles.reviewerSection}>
-            <Text style={styles.reviewerSectionTitle}>🍎 앱스토어 심사위원 전용 테스트 계정</Text>
-            <View style={styles.reviewerBtnRow}>
-              <TouchableOpacity
-                style={styles.reviewerBtn}
-                onPress={() => {
-                  setIsLogin(true);
-                  setEmail('reviewer_parent@famlink.com');
-                  setPassword('famlink2026!');
-                }}
-              >
-                <Text style={styles.reviewerBtnRole}>부모 계정</Text>
-                <Text style={styles.reviewerBtnEmail}>reviewer_parent</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.reviewerBtn}
-                onPress={() => {
-                  setIsLogin(true);
-                  setEmail('reviewer_child@famlink.com');
-                  setPassword('famlink2026!');
-                }}
-              >
-                <Text style={styles.reviewerBtnRole}>자녀 계정</Text>
-                <Text style={styles.reviewerBtnEmail}>reviewer_child</Text>
-              </TouchableOpacity>
+          {/* 1.4 심사위원(App Reviewer) 및 내부 QA 전용 히든 테스트 계정 퀵 버튼 (상단 로고 5회 탭 시 노출) */}
+          {showReviewerQuickLogin && (
+            <View style={styles.reviewerSection}>
+              <Text style={styles.reviewerSectionTitle}>🍎 앱스토어 심사위원 전용 테스트 계정</Text>
+              <View style={styles.reviewerBtnRow}>
+                <TouchableOpacity
+                  style={styles.reviewerBtn}
+                  onPress={() => {
+                    setIsLogin(true);
+                    setEmail('reviewer_parent@famlink.com');
+                    setPassword('famlink2026!');
+                  }}
+                >
+                  <Text style={styles.reviewerBtnRole}>부모 계정</Text>
+                  <Text style={styles.reviewerBtnEmail}>reviewer_parent</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.reviewerBtn}
+                  onPress={() => {
+                    setIsLogin(true);
+                    setEmail('reviewer_child@famlink.com');
+                    setPassword('famlink2026!');
+                  }}
+                >
+                  <Text style={styles.reviewerBtnRole}>자녀 계정</Text>
+                  <Text style={styles.reviewerBtnEmail}>reviewer_child</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
+          )}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

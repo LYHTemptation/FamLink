@@ -84,32 +84,9 @@ CREATE TABLE IF NOT EXISTS small_talk_responses (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 7. 포인트 쿠폰 상점 테이블 (rewards)
-CREATE TABLE IF NOT EXISTS rewards (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  family_id UUID REFERENCES families(id) ON DELETE CASCADE NOT NULL,
-  title TEXT NOT NULL,
-  cost INTEGER NOT NULL,
-  description TEXT,
-  provider TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- 8. 발급 쿠폰 보관함 테이블 (user_coupons)
-CREATE TABLE IF NOT EXISTS user_coupons (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  family_id UUID REFERENCES families(id) ON DELETE CASCADE NOT NULL,
-  profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
-  reward_id UUID REFERENCES rewards(id) ON DELETE SET NULL,
-  title TEXT NOT NULL,
-  cost INTEGER NOT NULL,
-  provider TEXT,
-  status TEXT DEFAULT 'available' NOT NULL,
-  expire_date TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
-ALTER TABLE user_coupons ADD COLUMN IF NOT EXISTS expire_date TEXT;
+-- 7~8. 구형 쿠폰/보상 레거시 테이블 정리 (포토북 실물 도서 & 반려몽 토크노믹스로 일원화됨)
+DROP TABLE IF EXISTS public.user_coupons CASCADE;
+DROP TABLE IF EXISTS public.rewards CASCADE;
 
 -- 9. 가족 장보기 및 체크리스트 테이블 (shopping_items)
 CREATE TABLE IF NOT EXISTS shopping_items (
@@ -146,7 +123,7 @@ CREATE TRIGGER on_family_created
   AFTER INSERT ON public.families
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_family();
 
--- 11. 행 레벨 보안 (RLS) 비활성화
+-- 11. 행 레벨 보안 (RLS) 초기 설정 (하단 21번 섹션에서 가족 단위 RLS 활성화)
 ALTER TABLE families DISABLE ROW LEVEL SECURITY;
 ALTER TABLE family_points DISABLE ROW LEVEL SECURITY;
 ALTER TABLE profiles DISABLE ROW LEVEL SECURITY;
@@ -154,8 +131,6 @@ ALTER TABLE messages DISABLE ROW LEVEL SECURITY;
 ALTER TABLE events DISABLE ROW LEVEL SECURITY;
 ALTER TABLE small_talk_topics DISABLE ROW LEVEL SECURITY;
 ALTER TABLE small_talk_responses DISABLE ROW LEVEL SECURITY;
-ALTER TABLE rewards DISABLE ROW LEVEL SECURITY;
-ALTER TABLE user_coupons DISABLE ROW LEVEL SECURITY;
 ALTER TABLE shopping_items DISABLE ROW LEVEL SECURITY;
 
 -- 12. 실시간 기능(Realtime) 추가 테이블 등록
@@ -167,11 +142,7 @@ BEGIN
   BEGIN alter publication supabase_realtime add table small_talk_responses; EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN alter publication supabase_realtime add table family_points; EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN alter publication supabase_realtime add table profiles; EXCEPTION WHEN OTHERS THEN NULL; END;
-  BEGIN alter publication supabase_realtime add table rewards; EXCEPTION WHEN OTHERS THEN NULL; END;
-  BEGIN alter publication supabase_realtime add table user_coupons; EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN alter publication supabase_realtime add table shopping_items; EXCEPTION WHEN OTHERS THEN NULL; END;
-  BEGIN alter publication supabase_realtime add table placed_furniture; EXCEPTION WHEN OTHERS THEN NULL; END;
-  BEGIN alter publication supabase_realtime add table house_layouts; EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN alter publication supabase_realtime add table petmong_characters; EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN alter publication supabase_realtime add table petmong_activities; EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN alter table petmong_characters replica identity full; EXCEPTION WHEN OTHERS THEN NULL; END;
@@ -188,29 +159,9 @@ CREATE POLICY "Allow Public Storage Access" ON storage.objects
   FOR ALL USING (bucket_id = 'family-photos')
   WITH CHECK (bucket_id = 'family-photos');
 
--- 14. 가족 인테리어 및 가구 배치 테이블 (placed_furniture)
-CREATE TABLE IF NOT EXISTS placed_furniture (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  family_id UUID REFERENCES families(id) ON DELETE CASCADE NOT NULL,
-  catalog_id TEXT NOT NULL,
-  name TEXT NOT NULL,
-  emoji TEXT NOT NULL,
-  x DOUBLE PRECISION DEFAULT 40.0 NOT NULL,
-  y DOUBLE PRECISION DEFAULT 40.0 NOT NULL,
-  rotation INTEGER DEFAULT 0 NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- 15. 가족 평면도 도면 테이블 (house_layouts)
-CREATE TABLE IF NOT EXISTS house_layouts (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  family_id UUID REFERENCES families(id) ON DELETE CASCADE NOT NULL,
-  image_url TEXT NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
-ALTER TABLE placed_furniture DISABLE ROW LEVEL SECURITY;
-ALTER TABLE house_layouts DISABLE ROW LEVEL SECURITY;
+-- 14~15. 구형 가구 배치/평면도 레거시 테이블 정리 (반려몽 감성 거실 테마로 일원화됨)
+DROP TABLE IF EXISTS public.placed_furniture CASCADE;
+DROP TABLE IF EXISTS public.house_layouts CASCADE;
 
 -- 16. 반려몽 캐릭터 테이블 (petmong_characters)
 CREATE TABLE IF NOT EXISTS petmong_characters (

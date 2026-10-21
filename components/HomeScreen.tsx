@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -10,10 +10,14 @@ import {
   Platform,
   TextInput,
   Alert,
+  Modal,
+  KeyboardAvoidingView,
 } from 'react-native';
-import { Plus, Send } from 'lucide-react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Plus, Send, Edit3, Sparkles, X } from 'lucide-react-native';
 import UserAvatar from './UserAvatar';
 import { colors, typography, commonStyles } from '../theme';
+import { supabase, isSupabaseReady } from '../lib/supabase';
 import { getEvolutionStage, getStageNameWithPet, getRequiredExpForLevel } from '../lib/petmongEvolution';
 import { stripEmojis } from '../utils/topics';
 import { getKoreanHoliday } from '../utils/koreanHolidays';
@@ -152,13 +156,79 @@ export default function HomeScreen({
     return `${now.getMonth() + 1}월 ${now.getDate()}일 ${days[now.getDay()]}`;
   }, []);
 
-  // 가족 명칭
-  const familyTitle = useMemo(() => {
-    if (currentUserProfile?.family_code) {
-      return `${currentUserProfile.family_code} 가족`;
+  // 가족 별칭(우리 집 이름) 직접 설정 상태 (기본값: '사랑하는 우리 가족')
+  const familyKey = currentUserProfile?.family_id || currentUserProfile?.family_code || 'default-family';
+  const nicknameStorageKey = `@famlink_family_nickname_${familyKey}`;
+  const [familyNickname, setFamilyNickname] = useState<string>('사랑하는 우리 가족');
+  const [nicknameModalVisible, setNicknameModalVisible] = useState<boolean>(false);
+  const [tempNickname, setTempNickname] = useState<string>('사랑하는 우리 가족');
+
+  const FAMILY_NICKNAME_PRESETS = useMemo(() => {
+    const petName = petmongCharacters?.[0]?.name || '몽이';
+    return [
+      '사랑하는 우리 가족',
+      '행복한 우리 집',
+      '웃음꽃 피는 우리 가족',
+      `다정한 ${petName}네 가족`,
+      '세상에서 제일 따뜻한 집',
+    ];
+  }, [petmongCharacters]);
+
+  useEffect(() => {
+    let isMounted = true;
+    AsyncStorage.getItem(nicknameStorageKey)
+      .then((saved) => {
+        if (isMounted && saved && saved.trim()) {
+          setFamilyNickname(saved.trim());
+        }
+      })
+      .catch(() => {});
+
+    if (isSupabaseReady && currentUserProfile?.family_id) {
+      supabase
+        .from('petmong_activities')
+        .select('notes, created_at')
+        .eq('family_id', currentUserProfile.family_id)
+        .eq('action_type', 'FAMILY_NICKNAME_UPDATE')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .then(({ data }) => {
+          const remoteName = data?.[0]?.notes?.trim();
+          if (isMounted && remoteName) {
+            setFamilyNickname(remoteName);
+            AsyncStorage.setItem(nicknameStorageKey, remoteName).catch(() => {});
+          }
+        })
+        .catch(() => {});
     }
-    return '김 가족';
-  }, [currentUserProfile?.family_code]);
+    return () => {
+      isMounted = false;
+    };
+  }, [nicknameStorageKey, currentUserProfile?.family_id]);
+
+  const handleSaveFamilyNickname = async () => {
+    const cleaned = tempNickname.trim() || '사랑하는 우리 가족';
+    setFamilyNickname(cleaned);
+    setNicknameModalVisible(false);
+    AsyncStorage.setItem(nicknameStorageKey, cleaned).catch(() => {});
+
+    if (isSupabaseReady && currentUserProfile?.family_id) {
+      supabase
+        .from('petmong_activities')
+        .insert({
+          family_id: currentUserProfile.family_id,
+          user_id: currentUserProfile.id,
+          action_type: 'FAMILY_NICKNAME_UPDATE',
+          notes: cleaned,
+          exp_gained: 0,
+          points_awarded: 0,
+        })
+        .then(() => {}, () => {});
+    }
+  };
+
+  // 가족 명칭
+  const familyTitle = familyNickname || '사랑하는 우리 가족';
 
   // 대표 활성 반려몽 캐릭터 (1가족 1공동 반려몽)
   const activePetmong = useMemo(() => {
@@ -381,9 +451,32 @@ export default function HomeScreen({
               >
                 <Text style={styles.dateText}>{todayFormattedKorean.toUpperCase()}</Text>
               </TouchableOpacity>
-              <Text style={styles.greetingTitle}>
-                안녕하세요,{'\n'}{familyTitle} 👋
-              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setTempNickname(familyTitle);
+                  setNicknameModalVisible(true);
+                }}
+                activeOpacity={0.75}
+                style={{ flexDirection: 'row', alignItems: 'flex-end', flexWrap: 'wrap' }}
+              >
+                <Text style={styles.greetingTitle}>
+                  안녕하세요,{'\n'}{familyTitle} 🏡
+                </Text>
+                <View
+                  style={{
+                    marginLeft: 6,
+                    marginBottom: 5,
+                    backgroundColor: 'rgba(255, 107, 71, 0.12)',
+                    paddingHorizontal: 7,
+                    paddingVertical: 3,
+                    borderRadius: 10,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                  }}
+                >
+                  <Edit3 size={11} color="#FF6B47" />
+                </View>
+              </TouchableOpacity>
             </View>
 
             {/* 실시간 포인트 뱃지 */}
@@ -836,6 +929,111 @@ export default function HomeScreen({
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* 우리 가족 별칭(애칭) 설정 모달 */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={nicknameModalVisible}
+        onRequestClose={() => setNicknameModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={commonStyles.modalOverlay}
+        >
+          <View style={commonStyles.modalBottomSheet}>
+            <View style={commonStyles.modalHeaderRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Sparkles size={18} color="#FF6B47" />
+                <Text style={commonStyles.modalHeaderTitle}>우리 가족 별칭 설정 🏡</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setNicknameModalVisible(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <X size={20} color="#8E8E93" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={{ fontSize: 12, color: '#78716C', marginBottom: 12, lineHeight: 17 }}>
+              홈 화면 상단에 표시될 우리 집만의 다정한 별칭을 지어보세요. 온 가족의 홈 화면에 함께 적용됩니다!
+            </Text>
+
+            <Text style={{ fontSize: 12, fontWeight: '700', color: '#78716C', marginBottom: 8 }}>
+              추천 별칭 빠르게 선택하기
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+              {FAMILY_NICKNAME_PRESETS.map((preset) => {
+                const isSelected = tempNickname.trim() === preset;
+                return (
+                  <TouchableOpacity
+                    key={preset}
+                    onPress={() => setTempNickname(preset)}
+                    activeOpacity={0.8}
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 7,
+                      borderRadius: 14,
+                      borderWidth: 1.5,
+                      borderColor: isSelected ? '#FF6B47' : '#F5F0E8',
+                      backgroundColor: isSelected ? '#FFF5F2' : '#FFFFFF',
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: isSelected ? '800' : '600',
+                        color: isSelected ? '#FF6B47' : '#78716C',
+                      }}
+                    >
+                      {preset}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Text style={{ fontSize: 12, fontWeight: '700', color: '#78716C', marginBottom: 6 }}>
+              직접 입력 (최대 16자)
+            </Text>
+            <TextInput
+              style={{
+                backgroundColor: '#FAF8F3',
+                borderRadius: 12,
+                padding: 12,
+                fontSize: 14,
+                color: '#1C1917',
+                borderWidth: 1,
+                borderColor: '#F5F0E8',
+                marginBottom: 14,
+              }}
+              placeholder="예: 행복한 김씨네 가족, 우당탕탕 우리집"
+              placeholderTextColor="#AEAEB2"
+              value={tempNickname}
+              onChangeText={setTempNickname}
+              maxLength={16}
+            />
+
+            <TouchableOpacity
+              style={{
+                flexDirection: 'row',
+                backgroundColor: '#FF6B47',
+                padding: 14,
+                borderRadius: 16,
+                justifyContent: 'center',
+                alignItems: 'center',
+              }}
+              onPress={handleSaveFamilyNickname}
+              activeOpacity={0.85}
+            >
+              <Sparkles size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={{ fontSize: 15, fontWeight: '700', color: '#FFFFFF' }}>
+                우리 가족 별칭 저장하기
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }

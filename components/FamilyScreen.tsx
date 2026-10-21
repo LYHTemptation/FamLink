@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -11,12 +11,15 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  Linking,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
-import { Users, Heart, Award, ShieldCheck, Smile, Edit3, LogOut, Sparkles, Check, Camera, Trash2, FileText } from 'lucide-react-native';
+import { Users, Heart, Award, ShieldCheck, Smile, Edit3, LogOut, Sparkles, Check, Camera, Trash2, FileText, Gift, MessageSquare, ExternalLink } from 'lucide-react-native';
 import { MoodIcon, MOOD_ITEMS, IconCopy, IconShare, IconClose, IconChevronRight } from './icons';
 import { colors, typography, commonStyles } from '../theme';
+import { supabase, isSupabaseReady } from '../lib/supabase';
 import UserAvatar from './UserAvatar';
 
 const EDIT_AVATAR_PRESETS = [
@@ -42,7 +45,15 @@ export interface FamilyScreenProps {
   onLogout?: () => void;
   onDeleteAccount?: () => void;
   onNavigateScreen?: (screen: string) => void;
+  onAwardPoints?: (amount: number, reason?: string) => Promise<boolean> | boolean | void;
 }
+
+const FEEDBACK_QUICK_CHIPS = [
+  '가족과 대화가 늘었어요 ❤️',
+  '반려몽 키우기가 귀여워요 🐾',
+  '스몰톡 질문이 따뜻해요 💬',
+  '포토북 제작이 기대돼요 📖',
+];
 
 export default function FamilyScreen({
   familyCode,
@@ -54,10 +65,121 @@ export default function FamilyScreen({
   onLogout,
   onDeleteAccount,
   onNavigateScreen,
+  onAwardPoints,
 }: FamilyScreenProps) {
   const [modalVisible, setModalVisible] = useState(false);
   const [policyModalVisible, setPolicyModalVisible] = useState(false);
   const [activePolicyTab, setActivePolicyTab] = useState('terms'); // 'terms' | 'privacy'
+  const [feedbackModalVisible, setFeedbackModalVisible] = useState(false);
+  const [feedbackText, setFeedbackText] = useState('');
+  const [selectedFeedbackChip, setSelectedFeedbackChip] = useState<string>(FEEDBACK_QUICK_CHIPS[0]);
+  const [hasClaimedFeedbackReward, setHasClaimedFeedbackReward] = useState(false);
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
+
+  const familyKey = currentUserProfile?.family_id || familyCode || 'default-family';
+  const feedbackStorageKey = `@famlink_feedback_reward_1000p_${familyKey}`;
+
+  useEffect(() => {
+    let isMounted = true;
+    AsyncStorage.getItem(feedbackStorageKey)
+      .then((val) => {
+        if (isMounted && val === 'true') {
+          setHasClaimedFeedbackReward(true);
+        }
+      })
+      .catch(() => {});
+
+    if (isSupabaseReady && currentUserProfile?.family_id) {
+      supabase
+        .from('petmong_activities')
+        .select('id')
+        .eq('family_id', currentUserProfile.family_id)
+        .eq('action_type', 'FEEDBACK_REWARD_1000P')
+        .limit(1)
+        .then(({ data }) => {
+          if (isMounted && Array.isArray(data) && data.length > 0) {
+            setHasClaimedFeedbackReward(true);
+            AsyncStorage.setItem(feedbackStorageKey, 'true').catch(() => {});
+          }
+        })
+        .catch(() => {});
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [feedbackStorageKey, currentUserProfile?.family_id]);
+
+  const handleSubmitFeedback = async (openStoreLink: boolean = false) => {
+    const finalNote = [selectedFeedbackChip, feedbackText.trim()].filter(Boolean).join(' | ');
+    if (!finalNote) {
+      Alert.alert('알림', '응원 한마디나 피드백 항목을 선택해 주세요.');
+      return;
+    }
+
+    setIsSubmittingFeedback(true);
+    try {
+      // 스토어 이동 선택 시 플랫폼별 스토어 URL 연결 시도
+      if (openStoreLink) {
+        const storeUrl =
+          Platform.OS === 'android'
+            ? 'market://details?id=com.yon_know.familymessenger'
+            : 'https://apps.apple.com/kr/search?term=FamLink';
+        Linking.openURL(storeUrl).catch(() => {});
+      }
+
+      if (!hasClaimedFeedbackReward) {
+        await AsyncStorage.setItem(feedbackStorageKey, 'true');
+        setHasClaimedFeedbackReward(true);
+
+        if (isSupabaseReady && currentUserProfile?.family_id) {
+          await supabase
+            .from('petmong_activities')
+            .insert({
+              family_id: currentUserProfile.family_id,
+              user_id: currentUserProfile.id,
+              action_type: 'FEEDBACK_REWARD_1000P',
+              notes: `[피드백] ${finalNote}`,
+              exp_gained: 0,
+              points_awarded: 1000,
+            })
+            .then(() => {}, () => {});
+        }
+
+        if (onAwardPoints) {
+          await onAwardPoints(1000, '소중한 피드백 보내기 (+1,000P)');
+        }
+
+        setFeedbackModalVisible(false);
+        setFeedbackText('');
+        Alert.alert(
+          '소중한 피드백 감사합니다! 🎁',
+          '보내주신 따뜻한 의견을 바탕으로 더 좋은 FamLink를 만들어갈게요.\n\n우리 가족방에 감사 선물로 +1,000 포인트가 즉시 적립되었습니다!'
+        );
+      } else {
+        if (isSupabaseReady && currentUserProfile?.family_id) {
+          await supabase
+            .from('petmong_activities')
+            .insert({
+              family_id: currentUserProfile.family_id,
+              user_id: currentUserProfile.id,
+              action_type: 'USER_FEEDBACK_NOTE',
+              notes: `[추가피드백] ${finalNote}`,
+              exp_gained: 0,
+              points_awarded: 0,
+            })
+            .then(() => {}, () => {});
+        }
+        setFeedbackModalVisible(false);
+        setFeedbackText('');
+        Alert.alert(
+          '피드백 전달 완료 💌',
+          '소중한 의견이 FamLink 팀에 잘 전달되었습니다! (1,000P 첫 피드백 보상은 이미 우리 가족방에 지급 완료되었습니다 ✨)'
+        );
+      }
+    } finally {
+      setIsSubmittingFeedback(false);
+    }
+  };
   const [editName, setEditName] = useState(currentUserProfile?.name || '');
   const [editRole, setEditRole] = useState(currentUserProfile?.role || '');
   const [selectedAvatar, setSelectedAvatar] = useState(currentUserProfile?.avatar || '👦');
@@ -255,6 +377,38 @@ export default function FamilyScreen({
         </View>
       </TouchableOpacity>
 
+      {/* 소중한 피드백 보내기 (+1,000P 1회 지급 이벤트 배너) */}
+      <TouchableOpacity
+        style={styles.inviteGuideCard}
+        onPress={() => setFeedbackModalVisible(true)}
+        activeOpacity={0.85}
+      >
+        <View style={[styles.guideIconWrap, { backgroundColor: '#FFF5F2' }]}>
+          <Gift size={22} color="#FF6B47" />
+        </View>
+
+        <View style={styles.guideTextCol}>
+          <View style={styles.guideTitleRow}>
+            <Text style={styles.guideTitle}>소중한 피드백 보내기</Text>
+            <View style={styles.guideTag}>
+              <Sparkles size={10} color="#FF6B47" style={{ marginRight: 2 }} />
+              <Text style={styles.guideTagText}>
+                {hasClaimedFeedbackReward ? '참여 완료 ✓' : '+1,000P 선물'}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.guideDesc}>
+            {hasClaimedFeedbackReward
+              ? '우리 가족의 따뜻한 응원으로 +1,000P 선물이 적립되었습니다! 언제든 의견을 더 남겨주세요.'
+              : 'FamLink 사용 소감이나 응원 메시지를 보내주시면 우리 가족방에 1,000 포인트를 즉시 선물해 드려요.'}
+          </Text>
+        </View>
+
+        <View style={styles.guideActionBtn}>
+          <IconChevronRight size={16} color="#FF6B47" />
+        </View>
+      </TouchableOpacity>
+
       {/* Member List Section */}
       <View style={styles.sectionCard}>
         <View style={styles.sectionHeader}>
@@ -347,6 +501,22 @@ export default function FamilyScreen({
 
         {/* 2. 약관 및 운영 정책 전용 페이지 바로가기 (리스트형) */}
         <View style={styles.accountPolicyBox}>
+          <TouchableOpacity
+            style={styles.accountPolicyRow}
+            onPress={() => setFeedbackModalVisible(true)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.accountPolicyLeft}>
+              <MessageSquare size={14} color="#FF6B47" style={{ marginRight: 8 }} />
+              <Text style={[styles.accountPolicyTitle, { color: '#1C1917', fontWeight: '700' }]}>
+                소중한 피드백 보내기 {hasClaimedFeedbackReward ? '(참여 완료)' : '(+1,000P)'}
+              </Text>
+            </View>
+            <IconChevronRight size={14} color="#FF6B47" />
+          </TouchableOpacity>
+
+          <View style={styles.accountPolicyDivider} />
+
           <TouchableOpacity
             style={styles.accountPolicyRow}
             onPress={() => {
@@ -732,6 +902,131 @@ export default function FamilyScreen({
             <TouchableOpacity style={styles.modalConfirmBtn} onPress={handleSaveProfile} activeOpacity={0.85}>
               <Sparkles size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
               <Text style={styles.modalConfirmBtnText}>프로필 저장 완료</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* 소중한 피드백 보내기 (+1,000P 선물) 모달 */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={feedbackModalVisible}
+        onRequestClose={() => setFeedbackModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalView}>
+            <View style={styles.modalHeaderRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Gift size={18} color="#FF6B47" />
+                <Text style={styles.modalHeader}>소중한 피드백 보내기</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setFeedbackModalVisible(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <IconClose size={20} color="#8E8E93" />
+              </TouchableOpacity>
+            </View>
+
+            <View
+              style={{
+                backgroundColor: '#FFF5F2',
+                borderRadius: 14,
+                padding: 12,
+                borderWidth: 1,
+                borderColor: '#FFE8E0',
+                marginBottom: 12,
+              }}
+            >
+              <Text style={{ fontSize: 13, fontWeight: '800', color: '#FF6B47', marginBottom: 4 }}>
+                {hasClaimedFeedbackReward
+                  ? '✨ 우리 가족 첫 피드백 선물(+1,000P) 지급 완료'
+                  : '🎁 우리 가족 첫 피드백 감사 선물: +1,000 포인트 즉시 지급!'}
+              </Text>
+              <Text style={{ fontSize: 12, color: '#78716C', lineHeight: 17 }}>
+                가족분들의 따뜻한 응원 한마디와 개선 의견이 FamLink를 더욱 다정한 공간으로 만듭니다.
+              </Text>
+            </View>
+
+            <Text style={styles.modalLabel}>어떤 점이 가장 좋으셨나요?</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+              {FEEDBACK_QUICK_CHIPS.map((chip) => {
+                const isSelected = selectedFeedbackChip === chip;
+                return (
+                  <TouchableOpacity
+                    key={chip}
+                    onPress={() => setSelectedFeedbackChip(chip)}
+                    activeOpacity={0.8}
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 8,
+                      borderRadius: 14,
+                      borderWidth: 1.5,
+                      borderColor: isSelected ? '#FF6B47' : '#F5F0E8',
+                      backgroundColor: isSelected ? '#FFF5F2' : '#FFFFFF',
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontWeight: isSelected ? '800' : '600',
+                        color: isSelected ? '#FF6B47' : '#78716C',
+                      }}
+                    >
+                      {chip}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Text style={styles.modalLabel}>자유로운 응원 또는 개선 의견 (선택)</Text>
+            <TextInput
+              style={[styles.modalInput, { minHeight: 76, textAlignVertical: 'top' }]}
+              placeholder="더 추가되었으면 하는 기능이나 따뜻한 응원 한마디를 남겨주세요!"
+              placeholderTextColor="#AEAEB2"
+              value={feedbackText}
+              onChangeText={setFeedbackText}
+              multiline
+              maxLength={200}
+            />
+
+            <TouchableOpacity
+              style={[styles.modalConfirmBtn, isSubmittingFeedback && { opacity: 0.6 }]}
+              onPress={() => handleSubmitFeedback(false)}
+              disabled={isSubmittingFeedback}
+              activeOpacity={0.85}
+            >
+              <Sparkles size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={styles.modalConfirmBtnText}>
+                {hasClaimedFeedbackReward ? '소중한 피드백 전달하기' : '피드백 보내고 +1,000P 즉시 받기'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'center',
+                alignItems: 'center',
+                paddingVertical: 11,
+                marginTop: 6,
+                borderRadius: 14,
+                backgroundColor: '#FAF8F3',
+                borderWidth: 1,
+                borderColor: '#F5F0E8',
+              }}
+              onPress={() => handleSubmitFeedback(true)}
+              disabled={isSubmittingFeedback}
+              activeOpacity={0.8}
+            >
+              <ExternalLink size={14} color="#78716C" style={{ marginRight: 6 }} />
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#78716C' }}>
+                스토어에서도 응원 남기기 {hasClaimedFeedbackReward ? '' : '(+1,000P 적립)'}
+              </Text>
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>

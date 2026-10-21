@@ -5,6 +5,8 @@
  * 권차(Volume) 목록 조회, 실물 도서 발주(`photobook_orders`) 로직을 전담합니다.
  */
 
+import { Image, Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import type {
   PhotobookSyncPayload,
@@ -17,6 +19,148 @@ export interface PhotobookVolumeMeta {
   label: string;
   period: string;
   desc: string;
+}
+
+// =========================================================
+// ⚡ 인메모리 즉시 렌더링 캐시 & 안전한 AsyncStorage 동기화
+// =========================================================
+const photobookVolumeMemoryCache = new Map<string, PhotobookSyncPayload>();
+const photobookVolumesListMemoryCache = new Map<
+  string,
+  Array<{ volume_id: string; title?: string }>
+>();
+const orderedVolumesMemoryCache = new Map<string, string[]>();
+
+const MAX_SAFE_ASYNC_STORAGE_BYTES = 1800000; // Android CursorWindow 2MB 한계 방어용 (약 1.8MB)
+
+export function getPhotobookStorageKey(familyId: string, volumeId: string = 'vol-1'): string {
+  return `FAMLINK_PHOTOBOOK_SYNC_${familyId}_${volumeId || 'vol-1'}`;
+}
+
+export function getCachedPhotobookVolume(
+  familyId?: string | null,
+  volumeId: string = 'vol-1'
+): PhotobookSyncPayload | null {
+  if (!familyId || familyId === 'default-family') return null;
+  return photobookVolumeMemoryCache.get(getPhotobookStorageKey(familyId, volumeId)) || null;
+}
+
+export function getCachedPhotobookVolumesList(
+  familyId?: string | null
+): Array<{ volume_id: string; title?: string }> | null {
+  if (!familyId || familyId === 'default-family') return null;
+  return photobookVolumesListMemoryCache.get(familyId) || null;
+}
+
+export function getCachedOrderedVolumeIds(familyId?: string | null): string[] | null {
+  if (!familyId || familyId === 'default-family') return null;
+  return orderedVolumesMemoryCache.get(familyId) || null;
+}
+
+/**
+ * 포토북 내 원격(http/https) 이미지 URL들을 모바일 네이티브 이미지 캐시에 백그라운드 프리페치
+ */
+function warmNativePhotobookImages(payload?: PhotobookSyncPayload | null): void {
+  if (!payload) return;
+  try {
+    const urls = new Set<string>();
+    if (
+      typeof payload.coverPhoto === 'string' &&
+      (payload.coverPhoto.startsWith('http://') || payload.coverPhoto.startsWith('https://'))
+    ) {
+      urls.add(payload.coverPhoto);
+    }
+    if (payload.spreadPhotos && typeof payload.spreadPhotos === 'object') {
+      Object.values(payload.spreadPhotos).forEach((arr) => {
+        if (Array.isArray(arr)) {
+          arr.forEach((uri) => {
+            if (typeof uri === 'string' && (uri.startsWith('http://') || uri.startsWith('https://'))) {
+              urls.add(uri);
+            }
+          });
+        }
+      });
+    }
+    urls.forEach((url) => {
+      Image.prefetch(url).catch(() => {});
+    });
+  } catch (_) {}
+}
+
+/**
+ * 인메모리 캐시 갱신 및 모바일 AsyncStorage 안전 저장 (2MB 초과 시 경량화 폴백)
+ */
+export function setCachedPhotobookVolume(
+  familyId: string,
+  volumeId: string,
+  payload: PhotobookSyncPayload
+): void {
+  if (!familyId || familyId === 'default-family' || !payload) return;
+  const key = getPhotobookStorageKey(familyId, volumeId || 'vol-1');
+  const existing = photobookVolumeMemoryCache.get(key);
+  if (existing?.updatedAt && payload.updatedAt && payload.updatedAt < existing.updatedAt) {
+    return;
+  }
+  photobookVolumeMemoryCache.set(key, payload);
+  warmNativePhotobookImages(payload);
+
+  try {
+    const serialized = JSON.stringify(payload);
+    if (Platform.OS === 'android' && serialized.length > MAX_SAFE_ASYNC_STORAGE_BYTES) {
+      // Android SQLite CursorWindow(2MB) 초과 방어: 대용량 data:image Base64를 제외한 레이아웃/표지/텍스트 우선 캐싱
+      const slimSpreadPhotos: Record<string | number, string[]> = {};
+      if (payload.spreadPhotos) {
+        Object.entries(payload.spreadPhotos).forEach(([k, list]) => {
+          if (Array.isArray(list)) {
+            slimSpreadPhotos[k] = list.filter((u) => typeof u === 'string' && !u.startsWith('data:image'));
+          }
+        });
+      }
+      const slimPayload: PhotobookSyncPayload = {
+        ...payload,
+        coverPhoto:
+          typeof payload.coverPhoto === 'string' && payload.coverPhoto.length > 250000
+            ? null
+            : payload.coverPhoto,
+        spreadPhotos: slimSpreadPhotos,
+        customGalleryPhotos: (payload.customGalleryPhotos || []).filter(
+          (u) => typeof u === 'string' && !u.startsWith('data:image')
+        ),
+      };
+      AsyncStorage.setItem(key, JSON.stringify(slimPayload)).catch(() => {});
+      return;
+    }
+    AsyncStorage.setItem(key, serialized).catch(() => {});
+  } catch (_) {}
+}
+
+/**
+ * 앱 시작 시 백그라운드에서 가족 대표 포토북(vol-1)과 권차 메타데이터를 미리 메모리에 적재합니다.
+ */
+export async function preloadFamilyPhotobookData(familyId: string): Promise<void> {
+  if (!familyId || familyId === 'default-family') return;
+  const vol1Key = getPhotobookStorageKey(familyId, 'vol-1');
+
+  // 1. 로컬 AsyncStorage에 저장된 vol-1 캐시를 인메모리에 즉시 복원
+  if (!photobookVolumeMemoryCache.has(vol1Key)) {
+    try {
+      const saved = await AsyncStorage.getItem(vol1Key);
+      if (saved) {
+        const parsed = JSON.parse(saved) as PhotobookSyncPayload;
+        if (parsed && !photobookVolumeMemoryCache.has(vol1Key)) {
+          photobookVolumeMemoryCache.set(vol1Key, parsed);
+          warmNativePhotobookImages(parsed);
+        }
+      }
+    } catch (_) {}
+  }
+
+  // 2. 원격 Supabase DB에서 최신 포토북(vol-1), 권차 목록, 주문 잠금 목록을 병렬 프리페치
+  await Promise.all([
+    fetchFamilyPhotobookVolume(familyId, 'vol-1'),
+    fetchFamilyPhotobookVolumes(familyId),
+    fetchOrderedVolumeIds(familyId),
+  ]).catch(() => {});
 }
 
 /**
@@ -60,6 +204,8 @@ export async function saveFamilyPhotobookToDB(params: {
   const { familyId, volumeId, payload, updatedBy } = params;
   if (!familyId || familyId === 'default-family') return;
   if (payload.isLocked) return;
+
+  setCachedPhotobookVolume(familyId, volumeId || 'vol-1', payload);
 
   Promise.resolve(
     supabase
@@ -122,24 +268,27 @@ export async function saveFamilyPhotobookToDB(params: {
 }
 
 /**
- * 특정 권차(volume_id) 포토북 원격 데이터 단건 조회
+ * 특정 권차(volume_id) 포토북 원격 데이터 단건 조회 (조회 즉시 인메모리 & 로컬 캐시 갱신)
  */
 export async function fetchFamilyPhotobookVolume(
   familyId: string,
   volumeId: string
 ): Promise<PhotobookSyncPayload | null> {
   if (!familyId || familyId === 'default-family') return null;
+  const targetVol = volumeId || 'vol-1';
 
   try {
     const { data, error } = await supabase
       .from('family_photobooks')
       .select('*')
       .eq('family_id', familyId)
-      .eq('volume_id', volumeId || 'vol-1')
+      .eq('volume_id', targetVol)
       .maybeSingle();
 
     if (!error && data) {
-      return mapPhotobookRowToState(data);
+      const mapped = mapPhotobookRowToState(data);
+      setCachedPhotobookVolume(familyId, targetVol, mapped);
+      return mapped;
     }
   } catch (_) {}
   return null;
@@ -159,9 +308,13 @@ export async function fetchFamilyPhotobookVolumes(
       .select('volume_id, title')
       .eq('family_id', familyId);
 
-    return Array.isArray(data) ? data : [];
+    const list = Array.isArray(data) ? data : [];
+    if (list.length > 0) {
+      photobookVolumesListMemoryCache.set(familyId, list);
+    }
+    return list;
   } catch (_) {
-    return [];
+    return photobookVolumesListMemoryCache.get(familyId) || [];
   }
 }
 
@@ -180,12 +333,14 @@ export async function fetchOrderedVolumeIds(
       .not('status', 'eq', 'cancelled');
 
     if (!error && Array.isArray(data)) {
-      return Array.from(new Set(data.map((r: any) => r.volume_id).filter(Boolean)));
+      const ids = Array.from(new Set(data.map((r: any) => r.volume_id).filter(Boolean)));
+      orderedVolumesMemoryCache.set(familyId, ids);
+      return ids;
     }
   } catch (err) {
     console.warn('[photobookService] fetchOrderedVolumeIds error:', err);
   }
-  return [];
+  return orderedVolumesMemoryCache.get(familyId) || [];
 }
 
 /**

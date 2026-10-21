@@ -228,6 +228,7 @@ export interface InteriorScreenProps {
   familyId?: string | null;
   petmongCharacters?: PetmongCharacter[];
   setPetmongCharacters?: React.Dispatch<React.SetStateAction<PetmongCharacter[]>> | ((chars: any) => void);
+  isPetmongLoading?: boolean;
   onAwardExp?: (userIdOrExp: any, amount?: number, reason?: string) => Promise<void> | void;
   familyMembers?: FamilyMember[];
   petVitals?: PetVitals;
@@ -270,6 +271,7 @@ export default function InteriorScreen({
   familyId,
   petmongCharacters = [],
   setPetmongCharacters,
+  isPetmongLoading = false,
   onAwardExp,
   familyMembers = [],
   petVitals: propPetVitals,
@@ -1551,7 +1553,7 @@ export default function InteriorScreen({
       {/* Main Fullscreen Interactive Room Game Engine */}
       {displayedCharacter ? (
         <PetmongGameEngine
-          character={displayedCharacter}
+          character={effectiveImageUrl ? { ...displayedCharacter, image_url: effectiveImageUrl } : displayedCharacter}
           owner={displayedOwner}
           isVisiting={false}
           visitorCharacter={myCharacter}
@@ -1579,8 +1581,8 @@ export default function InteriorScreen({
           smallTalkState={smallTalkState}
           onNavigateScreen={onNavigateScreen}
         />
-      ) : (
-        /* Empty Room Banner */
+      ) : isPetmongLoading ? null : (
+        /* Empty Room Banner (Only shown after initial DB/cache check confirms no Petmong exists) */
         <View style={styles.fullscreenOverlayCanvas} pointerEvents="box-none">
           <View style={styles.createPromptBanner}>
             <Text style={styles.createPromptTitle}>

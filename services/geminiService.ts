@@ -15,6 +15,7 @@ import {
 } from '../lib/aiSystemPrompts';
 import { supabase, isSupabaseReady } from '../lib/supabase';
 import { PetmongStylePreset } from '../types/domain';
+import { detectArchetype, PetmongArchetype } from '../lib/petmongEvolution';
 
 export const GEMINI_TEXT_MODEL = 'gemini-3.8-flash';
 export const GEMINI_TEXT_FALLBACK_MODELS = [
@@ -41,14 +42,12 @@ export function isGeminiConfigured(): boolean {
 
 /**
  * 보안 일원화 호출기:
- * 1순위: 로컬 개발 키(EXPO_PUBLIC_GEMINI_API_KEY)가 없는 배포 환경에서는 Supabase Edge Function('gemini-proxy')을 통해 서버 측 비밀키로 안전하게 호출
- * 2순위: 로컬 개발 환경(.env) 또는 프록시 미배포 시 클라이언트 키로 Fallback 호출
+ * 1순위: Supabase Edge Function('gemini-proxy')을 통해 서버 측 비밀키(GEMINI_API_KEY Secret)로 안전하게 프록시 호출
+ * 2순위: 로컬 오프라인/프록시 미연결 시 로컬 환경변수(EXPO_PUBLIC_GEMINI_API_KEY)가 있을 때만 Fallback 호출
  */
 async function callGeminiModel(model: string, payload: Record<string, any>): Promise<any | null> {
-  const localApiKey = getGeminiApiKey();
-
-  // 1. 배포 환경 (클라이언트에 키가 숨겨진 경우) -> Supabase Edge Function 호출
-  if (!localApiKey && isSupabaseReady) {
+  // 1. Supabase Edge Function ('gemini-proxy') 최우선 호출 — 모바일 앱 바이너리에 API 키 비노출 보장
+  if (isSupabaseReady) {
     try {
       const { data, error } = await supabase.functions.invoke('gemini-proxy', {
         body: { model, payload },
@@ -59,10 +58,10 @@ async function callGeminiModel(model: string, payload: Record<string, any>): Pro
     } catch (proxyErr) {
       console.warn('[geminiService] Edge Function proxy note:', proxyErr);
     }
-    return null;
   }
 
-  // 2. 로컬 개발 환경 키가 있는 경우 직접 호출 (실패 시 Edge Function 백업 시도)
+  // 2. 프록시 미작동 또는 로컬 단독 테스트 환경에서 로컬 키가 있는 경우에만 Fallback 호출
+  const localApiKey = getGeminiApiKey();
   if (localApiKey) {
     try {
       const resp = await fetch(
@@ -77,18 +76,7 @@ async function callGeminiModel(model: string, payload: Record<string, any>): Pro
         return await resp.json();
       }
     } catch (err) {
-      console.warn('[geminiService] Direct fetch error, trying proxy fallback:', err);
-    }
-
-    if (isSupabaseReady) {
-      try {
-        const { data, error } = await supabase.functions.invoke('gemini-proxy', {
-          body: { model, payload },
-        });
-        if (!error && data && !data.error) {
-          return data;
-        }
-      } catch (_) {}
+      console.warn('[geminiService] Direct fetch fallback error:', err);
     }
   }
 
@@ -267,22 +255,15 @@ export async function generatePetmongMascotFromPhoto(params: {
   try {
     const cleanBase64 = base64Photo.replace(/^data:image\/\w+;base64,/, '');
 
-    // Step 1: Vision 분석 - 피사체(인물, 아기, 반려동물)의 매력과 본질을 객관적·생생하게 추출
+    // Step 1: Vision 분석 - 피사체(인물, 아기, 반려동물, 소품)의 매력과 본질, 12대 종족 원형을 객관적·생생하게 추출
     const visualFeatureDescription = await analyzeImageWithGeminiVision(
       cleanBase64,
       'image/jpeg',
-      "Analyze this photo in depth. Identify the subject (person, child, or pet) and capture their most distinctive and charming visual essence: facial expression, eye sparkle and shape, warm smile, hairstyle or ears/fur texture, signature accessories (like glasses, hats), and overall emotional aura. Describe them in 2-3 vivid sentences so they can be faithfully and artistically transformed into a stylized character."
+      "Analyze this photo in depth. 1) Identify the subject's biological/visual lineage (e.g. canine, feline, rodent, large_beast, avian, aquatic, dinosaur, dragon_mythical, fairy_insect, plant_nature, human, or mecha_object). 2) Describe their signature colors, facial features, eyes, smile/expression, coat/skin/texture, and distinctive accessories in 2-3 vivid sentences so they can be faithfully transformed into a stylized character."
     );
 
     if (visualFeatureDescription) {
-      const lower = visualFeatureDescription.toLowerCase();
-      if (lower.includes('dog') || lower.includes('puppy') || lower.includes('canine')) detectedSpecies = 'canine';
-      else if (lower.includes('cat') || lower.includes('kitten') || lower.includes('feline')) detectedSpecies = 'feline';
-      else if (lower.includes('rabbit') || lower.includes('bunny')) detectedSpecies = 'rabbit';
-      else if (lower.includes('bear') || lower.includes('panda')) detectedSpecies = 'bear';
-      else if (lower.includes('bird') || lower.includes('chick')) detectedSpecies = 'bird';
-      else if (lower.includes('fox')) detectedSpecies = 'fox';
-      else if (lower.includes('hamster') || lower.includes('rodent')) detectedSpecies = 'rodent';
+      detectedSpecies = detectArchetype('', '', visualFeatureDescription);
     }
 
     // Step 2: 멀티모달 Image-to-Image 캐릭터 생성 (스타일 프리셋 분기)
@@ -317,6 +298,17 @@ export async function generatePetmongMascotFromPhoto(params: {
 
     const styleInfo = STYLE_PROMPTS[stylePreset] || STYLE_PROMPTS.cozy_creature;
 
+    const isStage1Baby = targetStageNum === 1;
+    const stage1BabyRequirement = isStage1Baby
+      ? `\n6. NEWBORN BABY INFANT REQUIREMENT (Stage 1 꼬물이 시절):
+Regardless of whether the input photo shows an adult animal, person, or object, you MUST transform them into a TRUE NEWBORN INFANT BABY VERSION of that subject!
+- Chubby baby cheeks, huge watery innocent baby eyes, 1.0 to 1.2 head-to-body newborn baby proportions.
+- If animal/feline/canine/beast: Newborn baby kitten/puppy, lying on its round tummy or crawling on floor with tiny paws, soft fluffy downy baby fur, tiny folded ears.
+- If avian/dino/dragon: Newly hatched fluffy chick or baby hatchling crawling out with stubby limbs.
+- If human: Cute crawling baby infant in onesie/diaper kicking tiny feet.
+- If mecha/object: Adorable palm-sized nano-baby sprite with round casing and blinking LED eyes.`
+      : '';
+
     const finalPrompt = `IMAGE-TO-IMAGE CHARACTER MASCOT GENERATION:
 Transform the uploaded photo into an irresistibly charming, lovable family character (Stage ${targetStageNum}).
 
@@ -328,7 +320,7 @@ Core Design Instructions:
 2. Personality & Mood: Radiate an adorable ${trait}.
 3. Aesthetics: ${styleInfo.prompt}
 4. Framing & Composition: Prominent close-up full-body framing. The character must fill 85% to 90% of the canvas frame with minimal padding, beautifully centered and clearly visible without excessive empty margins.
-5. Plain solid pure white background (#FFFFFF) only: Zero background elements, no scenery, no borders, NEVER draw checkerboard grid, NEVER draw checkered tiles or fake transparency squares. Centered standalone character on clean pure white canvas.`;
+5. Plain solid pure white background (#FFFFFF) only: Zero background elements, no scenery, no borders, NEVER draw checkerboard grid, NEVER draw checkered tiles or fake transparency squares. Centered standalone character on clean pure white canvas.${stage1BabyRequirement}`;
 
     generatedImageUrl = await generateImageWithGeminiModels([
       { text: finalPrompt },

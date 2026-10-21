@@ -69,6 +69,10 @@ import {
   fetchFamilyPhotobookVolumes,
   fetchOrderedVolumeIds,
   createPhotobookOrderInDB,
+  getCachedPhotobookVolume,
+  getCachedPhotobookVolumesList,
+  getCachedOrderedVolumeIds,
+  setCachedPhotobookVolume,
 } from '../services/photobookService';
 import {
   openAddressSearch,
@@ -136,23 +140,57 @@ export default function PhotobookStudioScreen({
   const screenWidth = windowWidth || Dimensions.get('window').width;
   const isSmallScreen = screenWidth < 380;
 
+  // 앱 시작 시 백그라운드 프리로드된 인메모리 캐시가 있으면 첫 프레임(0ms)부터 즉시 주입
+  const initialFamilyId = currentUserProfile?.family_id || currentUserProfile?.familyCode || 'default-family';
+  const initialCachedVol = useMemo(
+    () => getCachedPhotobookVolume(initialFamilyId, 'vol-1'),
+    [initialFamilyId]
+  );
+
   // 1. 볼륨 선택 (6개월 단위 누적 볼륨제: Vol. 1, Vol. 2, Vol. 3...)
   const [selectedVolume, setSelectedVolume] = useState('vol-1');
-  const [volumeList, setVolumeList] = useState(VOLUME_OPTIONS);
+  const [volumeList, setVolumeList] = useState(() => {
+    const cachedRows = getCachedPhotobookVolumesList(initialFamilyId);
+    if (!cachedRows || cachedRows.length === 0) return VOLUME_OPTIONS;
+    const existingIds = new Set(VOLUME_OPTIONS.map(v => v.id));
+    const additions: any[] = [];
+    cachedRows.forEach((row: any) => {
+      if (row.volume_id && !existingIds.has(row.volume_id)) {
+        const numMatch = row.volume_id.match(/\d+/);
+        const num = numMatch ? numMatch[0] : (VOLUME_OPTIONS.length + additions.length + 1);
+        additions.push({
+          id: row.volume_id,
+          title: `Vol. ${num}`,
+          label: `제${num}권`,
+          period: `${num * 180}일의 기록`,
+          desc: row.title || `우리 가족 ${num}번째 이야기`,
+        });
+      }
+    });
+    return additions.length > 0 ? [...VOLUME_OPTIONS, ...additions] : VOLUME_OPTIONS;
+  });
   const [volumePickerModalVisible, setVolumePickerModalVisible] = useState(false);
   const currentVolObj = volumeList.find(v => v.id === selectedVolume) || volumeList[0] || VOLUME_OPTIONS[0];
 
   // 실물 주문 완료(발간/인쇄 중)되어 수정 잠금 처리된 권차 목록
-  const [orderedVolumeIds, setOrderedVolumeIds] = useState<string[]>([]);
+  const [orderedVolumeIds, setOrderedVolumeIds] = useState<string[]>(
+    () => getCachedOrderedVolumeIds(initialFamilyId) || []
+  );
   const isVolumeLocked = useMemo(() => orderedVolumeIds.includes(selectedVolume), [orderedVolumeIds, selectedVolume]);
 
-  const [selectedThemeId, setSelectedThemeId] = useState('linen');
+  const [selectedThemeId, setSelectedThemeId] = useState<string>(
+    () => initialCachedVol?.selectedThemeId || 'linen'
+  );
   const currentTheme = STUDIO_THEMES.find(t => t.id === selectedThemeId) || STUDIO_THEMES[0];
   const [themePickerModalVisible, setThemePickerModalVisible] = useState(false);
 
   // 폰트 & 크기 커스텀 상태
-  const [bookFontFamily, setBookFontFamily] = useState('serif'); // 'serif' | 'sans' | 'handwriting'
-  const [bookFontSize, setBookFontSize] = useState('medium'); // 'small' | 'medium' | 'large'
+  const [bookFontFamily, setBookFontFamily] = useState<string>(
+    () => initialCachedVol?.bookFontFamily || 'serif'
+  ); // 'serif' | 'sans' | 'handwriting'
+  const [bookFontSize, setBookFontSize] = useState<string>(
+    () => initialCachedVol?.bookFontSize || 'medium'
+  ); // 'small' | 'medium' | 'large'
   const [fontPickerModalVisible, setFontPickerModalVisible] = useState(false);
   const [pagePickerModalVisible, setPagePickerModalVisible] = useState(false);
 
@@ -174,7 +212,9 @@ export default function PhotobookStudioScreen({
   }, [bookFontSize]);
 
   // 3대 포맷 체계 상태: { [`${sIdx}_${side}`]: 'photo' | 'smalltalk' | 'hybrid' }
-  const [pageFormats, setPageFormats] = useState<Record<string, string>>({});
+  const [pageFormats, setPageFormats] = useState<Record<string, string>>(
+    () => initialCachedVol?.pageFormats || {}
+  );
 
   const getPageFormat = (sIdx: number, side: string) => {
     const key = `${sIdx}_${side}`;
@@ -196,11 +236,24 @@ export default function PhotobookStudioScreen({
   };
 
   // 2. 도서 기본 정보 & 겉표지 커스텀 상태
-  const [bookTitle, setBookTitle] = useState('우리 가족의 첫 번째 이야기 (Vol. 1)');
-  const [bookSubtitle, setBookSubtitle] = useState('사소한 일상이 모여 만든 가장 눈부신 기적');
-  const [coverSignature, setCoverSignature] = useState('우리 가족의 따뜻한 이야기');
-  const [coverPhoto, setCoverPhoto] = useState<string | null>(null); // 커스텀 겉표지 대표 사진
-  const [coverStyle, setCoverStyle] = useState('classic'); // 'classic' (액자형) | 'full' (화보형) | 'minimal' (감성 타이포)
+  const [bookTitle, setBookTitle] = useState<string>(
+    () => initialCachedVol?.bookTitle || '우리 가족의 첫 번째 이야기 (Vol. 1)'
+  );
+  const [bookSubtitle, setBookSubtitle] = useState<string>(
+    () => initialCachedVol?.bookSubtitle || '사소한 일상이 모여 만든 가장 눈부신 기적'
+  );
+  const [coverSignature, setCoverSignature] = useState<string>(
+    () => initialCachedVol?.coverSignature || '우리 가족의 따뜻한 이야기'
+  );
+  const [coverPhoto, setCoverPhoto] = useState<string | null>(() => {
+    const raw = initialCachedVol?.coverPhoto;
+    if (!raw) return null;
+    if (Platform.OS === 'web' && typeof raw === 'string' && raw.startsWith('file://')) return null;
+    return raw;
+  }); // 커스텀 겉표지 대표 사진
+  const [coverStyle, setCoverStyle] = useState<string>(
+    () => initialCachedVol?.coverStyle || 'classic'
+  ); // 'classic' (액자형) | 'full' (화보형) | 'minimal' (감성 타이포)
   const [editTitleModalVisible, setEditTitleModalVisible] = useState(false);
   const [tempTitle, setTempTitle] = useState(bookTitle);
   const [tempSubtitle, setTempSubtitle] = useState(bookSubtitle);
@@ -358,14 +411,24 @@ export default function PhotobookStudioScreen({
   }, [messages]);
 
   // 4-1. 본인 기기 사진첩(갤러리)에서 직접 불러온 사진 목록
-  const [customGalleryPhotos, setCustomGalleryPhotos] = useState<string[]>([]);
+  const [customGalleryPhotos, setCustomGalleryPhotos] = useState<string[]>(() => {
+    const raw = initialCachedVol?.customGalleryPhotos;
+    if (!Array.isArray(raw)) return [];
+    return raw.filter((u: string) => u && (Platform.OS !== 'web' || !u.startsWith('file://')));
+  });
 
   // 스프레드별 커스텀 사진 매핑 { [spreadIndex]: [photoUri1, photoUri2, ...] }
-  const [spreadPhotos, setSpreadPhotos] = useState<Record<string | number, string[]>>({});
+  const [spreadPhotos, setSpreadPhotos] = useState<Record<string | number, string[]>>(
+    () => initialCachedVol?.spreadPhotos || {}
+  );
   // 스프레드별 사진 레이아웃 셔플 모드: 'single' | 'wide' | 'split' | 'grid'
-  const [spreadLayouts, setSpreadLayouts] = useState<Record<string | number, string>>({});
+  const [spreadLayouts, setSpreadLayouts] = useState<Record<string | number, string>>(
+    () => initialCachedVol?.spreadLayouts || {}
+  );
   // 스프레드별 AI 감성 한 줄 글귀
-  const [spreadCaptions, setSpreadCaptions] = useState<Record<string | number, string>>({});
+  const [spreadCaptions, setSpreadCaptions] = useState<Record<string | number, string>>(
+    () => initialCachedVol?.spreadCaptions || {}
+  );
 
   // 5. 모달 제어 상태
   const [photoPickerVisible, setPhotoPickerVisible] = useState(false);
@@ -377,14 +440,20 @@ export default function PhotobookStudioScreen({
   const [selectedArchiveMonth, setSelectedArchiveMonth] = useState<string>('all');
   const [isMonthPickerExpanded, setIsMonthPickerExpanded] = useState<boolean>(false);
   const [appendixModalVisible, setAppendixModalVisible] = useState(false);
-  const [customSpreadTopics, setCustomSpreadTopics] = useState<Record<string | number, any>>({});
+  const [customSpreadTopics, setCustomSpreadTopics] = useState<Record<string | number, any>>(
+    () => initialCachedVol?.customSpreadTopics || {}
+  );
 
   // AI 프롤로그(P.1) & 에필로그(P.32) 문학 에세이 상태
-  const [prologueEssay, setPrologueEssay] = useState(
-    '가장 눈부신 순간은 언제나 멀리 있지 않았습니다. 함께 밥을 먹고, 사소한 농담을 주고받고, 문득 전해진 다정한 안부 속에 우리 가족의 가장 따뜻한 계절이 깃들어 있었습니다.\n\n지난 6개월간 매일 주고받은 스몰톡 문답과 카메라에 담긴 온기를 엮어, 우리들의 찬란했던 시간들을 이 한 권의 책에 고이 남깁니다.'
+  const [prologueEssay, setPrologueEssay] = useState<string>(
+    () =>
+      initialCachedVol?.prologueEssay ||
+      '가장 눈부신 순간은 언제나 멀리 있지 않았습니다. 함께 밥을 먹고, 사소한 농담을 주고받고, 문득 전해진 다정한 안부 속에 우리 가족의 가장 따뜻한 계절이 깃들어 있었습니다.\n\n지난 6개월간 매일 주고받은 스몰톡 문답과 카메라에 담긴 온기를 엮어, 우리들의 찬란했던 시간들을 이 한 권의 책에 고이 남깁니다.'
   );
-  const [epilogueEssay, setEpilogueEssay] = useState(
-    '계절은 바뀌어도 우리가 함께 나눈 사랑의 온도는 변하지 않습니다. 함께여서 눈부셨던 180일간의 발자취는 이제 우리 마음속 가장 깊은 보물이 되었습니다.\n\n다음 6개월 뒤에도 더 풍성하고 다정한 추억으로 이 자리를 채워나가길 소망하며, 서로의 든든한 버팀목이 되어준 온 가족에게 이 책을 바칩니다.'
+  const [epilogueEssay, setEpilogueEssay] = useState<string>(
+    () =>
+      initialCachedVol?.epilogueEssay ||
+      '계절은 바뀌어도 우리가 함께 나눈 사랑의 온도는 변하지 않습니다. 함께여서 눈부셨던 180일간의 발자취는 이제 우리 마음속 가장 깊은 보물이 되었습니다.\n\n다음 6개월 뒤에도 더 풍성하고 다정한 추억으로 이 자리를 채워나가길 소망하며, 서로의 든든한 버팀목이 되어준 온 가족에게 이 책을 바칩니다.'
   );
   const [aiEssayModalVisible, setAiEssayModalVisible] = useState(false);
   const [targetEssayType, setTargetEssayType] = useState<'prologue' | 'epilogue'>('prologue');
@@ -483,6 +552,11 @@ export default function PhotobookStudioScreen({
   const currentUserName = currentUserProfile?.name || currentUser || '가족';
   const photobookChannelRef = useRef<any>(null);
   const isApplyingRemoteRef = useRef(false);
+  // 권차별 원격 DB 로드 완료 여부 & 최신 반영 시각(updatedAt) 가드 — 뒤늦게 도착한 오래된 로컬 캐시가 최신 DB 데이터를 덮어쓰는 현상 원천 차단
+  const hasLoadedRemoteVolumeRef = useRef<Record<string, boolean>>({});
+  const lastAppliedUpdatedAtRef = useRef<Record<string, number>>(
+    initialCachedVol?.updatedAt ? { 'vol-1': initialCachedVol.updatedAt } : {}
+  );
   const [lastSyncNotice, setLastSyncNotice] = useState<string | null>(null); // 다른 가족 변경 시 토스트 알림
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
 
@@ -493,6 +567,12 @@ export default function PhotobookStudioScreen({
     // 내가 작업 중인 권차와 다른 권차의 실시간 수정 사항은 현재 화면에 주입하지 않음 (권차 간 화면 오염 방지)
     if (payload.selectedVolume && payload.selectedVolume !== currentVol) {
       return;
+    }
+    if (typeof payload.updatedAt === 'number' && payload.updatedAt > 0) {
+      lastAppliedUpdatedAtRef.current[currentVol] = Math.max(
+        lastAppliedUpdatedAtRef.current[currentVol] || 0,
+        payload.updatedAt
+      );
     }
     isApplyingRemoteRef.current = true;
     try {
@@ -536,11 +616,13 @@ export default function PhotobookStudioScreen({
     }
   }, [currentUserName, selectedVolume]);
 
-  // 내 화면 변경 사항을 가족 채널로 실시간 브로드캐스트 + AsyncStorage 백업
+  // 내 화면 변경 사항을 가족 채널로 실시간 브로드캐스트 + 인메모리/AsyncStorage 백업
   const broadcastPhotobookChange = useCallback((updatedPartial?: any) => {
     if (isApplyingRemoteRef.current) return;
     const currentVol = updatedPartial?.selectedVolume || selectedVolume || 'vol-1';
     if (orderedVolumeIds.includes(currentVol)) return;
+    const nowTs = Date.now();
+    lastAppliedUpdatedAtRef.current[currentVol] = nowTs;
     const fullPayload = {
       selectedVolume,
       selectedThemeId,
@@ -560,12 +642,12 @@ export default function PhotobookStudioScreen({
       epilogueEssay,
       customGalleryPhotos,
       updatedBy: currentUserName,
-      updatedAt: Date.now(),
+      updatedAt: nowTs,
       ...updatedPartial,
     };
 
-    // 로컬 캐시 즉시 저장 (권차별 분리 캐싱으로 다권 데이터 오염 방지)
-    AsyncStorage.setItem(`FAMLINK_PHOTOBOOK_SYNC_${effectiveFamilyId}_${currentVol}`, JSON.stringify(fullPayload)).catch(() => {});
+    // 인메모리 캐시 & 로컬 AsyncStorage 안전 저장 (권차별 분리 캐싱으로 다권 데이터 오염 방지)
+    setCachedPhotobookVolume(effectiveFamilyId, currentVol, fullPayload);
 
     // Supabase Realtime Broadcast 전송 (가족 기기들에 0.1초 내 실시간 전송)
     if (photobookChannelRef.current) {
@@ -641,28 +723,43 @@ export default function PhotobookStudioScreen({
     setCurrentPageNum(0);
     setViewerPageNum(0);
 
-    // 1. 해당 권차의 로컬 캐시 조회
+    // 0. 인메모리 캐시에 있으면 0ms 즉시 반영
+    const memCached = getCachedPhotobookVolume(effectiveFamilyId, volId);
+    if (memCached) {
+      applyRemotePhotobookUpdate(memCached, volId);
+    }
+
+    // 1. 해당 권차의 로컬 AsyncStorage 캐시 조회 (원격 DB가 아직 안 왔고 더 최신일 때만 반영)
     AsyncStorage.getItem(`FAMLINK_PHOTOBOOK_SYNC_${effectiveFamilyId}_${volId}`)
       .then(saved => {
+        if (hasLoadedRemoteVolumeRef.current[volId]) return;
         if (saved) {
           try {
             const parsed = JSON.parse(saved);
-            applyRemotePhotobookUpdate(parsed, volId);
+            const lastTs = lastAppliedUpdatedAtRef.current[volId] || 0;
+            if (!parsed?.updatedAt || parsed.updatedAt >= lastTs) {
+              applyRemotePhotobookUpdate(parsed, volId);
+            }
             return;
           } catch (e) {}
         }
-        resetVolumeToDefaults(volId, volObj);
+        if (!memCached) {
+          resetVolumeToDefaults(volId, volObj);
+        }
       })
       .catch(() => {
-        resetVolumeToDefaults(volId, volObj);
+        if (!hasLoadedRemoteVolumeRef.current[volId] && !memCached) {
+          resetVolumeToDefaults(volId, volObj);
+        }
       });
 
     // 2. Supabase DB에서 해당 권차 데이터 조회 (photobookService 위임)
     if (effectiveFamilyId && effectiveFamilyId !== 'default-family') {
       fetchFamilyPhotobookVolume(effectiveFamilyId, volId).then((remoteState) => {
+        hasLoadedRemoteVolumeRef.current[volId] = true;
         if (remoteState) {
           applyRemotePhotobookUpdate(remoteState, volId);
-        } else {
+        } else if (!memCached) {
           resetVolumeToDefaults(volId, volObj);
         }
       });
@@ -737,6 +834,16 @@ export default function PhotobookStudioScreen({
   // 실시간 Supabase 채널 구독 및 초기 캐시 로드
   useEffect(() => {
     if (!effectiveFamilyId) return;
+    const targetVol = selectedVolume || 'vol-1';
+
+    // 0-0. 백그라운드 프리로드된 인메모리 캐시가 있다면 동기적으로 즉시 반영
+    const memCached = getCachedPhotobookVolume(effectiveFamilyId, targetVol);
+    if (memCached) {
+      const lastTs = lastAppliedUpdatedAtRef.current[targetVol] || 0;
+      if (!memCached.updatedAt || memCached.updatedAt >= lastTs) {
+        applyRemotePhotobookUpdate(memCached, targetVol);
+      }
+    }
 
     // 0. 가족이 작성해 둔 모든 권차 목록 및 주문 완료(잠금) 목록 조회하여 volumeList에 동적 병합
     if (effectiveFamilyId !== 'default-family') {
@@ -770,13 +877,17 @@ export default function PhotobookStudioScreen({
       });
     }
 
-    // 1. AsyncStorage 캐시 불러오기 (해당 권차 캐시)
-    AsyncStorage.getItem(`FAMLINK_PHOTOBOOK_SYNC_${effectiveFamilyId}_${selectedVolume}`)
+    // 1. AsyncStorage 캐시 불러오기 (원격 DB 응답보다 먼저 도착했고, 기존 상태보다 최신일 때만 적용)
+    AsyncStorage.getItem(`FAMLINK_PHOTOBOOK_SYNC_${effectiveFamilyId}_${targetVol}`)
       .then(saved => {
+        if (hasLoadedRemoteVolumeRef.current[targetVol]) return;
         if (saved) {
           try {
             const parsed = JSON.parse(saved);
-            applyRemotePhotobookUpdate(parsed, selectedVolume);
+            const lastTs = lastAppliedUpdatedAtRef.current[targetVol] || 0;
+            if (!parsed?.updatedAt || parsed.updatedAt >= lastTs) {
+              applyRemotePhotobookUpdate(parsed, targetVol);
+            }
           } catch (e) {}
         }
       })
@@ -784,9 +895,10 @@ export default function PhotobookStudioScreen({
 
     // 2. Supabase DB (family_photobooks)에서 최신 원격 설정 조회
     if (effectiveFamilyId !== 'default-family') {
-      fetchFamilyPhotobookVolume(effectiveFamilyId, selectedVolume || 'vol-1').then((remoteState) => {
+      fetchFamilyPhotobookVolume(effectiveFamilyId, targetVol).then((remoteState) => {
+        hasLoadedRemoteVolumeRef.current[targetVol] = true;
         if (remoteState) {
-          applyRemotePhotobookUpdate(remoteState, selectedVolume);
+          applyRemotePhotobookUpdate(remoteState, targetVol);
         }
       });
     }
@@ -798,8 +910,10 @@ export default function PhotobookStudioScreen({
 
     channel
       .on('broadcast', { event: 'PHOTOBOOK_SYNC' }, ({ payload }) => {
-        if (payload && payload.selectedVolume === selectedVolume) {
-          applyRemotePhotobookUpdate(payload, selectedVolume);
+        if (payload && payload.selectedVolume === targetVol) {
+          hasLoadedRemoteVolumeRef.current[targetVol] = true;
+          setCachedPhotobookVolume(effectiveFamilyId, targetVol, payload);
+          applyRemotePhotobookUpdate(payload, targetVol);
         }
       })
       .on(
@@ -812,8 +926,11 @@ export default function PhotobookStudioScreen({
         },
         (payload) => {
           const row = payload.new as any;
-          if (row && row.volume_id === selectedVolume) {
-            applyRemotePhotobookUpdate(mapPhotobookRowToState(row), selectedVolume);
+          if (row && row.volume_id === targetVol) {
+            const mapped = mapPhotobookRowToState(row);
+            hasLoadedRemoteVolumeRef.current[targetVol] = true;
+            setCachedPhotobookVolume(effectiveFamilyId, targetVol, mapped);
+            applyRemotePhotobookUpdate(mapped, targetVol);
           }
         }
       )

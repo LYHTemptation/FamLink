@@ -48,6 +48,7 @@ import AuthScreen from './screens/AuthScreen';
 import { supabase, isSupabaseReady } from './lib/supabase';
 import { getTopicForToday, stripEmojis } from './utils/topics';
 import { fetchSmallTalkTopicsFromDB, getTopicForDateFromList } from './services/smallTalkService';
+import { preloadFamilyPhotobookData } from './services/photobookService';
 import { showError } from './utils/errorHandler';
 import * as Notifications from 'expo-notifications';
 import { registerForPushNotificationsAsync, sendExpoPushNotification } from './utils/notifications';
@@ -100,6 +101,7 @@ export default function App() {
   const [pointHistory, setPointHistory] = useState<PointHistoryItem[]>(INITIAL_MOCK_POINT_HISTORY);
   const [customRooms, setCustomRooms] = useState<any[]>([]);
   const [petmongCharacters, setPetmongCharacters] = useState<PetmongCharacter[]>([]);
+  const [isPetmongReady, setIsPetmongReady] = useState<boolean>(!isSupabaseReady);
   const [petVitals, setPetVitals] = useState<PetmongVitals>({
     warmth: 80,
     hunger: 80,
@@ -441,10 +443,23 @@ export default function App() {
   // Real Database Query Functions (로컬 캐시 0.1초 즉시 오픈 + 2단계 비동기 동기화)
   const fetchRealDatabaseData = async (familyId: string) => {
     const fastCacheKey = `@famlink_fast_home_cache_${familyId}`;
+    const petmongCacheKey = `@famlink_cached_petmong_${familyId}`;
     let hasWarmCache = false;
 
     try {
-      const cachedStr = await AsyncStorage.getItem(fastCacheKey);
+      const [cachedStr, cachedPetmongStr] = await Promise.all([
+        AsyncStorage.getItem(fastCacheKey),
+        AsyncStorage.getItem(petmongCacheKey),
+      ]);
+      if (cachedPetmongStr) {
+        try {
+          const parsedPetmong = JSON.parse(cachedPetmongStr);
+          if (Array.isArray(parsedPetmong) && parsedPetmong.length > 0) {
+            setPetmongCharacters(parsedPetmong);
+            setIsPetmongReady(true);
+          }
+        } catch (_) {}
+      }
       if (cachedStr) {
         const cached = JSON.parse(cachedStr);
         if (cached && typeof cached === 'object') {
@@ -474,15 +489,32 @@ export default function App() {
     ]);
     setAppLoading(false);
 
-    // 2단계: 무거운 데이터(채팅 200개, 반려몽 Base64 이미지, 스몰톡 전체 목록)는 백그라운드에서 비동기 로드
+    // 2단계: 무거운 데이터(채팅 200개, 반려몽 Base64 이미지, 스몰톡 전체 목록, 포토북 1권 캐시)는 백그라운드에서 비동기 로드
     Promise.all([
       fetchRealSmallTalk(familyId),
       fetchRealMessages(familyId),
       fetchRealPetmongCharacters(familyId, profile?.id),
       fetchRealPetVitals(familyId),
+      preloadFamilyPhotobookData(familyId),
     ]).catch((err) => {
       console.warn('Background sync warning:', err);
     });
+  };
+
+  const persistPetmongCache = (familyId: string, chars: PetmongCharacter[]) => {
+    if (!familyId) return;
+    const petmongCacheKey = `@famlink_cached_petmong_${familyId}`;
+    try {
+      const raw = JSON.stringify(chars);
+      AsyncStorage.setItem(petmongCacheKey, raw).catch(() => {
+        // QuotaExceededError 방어: 대용량 Base64 image_url은 IndexedDB stage 캐시에서 복원되므로 경량 메타데이터만 저장
+        const lightweight = chars.map(c => ({
+          ...c,
+          image_url: c.image_url && c.image_url.length > 4096 ? '' : c.image_url,
+        }));
+        AsyncStorage.setItem(petmongCacheKey, JSON.stringify(lightweight)).catch(() => {});
+      });
+    } catch (_) {}
   };
 
   const fetchRealPetmongCharacters = async (familyId: string, userId: string = profile?.id || '') => {
@@ -500,6 +532,7 @@ export default function App() {
 
       if (data && data.length > 0) {
         setPetmongCharacters(data);
+        persistPetmongCache(familyId, data);
       } else if (familyId && (userId || session?.user?.id)) {
         const creatorId = userId || session?.user?.id;
         // DB에 가족 대표 반려몽이 없을 경우, 초기 기본 수호 반려몽('몽이') 자동 입주 & DB 저장
@@ -521,6 +554,7 @@ export default function App() {
 
         if (!insertErr && inserted && inserted.length > 0) {
           setPetmongCharacters(inserted);
+          persistPetmongCache(familyId, inserted);
           try {
             await supabase.from('petmong_activities').insert({
               family_id: familyId,
@@ -536,6 +570,8 @@ export default function App() {
       }
     } catch (err) {
       console.warn('Exception in fetchRealPetmongCharacters:', err);
+    } finally {
+      setIsPetmongReady(true);
     }
   };
 
@@ -748,6 +784,13 @@ export default function App() {
       pointsAwarded: complete,
     });
   };
+
+  // 반려몽 상태 변경 시 로컬 캐시 동기화 (앱 재실행 시 빈 거실 배너 깜빡임 0초 차단)
+  useEffect(() => {
+    const familyId = profile?.family_id;
+    if (!familyId || !isSupabaseReady || petmongCharacters.length === 0) return;
+    persistPetmongCache(familyId, petmongCharacters);
+  }, [profile?.family_id, petmongCharacters]);
 
   // 홈 대시보드 핵심 상태 변경 시 로컬 고속 캐시 자동 갱신 (다음 앱 실행 시 0.1초 즉시 오픈)
   useEffect(() => {
@@ -2011,6 +2054,7 @@ export default function App() {
               familyId={profile?.family_id}
               petmongCharacters={petmongCharacters}
               setPetmongCharacters={setPetmongCharacters}
+              isPetmongLoading={!isPetmongReady}
               onAwardExp={handleAwardPetmongExp}
               familyMembers={familyMembersList}
               petVitals={petVitals}
@@ -2109,6 +2153,7 @@ export default function App() {
               onLogout={handleLogout}
               onDeleteAccount={handleDeleteAccount}
               onNavigateScreen={setCurrentScreen}
+              onAwardPoints={handleAwardFamilyPoints}
             />
           </View>
         )}

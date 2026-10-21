@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
-import { EVOLUTION_STAGES, getStageEvolutionPrompt } from './petmongEvolution';
+import { EVOLUTION_STAGES, getStageEvolutionPrompt, detectArchetype } from './petmongEvolution';
 import { makeBackgroundTransparentOnDevice } from './imageTransparencyService';
 import {
   isGeminiConfigured,
@@ -905,11 +905,13 @@ export async function generateStageAiImage(
 
   // Multimodal Image-to-Image via unified geminiService (with 1 automatic retry on transient timeout/429)
   if (!evolvedImageUrl && hasGeminiKey) {
+    const resolvedArchetype = detectArchetype(character.emoji, character.name, characterTraits);
     const stagePrompt = getStageEvolutionPrompt(
       targetStage,
       `Character Visual Identity: ${characterTraits}`,
       character.personality || '다정한',
-      resolvedStylePreset
+      resolvedStylePreset,
+      resolvedArchetype
     );
 
     const parts: GeminiContentPart[] = [];
