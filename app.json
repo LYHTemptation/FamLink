@@ -27,7 +27,7 @@
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png"
       },
-      "package": "com.yon_know.familymessenger",
+      "package": "com.yonknow.familymessenger",
       "permissions": [
         "CAMERA",
         "READ_MEDIA_IMAGES",

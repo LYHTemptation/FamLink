@@ -1,3 +1,4 @@
+import './utils/setupFontScalingLock';
 import { registerRootComponent } from 'expo';
 import { Platform, Alert } from 'react-native';
 
