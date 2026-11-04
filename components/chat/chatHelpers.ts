@@ -211,3 +211,312 @@ export const parseKoreanTimeToMs = (timeStr?: string | null): number => {
   }
   return 0;
 };
+
+/**
+ * 메시지 공감(이모지 리액션) 지원 상수 및 파서
+ * DB 스키마 변경 없이 모든 가족에게 실시간 동기화되도록 메시지 텍스트 말미의 [[REACT:{...}]] 메타 태그로 직렬화합니다.
+ */
+export const REACTION_EMOJIS = ['❤️', '👍', '😂', '👏', '😢'] as const;
+
+const REACTION_SUFFIX_REGEX = /\n?\[\[REACT:(\{[\s\S]*?\})\]\]$/;
+const EDITED_SUFFIX_REGEX = /\n?\[\[EDITED\]\]$/;
+
+export interface ExtractedMessageReactions {
+  cleanText: string;
+  reactions: Record<string, string[]>;
+  isEdited: boolean;
+}
+
+export const extractReactionsAndCleanText = (
+  rawText?: string | null
+): ExtractedMessageReactions => {
+  if (!rawText || typeof rawText !== 'string') {
+    return { cleanText: '', reactions: {}, isEdited: false };
+  }
+  let workingText = rawText;
+  let reactions: Record<string, string[]> = {};
+
+  const match = workingText.match(REACTION_SUFFIX_REGEX);
+  if (match) {
+    workingText = workingText.slice(0, match.index ?? workingText.length);
+    try {
+      const parsed = JSON.parse(match[1]);
+      if (parsed && typeof parsed === 'object') {
+        Object.keys(parsed).forEach((emoji) => {
+          if (Array.isArray(parsed[emoji]) && parsed[emoji].length > 0) {
+            reactions[emoji] = parsed[emoji].map(String);
+          }
+        });
+      }
+    } catch (_) {}
+  }
+
+  let isEdited = false;
+  const editedMatch = workingText.match(EDITED_SUFFIX_REGEX);
+  if (editedMatch) {
+    isEdited = true;
+    workingText = workingText.slice(0, editedMatch.index ?? workingText.length);
+  }
+
+  return { cleanText: workingText, reactions, isEdited };
+};
+
+export const toggleMessageReactionText = (
+  rawText: string | undefined | null,
+  emoji: string,
+  actorName: string
+): string => {
+  const { cleanText, reactions, isEdited } = extractReactionsAndCleanText(rawText);
+  const currentList = reactions[emoji] ? [...reactions[emoji]] : [];
+  const existingIdx = currentList.indexOf(actorName);
+
+  if (existingIdx >= 0) {
+    currentList.splice(existingIdx, 1);
+  } else {
+    currentList.push(actorName);
+  }
+
+  const nextReactions: Record<string, string[]> = { ...reactions };
+  if (currentList.length > 0) {
+    nextReactions[emoji] = currentList;
+  } else {
+    delete nextReactions[emoji];
+  }
+
+  const baseWithEdited = isEdited
+    ? cleanText
+      ? `${cleanText}\n[[EDITED]]`
+      : '[[EDITED]]'
+    : cleanText;
+
+  const activeEmojis = Object.keys(nextReactions).filter(
+    (k) => Array.isArray(nextReactions[k]) && nextReactions[k].length > 0
+  );
+  if (activeEmojis.length === 0) {
+    return baseWithEdited;
+  }
+
+  const serialized = JSON.stringify(nextReactions);
+  return baseWithEdited
+    ? `${baseWithEdited}\n[[REACT:${serialized}]]`
+    : `[[REACT:${serialized}]]`;
+};
+
+export const applyEditedMessageText = (
+  originalRawText: string | undefined | null,
+  newBodyText: string
+): string => {
+  const { cleanText, reactions } = extractReactionsAndCleanText(originalRawText);
+  const replyMeta = parseReplyHeader(cleanText);
+  let rebuiltClean = newBodyText.trim();
+
+  if (replyMeta) {
+    const replyData = {
+      id: replyMeta.replyId,
+      name: replyMeta.senderName,
+      snippet: replyMeta.snippet,
+    };
+    rebuiltClean = `[답장:${JSON.stringify(replyData)}]\n${rebuiltClean}`;
+  }
+
+  const withEdited = `${rebuiltClean}\n[[EDITED]]`;
+  const activeEmojis = Object.keys(reactions).filter(
+    (k) => Array.isArray(reactions[k]) && reactions[k].length > 0
+  );
+  if (activeEmojis.length === 0) {
+    return withEdited;
+  }
+  return `${withEdited}\n[[REACT:${JSON.stringify(reactions)}]]`;
+};
+
+/**
+ * 날짜 구분선(Date Divider) 및 연속 메시지 그룹핑 메타데이터 계산기
+ */
+const WEEKDAY_KO = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+
+export const getMessageDateKey = (msg: any): string => {
+  const raw = msg?.created_at || msg?.rawDate;
+  if (raw) {
+    const d = new Date(raw);
+    if (!isNaN(d.getTime())) {
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+  }
+  return 'today-default';
+};
+
+export const formatDateDividerLabel = (msg: any): string => {
+  const raw = msg?.created_at || msg?.rawDate;
+  const d = raw ? new Date(raw) : new Date();
+  const validDate = !isNaN(d.getTime()) ? d : new Date();
+  const yyyy = validDate.getFullYear();
+  const mm = validDate.getMonth() + 1;
+  const dd = validDate.getDate();
+  const dayName = WEEKDAY_KO[validDate.getDay()];
+  return `${yyyy}년 ${mm}월 ${dd}일 ${dayName}`;
+};
+
+export const isSystemNoticeMessage = (msg: any): boolean => {
+  if (!msg) return false;
+  const { cleanText } = extractReactionsAndCleanText(
+    typeof msg.text === 'string' ? msg.text : ''
+  );
+  const replyMeta = parseReplyHeader(cleanText);
+  const body = replyMeta ? replyMeta.cleanText : cleanText;
+  return (
+    body.startsWith('[공지등록]') ||
+    body.startsWith('[공지설정]') ||
+    body.startsWith('[공지해제]') ||
+    body.startsWith('[방생성]')
+  );
+};
+
+export const getMessageSenderUniqueKey = (msg: any): string => {
+  if (!msg) return '';
+  return String(
+    msg.profile_id ||
+      msg.senderObj?.id ||
+      msg.senderName ||
+      msg.sender ||
+      ''
+  );
+};
+
+export interface MessageGroupingMeta {
+  showDateDivider: boolean;
+  dateDividerLabel: string;
+  showSenderHeader: boolean;
+  showTimestampMeta: boolean;
+  isGroupedWithPrev: boolean;
+  isGroupedWithNext: boolean;
+}
+
+export const computeMessageGroupingMeta = (
+  messages: any[],
+  index: number
+): MessageGroupingMeta => {
+  const current = messages[index];
+  if (!current) {
+    return {
+      showDateDivider: false,
+      dateDividerLabel: '',
+      showSenderHeader: true,
+      showTimestampMeta: true,
+      isGroupedWithPrev: false,
+      isGroupedWithNext: false,
+    };
+  }
+
+  const prev = index > 0 ? messages[index - 1] : null;
+  const next = index < messages.length - 1 ? messages[index + 1] : null;
+
+  const currentDateKey = getMessageDateKey(current);
+  const prevDateKey = prev ? getMessageDateKey(prev) : null;
+  const nextDateKey = next ? getMessageDateKey(next) : null;
+
+  const showDateDivider = !prev || currentDateKey !== prevDateKey;
+  const dateDividerLabel = showDateDivider ? formatDateDividerLabel(current) : '';
+
+  const currentSender = getMessageSenderUniqueKey(current);
+  const prevSender = prev ? getMessageSenderUniqueKey(prev) : '';
+  const nextSender = next ? getMessageSenderUniqueKey(next) : '';
+
+  const currentTime = current.timestamp || '';
+  const prevTime = prev?.timestamp || '';
+  const nextTime = next?.timestamp || '';
+
+  const isGroupedWithPrev = Boolean(
+    prev &&
+      !showDateDivider &&
+      !isSystemNoticeMessage(current) &&
+      !isSystemNoticeMessage(prev) &&
+      currentSender &&
+      currentSender === prevSender &&
+      currentTime &&
+      currentTime === prevTime
+  );
+
+  const isGroupedWithNext = Boolean(
+    next &&
+      currentDateKey === nextDateKey &&
+      !isSystemNoticeMessage(current) &&
+      !isSystemNoticeMessage(next) &&
+      currentSender &&
+      currentSender === nextSender &&
+      currentTime &&
+      currentTime === nextTime
+  );
+
+  return {
+    showDateDivider,
+    dateDividerLabel,
+    showSenderHeader: !isGroupedWithPrev,
+    showTimestampMeta: !isGroupedWithNext,
+    isGroupedWithPrev,
+    isGroupedWithNext,
+  };
+};
+
+/**
+ * 일반 텍스트 내 URL 및 전화번호 자동 감지/분리 유틸리티
+ */
+export interface LinkSegment {
+  type: 'text' | 'url' | 'phone';
+  value: string;
+  href?: string;
+}
+
+const URL_OR_PHONE_REGEX =
+  /((?:https?:\/\/|www\.)[^\s]+)|(\b(?:01[016789]|02|0[3-6][1-5]|15\d{2}|16\d{2}|18\d{2})-\d{3,4}-\d{4}\b)/gi;
+
+export const splitTextWithLinks = (text: string): LinkSegment[] => {
+  if (!text || typeof text !== 'string') return [{ type: 'text', value: '' }];
+  const segments: LinkSegment[] = [];
+  let lastIdx = 0;
+
+  let match: RegExpExecArray | null;
+  const regex = new RegExp(URL_OR_PHONE_REGEX.source, 'gi');
+
+  while ((match = regex.exec(text)) !== null) {
+    const matchIndex = match.index;
+    if (matchIndex > lastIdx) {
+      segments.push({
+        type: 'text',
+        value: text.slice(lastIdx, matchIndex),
+      });
+    }
+
+    const fullMatch = match[0];
+    if (match[1]) {
+      const href = fullMatch.toLowerCase().startsWith('http')
+        ? fullMatch
+        : `https://${fullMatch}`;
+      segments.push({
+        type: 'url',
+        value: fullMatch,
+        href,
+      });
+    } else if (match[2]) {
+      segments.push({
+        type: 'phone',
+        value: fullMatch,
+        href: `tel:${fullMatch.replace(/-/g, '')}`,
+      });
+    }
+
+    lastIdx = matchIndex + fullMatch.length;
+  }
+
+  if (lastIdx < text.length) {
+    segments.push({
+      type: 'text',
+      value: text.slice(lastIdx),
+    });
+  }
+
+  return segments.length > 0 ? segments : [{ type: 'text', value: text }];
+};
+

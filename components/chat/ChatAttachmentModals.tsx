@@ -26,16 +26,21 @@ import {
   CornerUpLeft,
   Pin,
   Trash2,
+  Camera,
+  Edit3,
+  Eye,
 } from 'lucide-react-native';
 import { colors } from '../../theme';
 import type { FamilyMember } from '../../types/domain';
 import styles from './ChatStyles';
+import { REACTION_EMOJIS, extractReactionsAndCleanText } from './chatHelpers';
 
 export interface ChatAttachmentModalsProps {
   insetsBottom: number;
   attachMenuVisible: boolean;
   setAttachMenuVisible: (visible: boolean) => void;
   pickImage: () => void;
+  takePhotoWithCamera?: () => void;
   handlePickDocument: () => void;
   handlePickVideo: () => void;
   handleOpenVoiceModal: () => void;
@@ -84,8 +89,11 @@ export interface ChatAttachmentModalsProps {
   selectedMsgForMenu: any;
   handleCopyMessageText: () => void;
   handleTriggerReply: () => void;
+  handleTriggerEdit?: () => void;
   handlePinNotice: () => void;
   handleTriggerDelete: () => void;
+  handleToggleReactionFromMenu?: (emoji: string) => void;
+  myActorName?: string;
 }
 
 export default function ChatAttachmentModals({
@@ -93,6 +101,7 @@ export default function ChatAttachmentModals({
   attachMenuVisible,
   setAttachMenuVisible,
   pickImage,
+  takePhotoWithCamera,
   handlePickDocument,
   handlePickVideo,
   handleOpenVoiceModal,
@@ -141,8 +150,11 @@ export default function ChatAttachmentModals({
   selectedMsgForMenu,
   handleCopyMessageText,
   handleTriggerReply,
+  handleTriggerEdit,
   handlePinNotice,
   handleTriggerDelete,
+  handleToggleReactionFromMenu,
+  myActorName,
 }: ChatAttachmentModalsProps): React.ReactElement {
   const sheetBottomPadding = Math.max(24, insetsBottom + 12);
 
@@ -176,8 +188,20 @@ export default function ChatAttachmentModals({
                 <View style={[styles.attachIconCircle, { backgroundColor: colors.primaryLight }]}>
                   <ImageIcon size={22} color={colors.primary} />
                 </View>
-                <Text style={styles.attachGridLabel}>사진 전송</Text>
+                <Text style={styles.attachGridLabel}>앨범 사진</Text>
               </TouchableOpacity>
+
+              {takePhotoWithCamera && (
+                <TouchableOpacity
+                  style={styles.attachGridItem}
+                  onPress={takePhotoWithCamera}
+                >
+                  <View style={[styles.attachIconCircle, { backgroundColor: '#FDF2F8' }]}>
+                    <Camera size={22} color="#EC4899" />
+                  </View>
+                  <Text style={styles.attachGridLabel}>카메라 촬영</Text>
+                </TouchableOpacity>
+              )}
 
               <TouchableOpacity style={styles.attachGridItem} onPress={handlePickDocument}>
                 <View style={[styles.attachIconCircle, { backgroundColor: '#EFF6FF' }]}>
@@ -624,15 +648,56 @@ export default function ChatAttachmentModals({
             ]}
           >
             {selectedMsgForMenu && (
-              <View style={styles.contextPreviewHeader}>
-                <Text style={styles.contextPreviewAuthor}>
-                  {selectedMsgForMenu.senderInfo?.name || '가족'}님의 메시지
-                </Text>
-                <Text style={styles.contextPreviewText} numberOfLines={2}>
-                  {selectedMsgForMenu.bubbleText ||
-                    (selectedMsgForMenu.item?.image ? '사진' : '메시지')}
-                </Text>
-              </View>
+              <>
+                {/* 상단 원터치 이모지 공감(Reaction) 바 */}
+                {handleToggleReactionFromMenu && (
+                  <View style={styles.contextReactionBar}>
+                    {REACTION_EMOJIS.map((emoji) => {
+                      const rawTxt =
+                        typeof selectedMsgForMenu.item?.text === 'string'
+                          ? selectedMsgForMenu.item.text
+                          : '';
+                      const { reactions } = extractReactionsAndCleanText(rawTxt);
+                      const isSelected = Boolean(
+                        myActorName && reactions[emoji]?.includes(myActorName)
+                      );
+                      return (
+                        <TouchableOpacity
+                          key={emoji}
+                          style={[
+                            styles.contextReactionEmojiBtn,
+                            isSelected && styles.contextReactionEmojiBtnActive,
+                          ]}
+                          activeOpacity={0.75}
+                          onPress={() => handleToggleReactionFromMenu(emoji)}
+                        >
+                          <Text style={styles.contextReactionEmojiText}>{emoji}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
+
+                <View style={styles.contextPreviewHeader}>
+                  <Text style={styles.contextPreviewAuthor}>
+                    {selectedMsgForMenu.senderInfo?.name || '가족'}님의 메시지
+                  </Text>
+                  <Text style={styles.contextPreviewText} numberOfLines={2}>
+                    {selectedMsgForMenu.bubbleText ||
+                      (selectedMsgForMenu.item?.image ? '사진' : '메시지')}
+                  </Text>
+                  {Array.isArray(selectedMsgForMenu.readNamesList) && (
+                    <View style={styles.contextReadReceiptRow}>
+                      <Eye size={12} color="#78716C" style={{ marginRight: 5 }} />
+                      <Text style={styles.contextReadReceiptText} numberOfLines={1}>
+                        {selectedMsgForMenu.readNamesList.length > 0
+                          ? `읽은 가족 (${selectedMsgForMenu.readNamesList.length}명): ${selectedMsgForMenu.readNamesList.join(', ')}`
+                          : '아직 다른 가족이 읽지 않았습니다'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </>
             )}
 
             <View style={styles.contextActionsList}>
@@ -659,6 +724,24 @@ export default function ChatAttachmentModals({
                 </View>
                 <Text style={styles.contextActionLabel}>답장하기</Text>
               </TouchableOpacity>
+
+              {Boolean(
+                handleTriggerEdit &&
+                  selectedMsgForMenu?.isMe &&
+                  selectedMsgForMenu?.bubbleText &&
+                  !selectedMsgForMenu.bubbleText.startsWith('[')
+              ) && (
+                <TouchableOpacity
+                  style={styles.contextActionBtn}
+                  activeOpacity={0.7}
+                  onPress={handleTriggerEdit}
+                >
+                  <View style={[styles.contextActionIconBox, { backgroundColor: '#ECFDF5' }]}>
+                    <Edit3 size={18} color="#059669" strokeWidth={2.2} />
+                  </View>
+                  <Text style={styles.contextActionLabel}>메시지 수정</Text>
+                </TouchableOpacity>
+              )}
 
               {Boolean(selectedMsgForMenu?.bubbleText) && (
                 <TouchableOpacity

@@ -486,7 +486,11 @@ export default function FamilyScreen({
               <Text style={styles.accountRoleTagText}> ({currentUserProfile?.role || '가족'})</Text>
             </Text>
             {currentUserProfile?.email ? (
-              <Text style={styles.accountEmailText} numberOfLines={1}>{currentUserProfile.email}</Text>
+              <Text style={styles.accountEmailText} numberOfLines={1}>
+                {currentUserProfile.email.endsWith('@famlink.local')
+                  ? currentUserProfile.email.replace('@famlink.local', '')
+                  : currentUserProfile.email}
+              </Text>
             ) : null}
           </View>
           <TouchableOpacity

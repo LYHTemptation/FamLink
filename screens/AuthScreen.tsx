@@ -30,6 +30,18 @@ export interface AuthScreenProps {
   onAuthComplete: (session: any, profile?: any) => void;
 }
 
+// Helper: 아이디 또는 이메일 입력을 Supabase Auth 규격(이메일 형식)으로 정규화
+const normalizeAuthEmail = (input: string): string => {
+  const trimmed = input.trim().toLowerCase();
+  if (!trimmed) return '';
+  // 사용자가 @가 포함된 이메일 형식을 직접 입력한 경우 그대로 사용
+  if (trimmed.includes('@')) {
+    return trimmed;
+  }
+  // 일반 아이디인 경우 Supabase Auth 유효성 검증을 통과할 수 있도록 가상 로컬 도메인 자동 부착
+  return `${trimmed}@famlink.local`;
+};
+
 export default function AuthScreen({ onAuthComplete }: AuthScreenProps) {
   const insets = useSafeAreaInsets();
   const [isLogin, setIsLogin] = useState(true);
@@ -59,13 +71,13 @@ export default function AuthScreen({ onAuthComplete }: AuthScreenProps) {
   };
 
   // Local/Developer Mock signup helper
-  const handleLocalMockAuth = () => {
+  const handleLocalMockAuth = (authEmail: string) => {
     setLoading(true);
     setTimeout(() => {
       setLoading(false);
       
       const mockSession = {
-        user: { id: `mock-user-${Date.now()}`, email },
+        user: { id: `mock-user-${Date.now()}`, email: authEmail },
       };
 
       const mockProfile = {
@@ -73,6 +85,7 @@ export default function AuthScreen({ onAuthComplete }: AuthScreenProps) {
         avatar: isLogin ? '👩‍🦰' : selectedAvatar,
         color: isLogin ? '#FF6B47' : selectedColor,
         role: isLogin ? 'mom' : roleName.trim(),
+        email: authEmail,
         family_code: familyOption === 'join' ? familyCode.toUpperCase() : `FAM-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
       };
 
@@ -82,15 +95,24 @@ export default function AuthScreen({ onAuthComplete }: AuthScreenProps) {
   };
 
   const handleAuth = async () => {
+    const rawInput = email.trim();
     // Basic validation
-    if (!email.trim() || !password.trim()) {
-      Alert.alert('오류', '이메일과 비밀번호를 입력해주세요.');
+    if (!rawInput || !password.trim()) {
+      Alert.alert('오류', '아이디(또는 이메일)와 비밀번호를 입력해주세요.');
       return;
     }
 
+    if (password.trim().length < 6) {
+      Alert.alert('오류', '비밀번호는 6자리 이상이어야 합니다.');
+      return;
+    }
+
+    // 아이디 입력을 Supabase Auth 규격으로 정규화 (아이디 단독 입력 시 @famlink.local 가상 도메인 부착)
+    const authEmail = normalizeAuthEmail(rawInput);
+
     if (!isSupabaseReady) {
       // Run Developer Mock authentication
-      handleLocalMockAuth();
+      handleLocalMockAuth(authEmail);
       return;
     }
 
@@ -101,16 +123,16 @@ export default function AuthScreen({ onAuthComplete }: AuthScreenProps) {
         // 1. Supabase Sign In with Reviewer Fallback Support
         let authData = null;
         const { data, error } = await supabase.auth.signInWithPassword({
-          email,
+          email: authEmail,
           password,
         });
 
         if (error) {
           // If reviewer account doesn't exist yet in Supabase Auth, auto-provision or login reviewer session
-          if (email === 'reviewer_parent@famlink.com' || email === 'reviewer_child@famlink.com') {
-            const isParent = email === 'reviewer_parent@famlink.com';
+          if (authEmail === 'reviewer_parent@famlink.com' || authEmail === 'reviewer_child@famlink.com') {
+            const isParent = authEmail === 'reviewer_parent@famlink.com';
             const mockReviewerSession = {
-              user: { id: isParent ? 'reviewer-parent-id' : 'reviewer-child-id', email },
+              user: { id: isParent ? 'reviewer-parent-id' : 'reviewer-child-id', email: authEmail },
             };
             const mockReviewerProfile = {
               id: isParent ? 'reviewer-parent-id' : 'reviewer-child-id',
@@ -118,11 +140,15 @@ export default function AuthScreen({ onAuthComplete }: AuthScreenProps) {
               avatar: isParent ? '👨‍💼' : '👦',
               color: isParent ? '#4A90E2' : '#2ECC71',
               role: isParent ? 'dad' : 'son',
+              email: authEmail,
               family_code: 'FAM-APPLE01',
               family_id: 'fam-apple-01-id',
             };
             onAuthComplete(mockReviewerSession, mockReviewerProfile);
             return;
+          }
+          if (error.message?.includes('Invalid login credentials')) {
+            throw new Error('아이디(이메일) 또는 비밀번호가 올바르지 않습니다.');
           }
           throw error;
         }
@@ -144,6 +170,7 @@ export default function AuthScreen({ onAuthComplete }: AuthScreenProps) {
             avatar: '👦',
             color: '#8E8E93',
             role: 'son',
+            email: authEmail,
             family_code: 'MOCKED-CODE',
           });
           return;
@@ -151,6 +178,7 @@ export default function AuthScreen({ onAuthComplete }: AuthScreenProps) {
 
         const formattedProfile = {
           ...profile,
+          email: authEmail,
           family_code: profile.families?.family_code || 'FAM-NONE',
         };
 
@@ -170,11 +198,19 @@ export default function AuthScreen({ onAuthComplete }: AuthScreenProps) {
 
         // 1. Supabase Sign Up
         const { data, error } = await supabase.auth.signUp({
-          email,
+          email: authEmail,
           password,
         });
 
-        if (error) throw error;
+        if (error) {
+          if (error.message?.includes('User already registered')) {
+            throw new Error('이미 사용 중인 아이디(또는 이메일)입니다. 다른 아이디를 입력하거나 로그인해 주세요.');
+          }
+          if (error.message?.includes('Password should be at least 6 characters')) {
+            throw new Error('비밀번호는 최소 6자리 이상이어야 합니다.');
+          }
+          throw error;
+        }
         if (!data.user) throw new Error('회원가입 결과를 받아오지 못했습니다.');
 
         let targetFamilyId = null;
@@ -239,7 +275,7 @@ export default function AuthScreen({ onAuthComplete }: AuthScreenProps) {
         setIsLogin(true);
       }
     } catch (err) {
-      Alert.alert('실패', (err as any)?.message || '인증 처리에 실패했습니다.');
+      Alert.alert('안내', (err as any)?.message || '인증 처리에 실패했습니다.');
     } finally {
       setLoading(false);
     }
@@ -276,18 +312,18 @@ export default function AuthScreen({ onAuthComplete }: AuthScreenProps) {
         <View style={styles.formCard}>
           <Text style={styles.formTitle}>{isLogin ? '가족방 로그인' : '가족방 가입하기'}</Text>
 
-          {/* Email Input */}
-          <Text style={styles.label}>이메일 주소</Text>
+          {/* Email / Username Input */}
+          <Text style={styles.label}>아이디 또는 이메일</Text>
           <View style={styles.inputWrapper}>
-            <Mail size={16} color="#AEAEB2" style={{ marginRight: 10 }} />
+            <User size={16} color="#AEAEB2" style={{ marginRight: 10 }} />
             <TextInput
               style={styles.input}
-              placeholder="example@email.com"
+              placeholder="아이디 또는 이메일 입력"
               placeholderTextColor="#AEAEB2"
               value={email}
               onChangeText={setEmail}
-              keyboardType="email-address"
               autoCapitalize="none"
+              autoCorrect={false}
             />
           </View>
 

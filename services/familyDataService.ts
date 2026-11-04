@@ -141,18 +141,28 @@ export function normalizeMessageTextPayload(rawText: any): string {
 /**
  * Supabase `messages` 테이블 Row를 UI 상태 객체로 변환
  */
-export function formatSupabaseMessageRow(m: any): any {
+export function formatSupabaseMessageRow(
+  m: any,
+  familyMembersFallback?: any[]
+): any {
   const timestamp = new Date(m.created_at).toLocaleTimeString('ko-KR', {
     hour: '2-digit',
     minute: '2-digit',
     hour12: true,
   });
+  const resolvedProfile =
+    m.profiles ||
+    (Array.isArray(familyMembersFallback)
+      ? familyMembersFallback.find((mem) => mem.id === m.profile_id)
+      : null) ||
+    null;
+
   return {
     id: m.id,
-    sender: m.profiles?.role || 'son',
+    sender: resolvedProfile?.role || 'son',
     profile_id: m.profile_id,
-    senderObj: m.profiles || null,
-    senderName: m.profiles?.name || null,
+    senderObj: resolvedProfile,
+    senderName: resolvedProfile?.name || null,
     text: normalizeMessageTextPayload(m.text),
     image: m.image_url || null,
     image_url: m.image_url || null,
@@ -161,6 +171,70 @@ export function formatSupabaseMessageRow(m: any): any {
     created_at: m.created_at,
     readBy: m.read_by || [],
   };
+}
+
+/**
+ * 채팅 첨부 미디어(사진·파일·동영상·음성메모) Supabase Storage 업로드 헬퍼
+ * - 스토리지 버킷 미생성 또는 권한 오류 시 소형 미디어는 Base64 Data URL로 안전 폴백
+ */
+export async function uploadChatAttachmentToStorage(
+  familyId: string | null | undefined,
+  fileUri: string,
+  fileNameHint: string = 'attachment.bin',
+  defaultContentType: string = 'application/octet-stream'
+): Promise<string> {
+  if (!fileUri || !isSupabaseReady || !familyId) {
+    return fileUri;
+  }
+  if (fileUri.startsWith('http://') || fileUri.startsWith('https://')) {
+    return fileUri;
+  }
+
+  const safeExtMatch = fileNameHint.match(/\.[a-zA-Z0-9]{1,6}$/);
+  const ext = safeExtMatch ? safeExtMatch[0].toLowerCase() : '';
+  const storagePath = `${familyId}/chat_${Date.now()}_${Math.random()
+    .toString(36)
+    .slice(2, 7)}${ext}`;
+
+  try {
+    const response = await fetch(fileUri);
+    const blob = await response.blob();
+    const contentType = blob.type || defaultContentType;
+
+    const { error: uploadError } = await supabase.storage
+      .from('family-photos')
+      .upload(storagePath, blob, {
+        cacheControl: '3600',
+        upsert: false,
+        contentType,
+      });
+
+    if (uploadError) {
+      // 4MB 이하 파일/사진/음성은 Base64 Data URL로 폴백하여 타 기기에서도 열람 가능하게 처리
+      if (blob.size <= 4 * 1024 * 1024) {
+        try {
+          const base64Data = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () =>
+              resolve(typeof reader.result === 'string' ? reader.result : fileUri);
+            reader.onerror = () => resolve(fileUri);
+            reader.readAsDataURL(blob);
+          });
+          return base64Data;
+        } catch (_) {
+          return fileUri;
+        }
+      }
+      return fileUri;
+    }
+
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from('family-photos').getPublicUrl(storagePath);
+    return publicUrl || fileUri;
+  } catch (_) {
+    return fileUri;
+  }
 }
 
 /**

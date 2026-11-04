@@ -74,6 +74,7 @@ import {
   normalizeMessageTextPayload,
   formatSupabaseMessageRow,
   calculateDecayedPetVitals,
+  uploadChatAttachmentToStorage,
 } from './services/familyDataService';
 import type { Session } from '@supabase/supabase-js';
 import type {
@@ -151,6 +152,11 @@ export default function App() {
   const [userModalVisible, setUserModalVisible] = useState<boolean>(false);
   const [celebrationVisible, setCelebrationVisible] = useState<boolean>(false);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
+  const familyMembersListRef = useRef<FamilyMember[]>([]);
+
+  useEffect(() => {
+    familyMembersListRef.current = familyMembersList;
+  }, [familyMembersList]);
 
   // 1. Authentication State Listener & Initialization
   useEffect(() => {
@@ -232,8 +238,28 @@ export default function App() {
     const messagesChannel = supabase
       .channel(`realtime-messages-${familyId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `family_id=eq.${familyId}` }, (payload) => {
-        if (payload.eventType === 'UPDATE' && payload.new) {
-          // Instantly sync text (for delete/unsend/vote) and read receipts without full table refetch
+        if (payload.eventType === 'INSERT' && payload.new) {
+          // 0ms instant single-row merge without re-fetching 200 rows (uses ref to avoid stale closure)
+          setMessages(prev => {
+            if (prev.some(m => m.id === payload.new.id)) return prev;
+            const formattedNew = formatSupabaseMessageRow(payload.new, familyMembersListRef.current);
+            // If this is our own message that is still in optimistic `isSending` state, replace the matching temp item
+            const pendingIdx = prev.findIndex(
+              m =>
+                m.isSending &&
+                m.profile_id === payload.new.profile_id &&
+                m.text === payload.new.text &&
+                (m.room_id || 'family-group') === (payload.new.room_id || 'family-group')
+            );
+            if (pendingIdx !== -1) {
+              const next = [...prev];
+              next[pendingIdx] = { ...formattedNew, isSending: false };
+              return next;
+            }
+            return [...prev, formattedNew];
+          });
+        } else if (payload.eventType === 'UPDATE' && payload.new) {
+          // Instantly sync text (for delete/unsend/vote/reactions) and read receipts without full table refetch
           setMessages(prev => prev.map(m => m.id === payload.new.id ? {
             ...m,
             text: payload.new.text,
@@ -430,6 +456,7 @@ export default function App() {
 
       const formatted: UserProfile = {
         ...userProfile,
+        email: currentSession.user.email,
         family_code: userProfile.families?.family_code || 'FAM-NONE',
         family_created_at: userProfile.families?.created_at || userProfile.created_at || new Date().toISOString(),
       };
@@ -1508,45 +1535,12 @@ export default function App() {
         let imageUrl = null;
 
         if (messageData.image) {
-          const fileUri = messageData.image;
-          const fileName = `${profile.family_id}/${Date.now()}_photo.jpg`;
-
-          try {
-            const response = await fetch(fileUri);
-            const blob = await response.blob();
-
-            const { data, error: uploadError } = await supabase.storage
-              .from('family-photos')
-              .upload(fileName, blob, {
-                cacheControl: '3600',
-                upsert: false,
-                contentType: blob.type || 'image/jpeg',
-              });
-
-            if (uploadError) {
-              console.warn('⚠️ Supabase Storage 업로드 안내 (Base64 전송):', uploadError.message);
-              // Storage 버킷이 미생성된 경우에도 다른 가족 브라우저/새로고침 시 사진이 정상 표시되도록 Base64 Data URL로 변환
-              try {
-                const base64Data = await new Promise((resolve) => {
-                  const reader = new FileReader();
-                  reader.onloadend = () => resolve(reader.result);
-                  reader.onerror = () => resolve(fileUri);
-                  reader.readAsDataURL(blob);
-                });
-                imageUrl = base64Data;
-              } catch (b64Err) {
-                imageUrl = fileUri;
-              }
-            } else {
-              const { data: { publicUrl } } = supabase.storage
-                .from('family-photos')
-                .getPublicUrl(fileName);
-              imageUrl = publicUrl;
-            }
-          } catch (imgErr) {
-            console.warn('⚠️ 이미지 처리 안내:', imgErr);
-            imageUrl = fileUri;
-          }
+          imageUrl = await uploadChatAttachmentToStorage(
+            profile.family_id,
+            messageData.image,
+            'photo.jpg',
+            'image/jpeg'
+          );
         }
 
         const { data: insertedData, error } = await supabase
@@ -1564,15 +1558,21 @@ export default function App() {
 
         if (error) throw error;
 
-        // Reconcile optimistic message with real server record
+        // Reconcile optimistic message with real server record (deduplicate if Realtime INSERT arrived first)
         if (insertedData) {
-          setMessages(prev => prev.map(m => m.id === tempId ? {
-            ...m,
-            id: insertedData.id,
-            image: insertedData.image_url || m.image,
-            image_url: insertedData.image_url || m.image_url,
-            isSending: false,
-          } : m));
+          setMessages(prev => {
+            const alreadyInsertedByRealtime = prev.some(m => m.id === insertedData.id);
+            if (alreadyInsertedByRealtime) {
+              return prev.filter(m => m.id !== tempId);
+            }
+            return prev.map(m => m.id === tempId ? {
+              ...m,
+              id: insertedData.id,
+              image: insertedData.image_url || m.image,
+              image_url: insertedData.image_url || m.image_url,
+              isSending: false,
+            } : m);
+          });
         }
 
         const isDirect = messageData.roomId?.startsWith('direct-');
@@ -1631,16 +1631,23 @@ export default function App() {
 
     if (isSupabaseReady && profile?.id) {
       try {
-        for (const msg of unreadMsgs) {
-          const currentReadBy = Array.isArray(msg.readBy) ? msg.readBy : [];
-          if (!currentReadBy.includes(profile.id)) {
-            const newReadBy = [...currentReadBy, profile.id];
-            await supabase
-              .from('messages')
-              .update({ read_by: newReadBy })
-              .eq('id', msg.id);
-          }
-        }
+        const isUuid = (id: any) =>
+          typeof id === 'string' &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+
+        await Promise.all(
+          unreadMsgs
+            .filter(msg => isUuid(msg.id))
+            .map(msg => {
+              const currentReadBy = Array.isArray(msg.readBy) ? msg.readBy : [];
+              if (currentReadBy.includes(profile.id)) return Promise.resolve();
+              const newReadBy = [...currentReadBy, profile.id];
+              return supabase
+                .from('messages')
+                .update({ read_by: newReadBy })
+                .eq('id', msg.id);
+            })
+        );
       } catch (e) {
         console.warn('Failed to update read_by in Supabase:', e);
       }
@@ -1650,13 +1657,18 @@ export default function App() {
   };
 
   const handleCreateCustomRoom = async (newRoom: any) => {
-    const updated = [newRoom, ...customRooms];
+    const updated = [newRoom, ...customRooms.filter(r => r.id !== newRoom.id)];
     setCustomRooms(updated);
     try {
       await AsyncStorage.setItem('FAMLINK_CUSTOM_ROOMS', JSON.stringify(updated));
     } catch (e) {
       console.error('Failed to save custom room', e);
     }
+    // 🚀 클라우드 실시간 동기화: 별도 DB 테이블 없이도 모든 가족 기기에서 새 대화방이 자동 생성되도록 메타 메시지 브로드캐스트
+    await handleSendMessage({
+      text: `[방생성] ${JSON.stringify(newRoom)}`,
+      roomId: newRoom.id,
+    });
   };
 
   // Calendar Actions

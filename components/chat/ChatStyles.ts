@@ -1724,6 +1724,473 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginLeft: 8,
   },
+
+  // ==========================================
+  // 9. MESSENGER UX UPGRADES (GROUPING, DATE DIVIDER, REACTIONS, SEARCH, VIEWER)
+  // ==========================================
+  dateDividerContainer: {
+    alignItems: 'center',
+    marginVertical: 14,
+    width: '100%',
+  },
+  dateDividerBadge: {
+    backgroundColor: 'rgba(28, 25, 23, 0.06)',
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    borderRadius: 14,
+  },
+  dateDividerText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#78716C',
+  },
+  messageRowGrouped: {
+    marginBottom: 5,
+  },
+  groupedAvatarSpacer: {
+    width: 30,
+    marginRight: 10,
+  },
+  myGroupedBubbleRadius: {
+    borderTopRightRadius: 6,
+  },
+  otherGroupedBubbleRadius: {
+    borderTopLeftRadius: 6,
+  },
+  myLinkText: {
+    color: '#FFFFFF',
+    textDecorationLine: 'underline',
+    fontWeight: '700',
+  },
+  otherLinkText: {
+    color: '#2563EB',
+    textDecorationLine: 'underline',
+    fontWeight: '700',
+  },
+
+  // Emoji Reactions under Bubble
+  reactionRowContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 5,
+    marginTop: 4,
+  },
+  myReactionRow: {
+    justifyContent: 'flex-end',
+  },
+  otherReactionRow: {
+    justifyContent: 'flex-start',
+  },
+  reactionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E8E0D0',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  reactionPillActive: {
+    backgroundColor: '#FFF5F2',
+    borderColor: '#FF6B47',
+  },
+  reactionPillEmoji: {
+    fontSize: 12,
+    marginRight: 4,
+  },
+  reactionPillCount: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#78716C',
+  },
+  reactionPillCountActive: {
+    color: '#FF6B47',
+    fontWeight: '800',
+  },
+
+  // Context Menu Quick Emoji Reaction Bar
+  contextReactionBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    backgroundColor: '#FAF8F3',
+    borderRadius: 18,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E8E0D0',
+  },
+  contextReactionEmojiBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#F5F0E8',
+  },
+  contextReactionEmojiBtnActive: {
+    backgroundColor: '#FFF5F2',
+    borderColor: '#FF6B47',
+    borderWidth: 1.5,
+  },
+  contextReactionEmojiText: {
+    fontSize: 22,
+  },
+
+  // Chat Header Action Icons & Search Bar
+  headerActionBtnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FAF8F3',
+    borderWidth: 1,
+    borderColor: '#E8E0D0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerIconBtnActive: {
+    backgroundColor: '#FFF5F2',
+    borderColor: '#FF6B47',
+  },
+  searchBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E8E0D0',
+  },
+  searchInputWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FAF8F3',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E8E0D0',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 13.5,
+    color: '#1C1917',
+    paddingVertical: 2,
+    marginLeft: 6,
+    ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
+  },
+  searchCountText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#FF6B47',
+    marginLeft: 8,
+  },
+  searchCloseBtn: {
+    marginLeft: 10,
+    padding: 4,
+  },
+
+  // Floating Scroll-to-Bottom & New Message Toast
+  scrollToBottomFabContainer: {
+    position: 'absolute',
+    right: 16,
+    bottom: 76,
+    flexDirection: 'row',
+    alignItems: 'center',
+    zIndex: 30,
+  },
+  scrollToBottomToastPill: {
+    backgroundColor: 'rgba(28, 25, 23, 0.88)',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 8,
+    maxWidth: 220,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 5,
+    elevation: 4,
+  },
+  scrollToBottomToastText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  scrollToBottomCircleBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.2,
+    borderColor: '#E8E0D0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.14,
+    shadowRadius: 5,
+    elevation: 4,
+  },
+
+  // Full-Screen Image Viewer Modal
+  imageViewerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(12, 10, 9, 0.96)',
+    justifyContent: 'space-between',
+  },
+  imageViewerTopBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingBottom: 12,
+  },
+  imageViewerMetaCol: {
+    flex: 1,
+  },
+  imageViewerSenderText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  imageViewerTimeText: {
+    color: '#A8A29E',
+    fontSize: 11.5,
+    marginTop: 2,
+  },
+  imageViewerActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  imageViewerIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imageViewerScrollContent: {
+    flexGrow: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imageViewerTouchArea: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+  },
+  imageViewerImgFit: {
+    width: 340,
+    height: 440,
+    maxWidth: '100%',
+  },
+  imageViewerImgZoomed: {
+    width: 660,
+    height: 660,
+  },
+  imageViewerBottomBar: {
+    alignItems: 'center',
+    paddingTop: 10,
+  },
+  imageViewerHintText: {
+    color: '#A8A29E',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  // Media & Files Drawer Sheet
+  mediaDrawerSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    width: '100%',
+    maxHeight: '82%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  mediaDrawerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  mediaDrawerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  mediaDrawerTitle: {
+    fontSize: 16.5,
+    fontWeight: '900',
+    color: '#1C1917',
+  },
+  mediaDrawerTabBar: {
+    flexDirection: 'row',
+    backgroundColor: '#FAF8F3',
+    borderRadius: 14,
+    padding: 4,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E8E0D0',
+  },
+  mediaDrawerTabBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    borderRadius: 10,
+  },
+  mediaDrawerTabBtnActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  mediaDrawerTabText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#78716C',
+  },
+  mediaDrawerTabTextActive: {
+    color: '#FF6B47',
+    fontWeight: '800',
+  },
+  mediaDrawerContentScroll: {
+    maxHeight: 400,
+  },
+  mediaDrawerEmptyBox: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 48,
+    gap: 10,
+  },
+  mediaDrawerEmptyText: {
+    fontSize: 13,
+    color: '#78716C',
+    fontWeight: '600',
+  },
+  mediaPhotoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingBottom: 16,
+  },
+  mediaPhotoGridCell: {
+    width: '31.5%',
+    aspectRatio: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#FAF8F3',
+    borderWidth: 1,
+    borderColor: '#E8E0D0',
+  },
+  mediaPhotoGridImg: {
+    width: '100%',
+    height: '100%',
+  },
+  mediaFileList: {
+    gap: 10,
+    paddingBottom: 16,
+  },
+  mediaFileRowCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FAF8F3',
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E8E0D0',
+  },
+
+  // Search Keyword Highlight, Edited Tag, Target Message Highlight, Read Receipt Details
+  searchHighlightText: {
+    backgroundColor: '#FDE047',
+    color: '#1C1917',
+    fontWeight: '800',
+  },
+  myEditedTagText: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.78)',
+    fontWeight: '500',
+  },
+  otherEditedTagText: {
+    fontSize: 11,
+    color: '#A8A29E',
+    fontWeight: '500',
+  },
+  highlightedBubble: {
+    borderWidth: 2.2,
+    borderColor: '#F59E0B',
+    shadowColor: '#F59E0B',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.45,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  contextReadReceiptRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: '#E8E0D0',
+  },
+  contextReadReceiptText: {
+    fontSize: 11.5,
+    color: '#78716C',
+    fontWeight: '600',
+    flex: 1,
+  },
+  editingBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#ECFDF5',
+    borderTopWidth: 1.2,
+    borderTopColor: '#A7F3D0',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  editingBarIconBox: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: '#D1FAE5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 9,
+  },
+  editingBarTitle: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#059669',
+    marginBottom: 1,
+  },
 });
 
 export default styles;
