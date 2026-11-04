@@ -77,8 +77,11 @@ export default function ChatImageViewerModal({
     });
   };
 
-  // 대화방 내 공유된 사진 및 파일/동영상 추출
+  // 대화방 내 공유된 사진 및 파일/동영상 추출 (⚡ 지연 평가: 서랍이 열렸을 때만 연산하여 평상시 채팅 CPU 0% 유지)
   const { sharedPhotos, sharedFiles } = useMemo(() => {
+    if (!mediaDrawerVisible) {
+      return { sharedPhotos: [], sharedFiles: [] };
+    }
     const photos: { id: string; uri: string; senderName: string; timestamp: string }[] = [];
     const files: {
       id: string;

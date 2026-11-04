@@ -1,5 +1,5 @@
 import './utils/setupFontScalingLock';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   StyleSheet,
   Text,
@@ -1671,6 +1671,45 @@ export default function App() {
     });
   };
 
+  const handleUpdateMessageVote = useCallback(async (messageId: any, newText: string) => {
+    setMessages(prev => prev.map(m => m.id === messageId ? { ...m, text: newText } : m));
+    if (isSupabaseReady) {
+      try {
+        await supabase
+          .from('messages')
+          .update({ text: newText })
+          .eq('id', messageId);
+      } catch (err) {
+        console.warn('Failed to update poll/reaction/edited message:', err);
+      }
+    }
+  }, []);
+
+  const handleDeleteMessage = useCallback(async (messageId: any, mode?: string) => {
+    if (mode === 'all') {
+      // 모두에게서 삭제 (전송 취소)
+      setMessages(prev => prev.map(m => m.id === messageId ? {
+        ...m,
+        text: '[삭제된 메시지입니다]',
+        image: null,
+        image_url: null
+      } : m));
+      if (isSupabaseReady) {
+        try {
+          await supabase
+            .from('messages')
+            .update({ text: '[삭제된 메시지입니다]', image_url: null })
+            .eq('id', messageId);
+        } catch (err) {
+          console.warn('Failed to delete message for all:', err);
+        }
+      }
+    } else {
+      // 나에게서만 삭제
+      setMessages(prev => prev.filter(m => m.id !== messageId));
+    }
+  }, []);
+
   // Calendar Actions
   const handleAddEvent = async (eventData: any) => {
     const tempId = `evt-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
@@ -1995,6 +2034,7 @@ export default function App() {
             pointerEvents={currentScreen === 'chat' ? 'auto' : 'none'}
           >
             <ChatScreen
+              isActive={currentScreen === 'chat'}
               messages={messages}
               currentUser={currentUser}
               currentUserProfile={profile}
@@ -2009,44 +2049,8 @@ export default function App() {
               onAddEvent={handleAddEvent}
               onAddShoppingItem={handleAddItem}
               onAddChore={handleAddItem}
-              onUpdateMessageVote={async (messageId, newText) => {
-                // Optimistically update message text for poll
-                setMessages(prev => prev.map(m => m.id === messageId ? { ...m, text: newText } : m));
-                if (isSupabaseReady) {
-                  try {
-                    await supabase
-                      .from('messages')
-                      .update({ text: newText })
-                      .eq('id', messageId);
-                  } catch (err) {
-                    console.warn('Failed to update poll message:', err);
-                  }
-                }
-              }}
-              onDeleteMessage={async (messageId, mode) => {
-                if (mode === 'all') {
-                  // 모두에게서 삭제 (전송 취소)
-                  setMessages(prev => prev.map(m => m.id === messageId ? {
-                    ...m,
-                    text: '[삭제된 메시지입니다]',
-                    image: null,
-                    image_url: null
-                  } : m));
-                  if (isSupabaseReady) {
-                    try {
-                      await supabase
-                        .from('messages')
-                        .update({ text: '[삭제된 메시지입니다]', image_url: null })
-                        .eq('id', messageId);
-                    } catch (err) {
-                      console.warn('Failed to delete message for all:', err);
-                    }
-                  }
-                } else {
-                  // 나에게서만 삭제
-                  setMessages(prev => prev.filter(m => m.id !== messageId));
-                }
-              }}
+              onUpdateMessageVote={handleUpdateMessageVote}
+              onDeleteMessage={handleDeleteMessage}
             />
           </View>
         )}

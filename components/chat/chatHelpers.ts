@@ -520,3 +520,167 @@ export const splitTextWithLinks = (text: string): LinkSegment[] => {
   return segments.length > 0 ? segments : [{ type: 'text', value: text }];
 };
 
+/**
+ * 대화방 목록(ChatRoomListView)용 마지막 메시지 텍스트 및 카드 타입 추출 순수 함수
+ */
+export interface MessagePreviewData {
+  text: string;
+  cardType: string | null;
+}
+
+export const getMessagePreviewData = (msg: any): MessagePreviewData => {
+  if (!msg) return { text: '', cardType: null };
+  if (msg.is_deleted || msg.text === '[삭제된 메시지입니다]') {
+    return { text: '삭제된 메시지입니다.', cardType: 'deleted' };
+  }
+  if (msg.image) return { text: '사진을 공유했습니다.', cardType: 'image' };
+
+  let rawInput = '';
+  if (typeof msg.text === 'string') {
+    rawInput = msg.text;
+  } else if (typeof msg.text === 'object' && msg.text !== null) {
+    if (msg.text.bookTitle) {
+      rawInput = `[포토북] "${msg.text.bookTitle}" 주문 접수`;
+    } else if (msg.text.title) {
+      rawInput = msg.text.title;
+    } else if (msg.text.name) {
+      rawInput = msg.text.name;
+    } else if (msg.text.text) {
+      rawInput = msg.text.text;
+    } else {
+      try {
+        rawInput = JSON.stringify(msg.text);
+      } catch {
+        rawInput = String(msg.text);
+      }
+    }
+  } else if (msg.text != null) {
+    rawInput = String(msg.text);
+  }
+
+  const { cleanText: rawText } = extractReactionsAndCleanText(rawInput);
+  if (!rawText) return { text: '', cardType: null };
+
+  if (rawText === '[삭제된 메시지입니다]') {
+    return { text: '삭제된 메시지입니다.', cardType: 'deleted' };
+  }
+
+  if (rawText.startsWith('[방생성]')) {
+    return { text: '새로운 대화방이 시작되었습니다.', cardType: 'notice' };
+  }
+
+  const replyMeta = parseReplyHeader(rawText);
+  if (replyMeta) {
+    const cleanBody = replyMeta.cleanText
+      ? replyMeta.cleanText.replace(/[\r\n]+/g, ' ').trim()
+      : '';
+    return {
+      text: cleanBody
+        ? `(답장) ${cleanBody}`
+        : `${replyMeta.senderName || '가족'}님에게 답장`,
+      cardType: 'reply',
+    };
+  }
+
+  if (rawText.startsWith('[공지설정]')) {
+    try {
+      const clean = rawText.replace(/^\[공지설정\]\s*/, '');
+      const data = JSON.parse(clean);
+      const pinnerName = data.pinner || data.author || '가족';
+      return { text: `📌 ${pinnerName}님이 공지를 등록했습니다.`, cardType: 'notice' };
+    } catch (_) {
+      return { text: '📌 공지가 등록되었습니다.', cardType: 'notice' };
+    }
+  }
+  if (rawText.startsWith('[공지해제]')) {
+    return { text: '📌 공지가 해제되었습니다.', cardType: 'notice' };
+  }
+
+  if (rawText.startsWith('[집안일카드]') || rawText.startsWith('[장보기카드]')) {
+    const isLegacy = rawText.includes('[장보기카드]');
+    try {
+      const data = JSON.parse(
+        rawText.replace(isLegacy ? /^\[장보기카드\]\s*/ : /^\[집안일카드\]\s*/, '')
+      );
+      return { text: `집안일: ${data.title || '새 할 일'}`, cardType: 'chore' };
+    } catch (_) {
+      return { text: '집안일 추가 요청', cardType: 'chore' };
+    }
+  }
+
+  if (rawText.startsWith('[일정공유]')) {
+    try {
+      const data = JSON.parse(rawText.replace(/^\[일정공유\]\s*/, ''));
+      return { text: `일정: ${data.title || '새 일정'}`, cardType: 'event' };
+    } catch (_) {
+      return { text: '캘린더 일정 공유', cardType: 'event' };
+    }
+  }
+
+  if (rawText.startsWith('[가족투표]')) {
+    try {
+      const data = JSON.parse(rawText.replace(/^\[가족투표\]\s*/, ''));
+      return { text: `투표: ${data.title || '새 투표'}`, cardType: 'poll' };
+    } catch (_) {
+      return { text: '가족 투표 진행 중', cardType: 'poll' };
+    }
+  }
+
+  if (rawText.startsWith('[위치공유]')) {
+    try {
+      const data = JSON.parse(rawText.replace(/^\[위치공유\]\s*/, ''));
+      return { text: `위치: ${data.title || '모임 장소'}`, cardType: 'location' };
+    } catch (_) {
+      return { text: '위치 / 모임 장소 공유', cardType: 'location' };
+    }
+  }
+
+  if (rawText.startsWith('[음성메모]')) {
+    try {
+      const data = JSON.parse(rawText.replace(/^\[음성메모\]\s*/, ''));
+      return { text: `음성 메시지 (${data.duration || 3}초)`, cardType: 'voice' };
+    } catch (_) {
+      return { text: '음성 메시지', cardType: 'voice' };
+    }
+  }
+
+  if (rawText.startsWith('[동영상]')) {
+    try {
+      const data = JSON.parse(rawText.replace(/^\[동영상\]\s*/, ''));
+      return { text: `동영상: ${data.name || '가족 영상'}`, cardType: 'video' };
+    } catch (_) {
+      return { text: '동영상 공유', cardType: 'video' };
+    }
+  }
+
+  if (rawText.startsWith('[파일]')) {
+    try {
+      const data = JSON.parse(rawText.replace(/^\[파일\]\s*/, ''));
+      return { text: `파일: ${data.name || '문서'}`, cardType: 'file' };
+    } catch (_) {
+      return { text: '파일 공유', cardType: 'file' };
+    }
+  }
+
+  const photobookData = parsePhotobookOrderData(rawText);
+  if (photobookData) {
+    return { text: `포토북 주문: ${photobookData.bookTitle}`, cardType: 'photobook' };
+  }
+
+  const trimmed = rawText.trim();
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed.bookTitle) {
+        return { text: `포토북 주문: ${parsed.bookTitle}`, cardType: 'photobook' };
+      }
+      if (parsed.title) return { text: parsed.title, cardType: null };
+      if (parsed.text) return { text: parsed.text, cardType: null };
+      if (parsed.name) return { text: parsed.name, cardType: null };
+    } catch (_) {}
+  }
+
+  return { text: rawText.replace(/[\r\n]+/g, ' ').trim(), cardType: null };
+};
+
+

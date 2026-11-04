@@ -3,32 +3,15 @@ import {
   Text,
   View,
   FlatList,
-  TextInput,
   TouchableOpacity,
   Keyboard,
   Platform,
-  Image,
   Alert,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  Users,
-  Send,
-  ChevronLeft,
-  Plus,
-  X,
-  MessageCircle,
-  CornerUpLeft,
-  Pin,
-  Search,
-  FolderOpen,
-  ArrowDown,
-  Edit3,
-  Check,
-} from 'lucide-react-native';
-import UserAvatar from './UserAvatar';
+import { MessageCircle, ArrowDown } from 'lucide-react-native';
 import { stripEmojis } from '../utils/topics';
 
 import {
@@ -40,12 +23,18 @@ import {
   toggleMessageReactionText,
   applyEditedMessageText,
   computeMessageGroupingMeta,
+  getMessagePreviewData,
 } from './chat/chatHelpers';
 import { useChatAttachments } from './chat/useChatAttachments';
 import ChatAttachmentModals from './chat/ChatAttachmentModals';
 import ChatMessageBubble from './chat/ChatMessageBubble';
 import ChatRoomListView from './chat/ChatRoomListView';
 import ChatImageViewerModal, { ViewerImageState } from './chat/ChatImageViewerModal';
+import ChatConversationHeader from './chat/ChatConversationHeader';
+import ChatInputBar, {
+  ReplyingToState,
+  EditingMessageState,
+} from './chat/ChatInputBar';
 import styles from './chat/ChatStyles';
 
 export {
@@ -63,6 +52,7 @@ import {
 } from '../types/domain';
 
 export interface ChatScreenProps {
+  isActive?: boolean;
   messages?: ChatMessage[];
   currentUser?: any;
   currentUserProfile?: UserProfile | null;
@@ -105,7 +95,15 @@ const DEFAULT_MEMBERS: Record<string, { name: string; avatar: string; color: str
   daughter: { name: '딸', avatar: '👧', color: '#F59E0B' },
 };
 
+const DEFAULT_NAMES: Record<string, string> = {
+  mom: '엄마',
+  dad: '아빠',
+  son: '아들',
+  daughter: '딸',
+};
+
 export default function ChatScreen({
+  isActive = true,
   messages = [],
   currentUser,
   currentUserProfile,
@@ -125,24 +123,14 @@ export default function ChatScreen({
 }: ChatScreenProps) {
   const insets = useSafeAreaInsets();
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
-  const [inputText, setInputText] = useState('');
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
   const flatListRef = useRef<FlatList<any>>(null);
-  const inputRef = useRef<TextInput>(null);
-  const isSendingRef = useRef(false);
 
   // 💬 특정 메시지 인용 답장(Quote Reply) & ✏️ 메시지 수정(Edit) State
-  const [replyingTo, setReplyingTo] = useState<{
-    id: any;
-    senderName?: string;
-    text?: string;
-    image?: string | null;
-  } | null>(null);
-  const [editingMessage, setEditingMessage] = useState<{
-    id: string | number;
-    rawText: string;
-    originalBody: string;
-  } | null>(null);
+  const [replyingTo, setReplyingTo] = useState<ReplyingToState | null>(null);
+  const [editingMessage, setEditingMessage] = useState<EditingMessageState | null>(
+    null
+  );
 
   // 🎯 답장/공지 터치로 스크롤 이동 시 대상 말풍선 하이라이트 State
   const [highlightedMsgId, setHighlightedMsgId] = useState<string | number | null>(
@@ -180,9 +168,25 @@ export default function ChatScreen({
   const [newRoomTitle, setNewRoomTitle] = useState('');
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
 
+  // ⚡ O(1) 가족 구성원 해시 맵 인덱싱 (id 및 role 키 동시 매핑)
+  const memberLookupMap = useMemo(() => {
+    const map = new Map<string, FamilyMember>();
+    if (familyMembers && Array.isArray(familyMembers)) {
+      for (let i = 0; i < familyMembers.length; i++) {
+        const m = familyMembers[i];
+        if (!m || typeof m !== 'object') continue;
+        if (m.id) map.set(String(m.id), m);
+        if (m.role && !map.has(String(m.role))) {
+          map.set(String(m.role), m);
+        }
+      }
+    }
+    return map;
+  }, [familyMembers]);
+
   const getSenderInfo = useCallback(
     (profileIdOrRole?: any, senderRole?: any, senderObj?: any) => {
-      let pId = null;
+      let pId: string | null = null;
       let sRole = senderRole;
       let sObj = senderObj;
 
@@ -193,7 +197,7 @@ export default function ChatScreen({
       } else if (typeof profileIdOrRole === 'string' && !senderRole && !senderObj) {
         sRole = profileIdOrRole;
       } else if (profileIdOrRole) {
-        pId = profileIdOrRole;
+        pId = String(profileIdOrRole);
       }
 
       if (sObj && typeof sObj === 'object' && sObj.name) {
@@ -204,34 +208,29 @@ export default function ChatScreen({
         };
       }
 
-      if (familyMembers && Array.isArray(familyMembers)) {
-        if (pId) {
-          const matchById = familyMembers.find(
-            (m) => m && typeof m === 'object' && m.id === pId
-          );
-          if (matchById) {
-            return {
-              name: matchById.name,
-              avatar: matchById.avatar || '👦',
-              color: matchById.color || '#3B82F6',
-            };
-          }
-        }
-        if (sRole) {
-          const matchByRole = familyMembers.find(
-            (m) => m && typeof m === 'object' && (m.role === sRole || m.id === sRole)
-          );
-          if (matchByRole) {
-            return {
-              name: matchByRole.name,
-              avatar: matchByRole.avatar || '👦',
-              color: matchByRole.color || '#3B82F6',
-            };
-          }
+      if (pId) {
+        const matchById = memberLookupMap.get(String(pId));
+        if (matchById) {
+          return {
+            name: matchById.name,
+            avatar: matchById.avatar || '👦',
+            color: matchById.color || '#3B82F6',
+          };
         }
       }
 
-      const roleKey = sRole || pId;
+      if (sRole) {
+        const matchByRole = memberLookupMap.get(String(sRole));
+        if (matchByRole) {
+          return {
+            name: matchByRole.name,
+            avatar: matchByRole.avatar || '👦',
+            color: matchByRole.color || '#3B82F6',
+          };
+        }
+      }
+
+      const roleKey = String(sRole || pId || '');
       return (
         DEFAULT_MEMBERS[roleKey] || {
           name: (sObj && sObj.name) || roleKey || '가족',
@@ -240,30 +239,17 @@ export default function ChatScreen({
         }
       );
     },
-    [familyMembers]
+    [memberLookupMap]
   );
 
   const getMemberName = useCallback(
     (keyOrId: any) => {
-      if (familyMembers && Array.isArray(familyMembers)) {
-        const matchById = familyMembers.find(
-          (m) => m && typeof m === 'object' && m.id === keyOrId
-        );
-        if (matchById) return matchById.name;
-        const matchByRole = familyMembers.find(
-          (m) => m && typeof m === 'object' && m.role === keyOrId
-        );
-        if (matchByRole) return matchByRole.name;
-      }
-      const DEFAULT_NAMES: Record<string, string> = {
-        mom: '엄마',
-        dad: '아빠',
-        son: '아들',
-        daughter: '딸',
-      };
-      return DEFAULT_NAMES[keyOrId] || keyOrId;
+      if (!keyOrId) return '가족';
+      const match = memberLookupMap.get(String(keyOrId));
+      if (match?.name) return match.name;
+      return DEFAULT_NAMES[String(keyOrId)] || String(keyOrId);
     },
-    [familyMembers]
+    [memberLookupMap]
   );
 
   const myActorName = useMemo(
@@ -388,12 +374,11 @@ export default function ChatScreen({
       return;
     }
 
-    const currentRoomMsgs = (messages || []).filter((m) =>
-      isMessageInRoom(m, selectedRoomId)
-    );
     let latestNoticeEvent: string | null = null;
-    for (let i = currentRoomMsgs.length - 1; i >= 0; i--) {
-      const msgObj = currentRoomMsgs[i];
+    const msgList = messages || [];
+    for (let i = msgList.length - 1; i >= 0; i--) {
+      const msgObj = msgList[i];
+      if (!isMessageInRoom(msgObj, selectedRoomId)) continue;
       const rawTxt = typeof msgObj?.text === 'string' ? msgObj.text : '';
       const { cleanText: txt } = extractReactionsAndCleanText(rawTxt);
       if (txt && (txt.startsWith('[공지설정]') || txt.startsWith('[공지해제]'))) {
@@ -437,12 +422,12 @@ export default function ChatScreen({
       .catch(() => {});
   }, [selectedRoomId, messages, isMessageInRoom]);
 
-  // Trigger read receipt update when entering a chat room or receiving new messages
+  // ⚡ 채팅 탭이 실제로 활성화(isActive)되어 있고 방에 들어가 있을 때만 읽음 처리 트리거
   useEffect(() => {
-    if (selectedRoomId !== null && onMarkAsRead) {
+    if (isActive && selectedRoomId !== null && onMarkAsRead) {
       onMarkAsRead(selectedRoomId);
     }
-  }, [selectedRoomId, messages?.length]);
+  }, [isActive, selectedRoomId, messages?.length, onMarkAsRead]);
 
   // 대화방 진입 시 즉시 하단 이동
   useEffect(() => {
@@ -521,59 +506,63 @@ export default function ChatScreen({
     };
   }, []);
 
-  const handleSend = () => {
-    const textToSend = inputText.trim();
-    if (!textToSend && !selectedPhoto) return;
-    if (isSendingRef.current) return;
-    isSendingRef.current = true;
-    setTimeout(() => {
-      isSendingRef.current = false;
-    }, 250);
+  // ChatInputBar에서 전송(또는 수정 완료) 시 호출되는 핸들러
+  const handleSubmitInputText = useCallback(
+    (textToSend: string) => {
+      if (!textToSend && !selectedPhoto) return;
 
-    // ✏️ 메시지 수정 모드인 경우 기존 메시지 텍스트 업데이트
-    if (editingMessage && textToSend) {
-      if (onUpdateMessageVote) {
-        const updatedRawText = applyEditedMessageText(
-          editingMessage.rawText,
-          textToSend
-        );
-        onUpdateMessageVote(editingMessage.id, updatedRawText);
+      // ✏️ 메시지 수정 모드인 경우 기존 메시지 텍스트 업데이트
+      if (editingMessage && textToSend) {
+        if (onUpdateMessageVote) {
+          const updatedRawText = applyEditedMessageText(
+            editingMessage.rawText,
+            textToSend
+          );
+          onUpdateMessageVote(editingMessage.id, updatedRawText);
+        }
+        setEditingMessage(null);
+        return;
       }
-      setEditingMessage(null);
-      setInputText('');
-      return;
-    }
 
-    let finalPayloadText = textToSend;
-    if (replyingTo) {
-      const snippet = (replyingTo.text || (replyingTo.image ? '[사진]' : '메시지'))
-        .replace(/[\r\n]+/g, ' ')
-        .trim()
-        .slice(0, 60);
-      const replyData = {
-        id: String(replyingTo.id || ''),
-        name: String(replyingTo.senderName || '가족'),
-        snippet,
-      };
-      finalPayloadText = `[답장:${JSON.stringify(replyData)}]\n${textToSend}`;
-      setReplyingTo(null);
-    }
+      let finalPayloadText = textToSend;
+      if (replyingTo) {
+        const snippet = (replyingTo.text || (replyingTo.image ? '[사진]' : '메시지'))
+          .replace(/[\r\n]+/g, ' ')
+          .trim()
+          .slice(0, 60);
+        const replyData = {
+          id: String(replyingTo.id || ''),
+          name: String(replyingTo.senderName || '가족'),
+          snippet,
+        };
+        finalPayloadText = `[답장:${JSON.stringify(replyData)}]\n${textToSend}`;
+        setReplyingTo(null);
+      }
 
-    if (onSendMessage) {
-      onSendMessage({
-        text: finalPayloadText,
-        image: selectedPhoto,
-        roomId: selectedRoomId || 'family-group',
-      });
-    }
+      if (onSendMessage) {
+        onSendMessage({
+          text: finalPayloadText,
+          image: selectedPhoto,
+          roomId: selectedRoomId || 'family-group',
+        });
+      }
 
-    setInputText('');
-    setSelectedPhoto(null);
+      setSelectedPhoto(null);
 
-    setTimeout(() => {
-      scrollToBottomSafely(true);
-    }, 50);
-  };
+      setTimeout(() => {
+        scrollToBottomSafely(true);
+      }, 50);
+    },
+    [
+      selectedPhoto,
+      editingMessage,
+      onUpdateMessageVote,
+      replyingTo,
+      onSendMessage,
+      selectedRoomId,
+      scrollToBottomSafely,
+    ]
+  );
 
   // 메시지 공감(이모지 리액션) 토글 핸들러
   const handleToggleReaction = useCallback(
@@ -624,7 +613,7 @@ export default function ChatScreen({
     []
   );
 
-  const handleCopyMessageText = async () => {
+  const handleCopyMessageText = useCallback(async () => {
     if (!selectedMsgForMenu) return;
     const textToCopy = selectedMsgForMenu.bubbleText || '';
     if (textToCopy) {
@@ -632,9 +621,9 @@ export default function ChatScreen({
       Alert.alert('복사 완료 📋', '메시지가 클립보드에 복사되었습니다.');
     }
     setContextMenuVisible(false);
-  };
+  }, [selectedMsgForMenu]);
 
-  const handleTriggerReply = () => {
+  const handleTriggerReply = useCallback(() => {
     if (!selectedMsgForMenu) return;
     const replyMeta = parseReplyHeader(selectedMsgForMenu.bubbleText);
     const cleanSnippet = replyMeta
@@ -649,13 +638,10 @@ export default function ChatScreen({
       image: selectedMsgForMenu.item.image,
     });
     setContextMenuVisible(false);
-    setTimeout(() => {
-      inputRef.current?.focus();
-    }, 150);
-  };
+  }, [selectedMsgForMenu]);
 
   // 내가 보낸 메시지 수정 모드 진입
-  const handleTriggerEdit = () => {
+  const handleTriggerEdit = useCallback(() => {
     if (!selectedMsgForMenu?.item?.id) return;
     const rawTxt =
       typeof selectedMsgForMenu.item.text === 'string'
@@ -672,14 +658,10 @@ export default function ChatScreen({
       rawText: rawTxt,
       originalBody: bodyToEdit,
     });
-    setInputText(bodyToEdit);
     setContextMenuVisible(false);
-    setTimeout(() => {
-      inputRef.current?.focus();
-    }, 150);
-  };
+  }, [selectedMsgForMenu]);
 
-  const handlePinNotice = async () => {
+  const handlePinNotice = useCallback(async () => {
     if (!selectedMsgForMenu || !selectedRoomId) return;
     const replyMeta = parseReplyHeader(selectedMsgForMenu.bubbleText);
     const noticeText = replyMeta
@@ -710,9 +692,9 @@ export default function ChatScreen({
 
     setContextMenuVisible(false);
     Alert.alert('공지 등록 📌', '가족 대화방 상단에 공지로 고정되었습니다.');
-  };
+  }, [selectedMsgForMenu, selectedRoomId, myActorName, onSendMessage]);
 
-  const handleUnpinNotice = async () => {
+  const handleUnpinNotice = useCallback(async () => {
     setPinnedNotice(null);
     if (selectedRoomId) {
       try {
@@ -729,9 +711,9 @@ export default function ChatScreen({
         });
       }
     }
-  };
+  }, [selectedRoomId, onSendMessage]);
 
-  const handleTriggerDelete = () => {
+  const handleTriggerDelete = useCallback(() => {
     if (!selectedMsgForMenu) return;
     const targetMsg = selectedMsgForMenu.item;
     const isMe = selectedMsgForMenu.isMe;
@@ -772,172 +754,131 @@ export default function ChatScreen({
         },
       ]);
     }
-  };
+  }, [selectedMsgForMenu, onDeleteMessage]);
 
-  // Format message text for chat room preview
-  const getMessagePreviewData = useCallback((msg: any) => {
-    if (!msg) return { text: '', cardType: null };
-    if (msg.is_deleted || msg.text === '[삭제된 메시지입니다]') {
-      return { text: '삭제된 메시지입니다.', cardType: 'deleted' };
-    }
-    if (msg.image) return { text: '사진을 공유했습니다.', cardType: 'image' };
-
-    let rawInput = '';
-    if (typeof msg.text === 'string') {
-      rawInput = msg.text;
-    } else if (typeof msg.text === 'object' && msg.text !== null) {
-      if (msg.text.bookTitle) {
-        rawInput = `[포토북] "${msg.text.bookTitle}" 주문 접수`;
-      } else if (msg.text.title) {
-        rawInput = msg.text.title;
-      } else if (msg.text.name) {
-        rawInput = msg.text.name;
-      } else if (msg.text.text) {
-        rawInput = msg.text.text;
-      } else {
-        try {
-          rawInput = JSON.stringify(msg.text);
-        } catch {
-          rawInput = String(msg.text);
-        }
-      }
-    } else if (msg.text != null) {
-      rawInput = String(msg.text);
-    }
-
-    const { cleanText: rawText } = extractReactionsAndCleanText(rawInput);
-    if (!rawText) return { text: '', cardType: null };
-
-    if (rawText === '[삭제된 메시지입니다]') {
-      return { text: '삭제된 메시지입니다.', cardType: 'deleted' };
-    }
-
-    if (rawText.startsWith('[방생성]')) {
-      return { text: '새로운 대화방이 시작되었습니다.', cardType: 'notice' };
-    }
-
-    const replyMeta = parseReplyHeader(rawText);
-    if (replyMeta) {
-      const cleanBody = replyMeta.cleanText
-        ? replyMeta.cleanText.replace(/[\r\n]+/g, ' ').trim()
-        : '';
-      return {
-        text: cleanBody
-          ? `(답장) ${cleanBody}`
-          : `${replyMeta.senderName || '가족'}님에게 답장`,
-        cardType: 'reply',
-      };
-    }
-
-    if (rawText.startsWith('[공지설정]')) {
-      try {
-        const clean = rawText.replace(/^\[공지설정\]\s*/, '');
-        const data = JSON.parse(clean);
-        const pinnerName = data.pinner || data.author || '가족';
-        return { text: `📌 ${pinnerName}님이 공지를 등록했습니다.`, cardType: 'notice' };
-      } catch (_) {
-        return { text: '📌 공지가 등록되었습니다.', cardType: 'notice' };
-      }
-    }
-    if (rawText.startsWith('[공지해제]')) {
-      return { text: '📌 공지가 해제되었습니다.', cardType: 'notice' };
-    }
-
-    if (rawText.startsWith('[집안일카드]') || rawText.startsWith('[장보기카드]')) {
-      const isLegacy = rawText.includes('[장보기카드]');
-      try {
-        const data = JSON.parse(
-          rawText.replace(isLegacy ? /^\[장보기카드\]\s*/ : /^\[집안일카드\]\s*/, '')
-        );
-        return { text: `집안일: ${data.title || '새 할 일'}`, cardType: 'chore' };
-      } catch (_) {
-        return { text: '집안일 추가 요청', cardType: 'chore' };
-      }
-    }
-
-    if (rawText.startsWith('[일정공유]')) {
-      try {
-        const data = JSON.parse(rawText.replace(/^\[일정공유\]\s*/, ''));
-        return { text: `일정: ${data.title || '새 일정'}`, cardType: 'event' };
-      } catch (_) {
-        return { text: '캘린더 일정 공유', cardType: 'event' };
-      }
-    }
-
-    if (rawText.startsWith('[가족투표]')) {
-      try {
-        const data = JSON.parse(rawText.replace(/^\[가족투표\]\s*/, ''));
-        return { text: `투표: ${data.title || '새 투표'}`, cardType: 'poll' };
-      } catch (_) {
-        return { text: '가족 투표 진행 중', cardType: 'poll' };
-      }
-    }
-
-    if (rawText.startsWith('[위치공유]')) {
-      try {
-        const data = JSON.parse(rawText.replace(/^\[위치공유\]\s*/, ''));
-        return { text: `위치: ${data.title || '모임 장소'}`, cardType: 'location' };
-      } catch (_) {
-        return { text: '위치 / 모임 장소 공유', cardType: 'location' };
-      }
-    }
-
-    if (rawText.startsWith('[음성메모]')) {
-      try {
-        const data = JSON.parse(rawText.replace(/^\[음성메모\]\s*/, ''));
-        return { text: `음성 메시지 (${data.duration || 3}초)`, cardType: 'voice' };
-      } catch (_) {
-        return { text: '음성 메시지', cardType: 'voice' };
-      }
-    }
-
-    if (rawText.startsWith('[동영상]')) {
-      try {
-        const data = JSON.parse(rawText.replace(/^\[동영상\]\s*/, ''));
-        return { text: `동영상: ${data.name || '가족 영상'}`, cardType: 'video' };
-      } catch (_) {
-        return { text: '동영상 공유', cardType: 'video' };
-      }
-    }
-
-    if (rawText.startsWith('[파일]')) {
-      try {
-        const data = JSON.parse(rawText.replace(/^\[파일\]\s*/, ''));
-        return { text: `파일: ${data.name || '문서'}`, cardType: 'file' };
-      } catch (_) {
-        return { text: '파일 공유', cardType: 'file' };
-      }
-    }
-
-    const photobookData = parsePhotobookOrderData(rawText);
-    if (photobookData) {
-      return { text: `포토북 주문: ${photobookData.bookTitle}`, cardType: 'photobook' };
-    }
-
-    const trimmed = rawText.trim();
-    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-      try {
-        const parsed = JSON.parse(trimmed);
-        if (parsed.bookTitle) {
-          return { text: `포토북 주문: ${parsed.bookTitle}`, cardType: 'photobook' };
-        }
-        if (parsed.title) return { text: parsed.title, cardType: null };
-        if (parsed.text) return { text: parsed.text, cardType: null };
-        if (parsed.name) return { text: parsed.name, cardType: null };
-      } catch (_) {}
-    }
-
-    return { text: rawText.replace(/[\r\n]+/g, ' ').trim(), cardType: null };
-  }, []);
-
-  // ⚡ useMemo: 대화방 리스트 및 미독 카운트 메모이제이션 + 메시지 스트림 기반 커스텀 대화방 실시간 자동 복원
+  // ⚡ O(M) 단일 패스(Single-Pass) 인덱싱: messages 배열을 단 1번만 순회하여 모든 대화방의 마지막 메시지, 미독 카운트, 커스텀 방 메타데이터를 동시 집계
   const CHAT_ROOMS: ChatRoomItem[] = useMemo(() => {
-    const getRoomLastMessageInfo = (roomId: string, otherMemberId: any = null) => {
-      const roomMsgs = (messages || []).filter((m) =>
-        isMessageInRoom(m, roomId, otherMemberId)
-      );
-      if (roomMsgs.length === 0) return null;
-      const last = roomMsgs[roomMsgs.length - 1];
+    const myId = currentUserProfile?.id || currentUser;
+
+    // 1. 1:1 대화방 대상 멤버 및 레거시 방 ID 매핑 준비
+    const directMemberToRoomMap = new Map<string, string>();
+    const directMembersList: { member: FamilyMember; otherId: string; roomId: string }[] = [];
+
+    if (familyMembers && Array.isArray(familyMembers)) {
+      for (let i = 0; i < familyMembers.length; i++) {
+        const member = familyMembers[i];
+        if (!member) continue;
+        const otherId = String(member.id || member.role || '');
+        const isMyself =
+          currentUserProfile && member.id
+            ? member.id === currentUserProfile.id
+            : member.id === currentUser || member.role === currentUser;
+
+        if (!isMyself && otherId) {
+          const rId = getDirectRoomId(myId, otherId);
+          directMembersList.push({ member, otherId, roomId: rId });
+          if (member.id) directMemberToRoomMap.set(String(member.id), rId);
+          if (member.role) directMemberToRoomMap.set(String(member.role), rId);
+        }
+      }
+    }
+
+    // 2. 로컬 customRooms 초기 등록
+    const mergedCustomRoomsMap = new Map<string, any>();
+    if (customRooms && Array.isArray(customRooms)) {
+      for (let i = 0; i < customRooms.length; i++) {
+        const r = customRooms[i];
+        if (r?.id) mergedCustomRoomsMap.set(r.id, r);
+      }
+    }
+
+    // 3. 단일 패스로 messages 순회하여 방별 { lastMsg, unreadCount } 집계
+    const roomStatsMap = new Map<string, { lastMsg: any; unreadCount: number }>();
+
+    const checkIsReadByMe = (readByList: any[]): boolean => {
+      if (!Array.isArray(readByList) || readByList.length === 0) return false;
+      for (let i = 0; i < readByList.length; i++) {
+        const id = readByList[i];
+        if (currentUserProfile?.id && id === currentUserProfile.id) return true;
+        if (id === currentUser) return true;
+        const matched = memberLookupMap.get(String(id));
+        if (matched && (matched.id === currentUser || matched.role === currentUser)) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    const msgList = messages || [];
+    for (let i = 0; i < msgList.length; i++) {
+      const msg = msgList[i];
+      if (!msg) continue;
+      const mRoom = String(msg.room_id || 'family-group');
+
+      // 커스텀 방 자동 발견 및 [방생성] 메타 파싱
+      if (mRoom.startsWith('custom-')) {
+        const rawTxt = typeof msg.text === 'string' ? msg.text : '';
+        if (rawTxt.includes('[방생성]')) {
+          const { cleanText } = extractReactionsAndCleanText(rawTxt);
+          if (cleanText.startsWith('[방생성]')) {
+            try {
+              const parsedRoom = JSON.parse(cleanText.replace(/^\[방생성\]\s*/, ''));
+              if (parsedRoom?.id) {
+                mergedCustomRoomsMap.set(parsedRoom.id, parsedRoom);
+              }
+            } catch (_) {}
+          }
+        }
+        if (!mergedCustomRoomsMap.has(mRoom)) {
+          mergedCustomRoomsMap.set(mRoom, {
+            id: mRoom,
+            title: '가족 커스텀 대화방',
+            subtitle: '가족 그룹방',
+            avatar: '💬',
+            color: '#FF6B47',
+            isGroup: true,
+          });
+        }
+      }
+
+      // 정규화된 타겟 roomId 판별
+      let canonicalRoomId = mRoom;
+      if (mRoom.startsWith('direct-')) {
+        // 레거시 단일 ID 형식(direct-otherId 또는 direct-myId) 호환
+        const parts = mRoom.replace(/^direct-/, '').split('-');
+        if (parts.length === 1) {
+          const otherCandidate =
+            msg.profile_id && msg.profile_id !== myId
+              ? String(msg.profile_id)
+              : msg.sender && msg.sender !== currentUser
+              ? String(msg.sender)
+              : parts[0];
+          const mapped = directMemberToRoomMap.get(otherCandidate);
+          if (mapped) canonicalRoomId = mapped;
+        }
+      }
+
+      const prevStat = roomStatsMap.get(canonicalRoomId) || {
+        lastMsg: null,
+        unreadCount: 0,
+      };
+      prevStat.lastMsg = msg;
+
+      const isMe =
+        currentUserProfile && msg.profile_id
+          ? msg.profile_id === currentUserProfile.id
+          : msg.sender === currentUser;
+
+      if (!isMe && !checkIsReadByMe(msg.readBy || [])) {
+        prevStat.unreadCount += 1;
+      }
+
+      roomStatsMap.set(canonicalRoomId, prevStat);
+    }
+
+    // 4. 방별 마지막 메시지 포맷터 (방당 최대 1회만 호출)
+    const buildLastMessageInfo = (last: any) => {
+      if (!last) return null;
       const sender = getSenderInfo(last.profile_id, last.sender, last.senderObj);
       const { text: displayText, cardType } = getMessagePreviewData(last);
 
@@ -966,35 +907,9 @@ export default function ChatScreen({
       };
     };
 
-    const getRoomUnreadCount = (roomId: string, otherMemberId: any = null): number => {
-      return (messages || []).filter((msg) => {
-        if (!isMessageInRoom(msg, roomId, otherMemberId)) return false;
-        const isMe =
-          currentUserProfile && msg.profile_id
-            ? msg.profile_id === currentUserProfile.id
-            : msg.sender === currentUser;
-        if (isMe) return false;
-
-        const readByList = msg.readBy || [];
-        const isReadByMe = readByList.some((id) => {
-          if (currentUserProfile && currentUserProfile.id) {
-            return id === currentUserProfile.id;
-          }
-          if (id === currentUser) return true;
-          if (familyMembers && Array.isArray(familyMembers)) {
-            const match = familyMembers.find(
-              (m) => m && typeof m === 'object' && m.id === id
-            );
-            if (match && match.id === currentUser) return true;
-          }
-          return false;
-        });
-        return !isReadByMe;
-      }).length;
-    };
-
-    const familyLast = getRoomLastMessageInfo('family-group');
-    const familyGroupUnread = getRoomUnreadCount('family-group');
+    const familyStat = roomStatsMap.get('family-group');
+    const familyLast = buildLastMessageInfo(familyStat?.lastMsg);
+    const familyGroupUnread = familyStat?.unreadCount || 0;
 
     const rooms: ChatRoomItem[] = [
       {
@@ -1014,42 +929,10 @@ export default function ChatScreen({
       },
     ];
 
-    // 로컬 customRooms + 다른 가족이 생성해 메시지 스트림([방생성])으로 수신된 커스텀 방 병합
-    const mergedCustomRoomsMap = new Map<string, any>();
-    if (customRooms && Array.isArray(customRooms)) {
-      customRooms.forEach((r) => {
-        if (r?.id) mergedCustomRoomsMap.set(r.id, r);
-      });
-    }
-    (messages || []).forEach((msg) => {
-      const rId = msg?.room_id;
-      if (!rId || !rId.startsWith('custom-')) return;
-      const rawTxt = typeof msg.text === 'string' ? msg.text : '';
-      const { cleanText } = extractReactionsAndCleanText(rawTxt);
-      if (cleanText.startsWith('[방생성]')) {
-        try {
-          const parsedRoom = JSON.parse(cleanText.replace(/^\[방생성\]\s*/, ''));
-          if (parsedRoom?.id) {
-            mergedCustomRoomsMap.set(parsedRoom.id, parsedRoom);
-            return;
-          }
-        } catch (_) {}
-      }
-      if (!mergedCustomRoomsMap.has(rId)) {
-        mergedCustomRoomsMap.set(rId, {
-          id: rId,
-          title: '가족 커스텀 대화방',
-          subtitle: '가족 그룹방',
-          avatar: '💬',
-          color: '#FF6B47',
-          isGroup: true,
-        });
-      }
-    });
-
     mergedCustomRoomsMap.forEach((room) => {
-      const count = getRoomUnreadCount(room.id);
-      const last = getRoomLastMessageInfo(room.id);
+      const stat = roomStatsMap.get(room.id);
+      const count = stat?.unreadCount || 0;
+      const last = buildLastMessageInfo(stat?.lastMsg);
       rooms.push({
         ...room,
         lastMessage: last
@@ -1062,37 +945,27 @@ export default function ChatScreen({
       });
     });
 
-    if (familyMembers && Array.isArray(familyMembers) && familyMembers.length > 0) {
-      familyMembers.forEach((member) => {
-        const myId = currentUserProfile?.id || currentUser;
-        const otherId = member.id || member.role;
-        const isMyself =
-          currentUserProfile && member.id
-            ? member.id === currentUserProfile.id
-            : member.id === currentUser || member.role === currentUser;
+    for (let i = 0; i < directMembersList.length; i++) {
+      const { member, otherId, roomId } = directMembersList[i];
+      const stat = roomStatsMap.get(roomId);
+      const count = stat?.unreadCount || 0;
+      const last = buildLastMessageInfo(stat?.lastMsg);
 
-        if (member && !isMyself) {
-          const roomId = getDirectRoomId(myId, otherId);
-          const count = getRoomUnreadCount(roomId, otherId);
-          const last = getRoomLastMessageInfo(roomId, otherId);
-
-          rooms.push({
-            id: roomId,
-            otherMemberId: otherId,
-            title: `${member.name}님과의 대화`,
-            subtitle: '1:1 대화방',
-            lastMessage: last
-              ? last.fullText
-              : `${member.name}님에게 메시지를 보내보세요.`,
-            lastMessageObj: last,
-            time: last ? last.time : '대화 가능',
-            lastMessageTimestamp: last ? last.timestampMs : 0,
-            avatar: member.avatar || '👦',
-            color: member.color || '#3B82F6',
-            badge: count > 0 ? `${count}` : null,
-            isGroup: false,
-          });
-        }
+      rooms.push({
+        id: roomId,
+        otherMemberId: otherId,
+        title: `${member.name}님과의 대화`,
+        subtitle: '1:1 대화방',
+        lastMessage: last
+          ? last.fullText
+          : `${member.name}님에게 메시지를 보내보세요.`,
+        lastMessageObj: last,
+        time: last ? last.time : '대화 가능',
+        lastMessageTimestamp: last ? last.timestampMs : 0,
+        avatar: member.avatar || '👦',
+        color: member.color || '#3B82F6',
+        badge: count > 0 ? `${count}` : null,
+        isGroup: false,
       });
     }
 
@@ -1113,9 +986,8 @@ export default function ChatScreen({
     currentUserProfile,
     currentUser,
     memberCount,
-    isMessageInRoom,
+    memberLookupMap,
     getSenderInfo,
-    getMessagePreviewData,
     getDirectRoomId,
   ]);
 
@@ -1155,15 +1027,15 @@ export default function ChatScreen({
     lastUserAns = responses[lastUserKey];
   }
 
-  const handleToggleMemberSelect = (roleKey: string) => {
-    if (selectedMembers.includes(roleKey)) {
-      setSelectedMembers(selectedMembers.filter((r) => r !== roleKey));
-    } else {
-      setSelectedMembers([...selectedMembers, roleKey]);
-    }
-  };
+  const handleToggleMemberSelect = useCallback((roleKey: string) => {
+    setSelectedMembers((prev) =>
+      prev.includes(roleKey)
+        ? prev.filter((r) => r !== roleKey)
+        : [...prev, roleKey]
+    );
+  }, []);
 
-  const handleCreateRoomSubmit = () => {
+  const handleCreateRoomSubmit = useCallback(() => {
     if (!newRoomTitle.trim()) {
       Alert.alert('입력 안내', '대화방 이름을 입력해주세요.');
       return;
@@ -1190,7 +1062,13 @@ export default function ChatScreen({
     setSelectedMembers([]);
     setCreateModalVisible(false);
     setSelectedRoomId(createdRoom.id);
-  };
+  }, [
+    newRoomTitle,
+    selectedMembers,
+    currentUserProfile?.id,
+    currentUser,
+    onCreateCustomRoom,
+  ]);
 
   // 현재 선택된 방 및 메시지 리스트 메모이제이션
   const currentRoom = useMemo(
@@ -1277,14 +1155,15 @@ export default function ChatScreen({
 
       if (isDirectRoom) {
         const otherId = currentRoom?.otherMemberId;
+        const otherMemberObj = otherId ? memberLookupMap.get(String(otherId)) : null;
         const isReadByOther = (readByList || []).some((id: any) => {
           if (!id || !otherId) return false;
           if (id === otherId) return true;
-          if (familyMembers && Array.isArray(familyMembers)) {
-            const match = familyMembers.find(
-              (m) => m && (m.id === otherId || m.role === otherId)
-            );
-            if (match && (match.id === id || match.role === id)) return true;
+          if (
+            otherMemberObj &&
+            (otherMemberObj.id === id || otherMemberObj.role === id)
+          ) {
+            return true;
           }
           return false;
         });
@@ -1297,14 +1176,10 @@ export default function ChatScreen({
           .filter((id: any) => {
             if (item.profile_id && id === item.profile_id) return false;
             if (!item.profile_id && id === item.sender) return false;
-            if (familyMembers && Array.isArray(familyMembers)) {
-              const match = familyMembers.find(
-                (m) => m && typeof m === 'object' && (m.id === id || m.role === id)
-              );
-              if (match) {
-                if (item.profile_id && match.id === item.profile_id) return false;
-                if (!item.profile_id && match.role === item.sender) return false;
-              }
+            const match = memberLookupMap.get(String(id));
+            if (match) {
+              if (item.profile_id && match.id === item.profile_id) return false;
+              if (!item.profile_id && match.role === item.sender) return false;
             }
             return true;
           })
@@ -1372,7 +1247,8 @@ export default function ChatScreen({
       currentUser,
       selectedRoomId,
       currentRoom,
-      familyMembers,
+      memberLookupMap,
+      familyMembers?.length,
       getMemberName,
       memberCount,
       groupingMetaList,
@@ -1425,138 +1301,29 @@ export default function ChatScreen({
   // 2. RENDER CHAT CONVERSATION VIEW
   return (
     <View style={styles.container}>
-      {/* Detail Chat Header with Back Button + Search & Media Drawer Icons */}
-      <View style={styles.chatHeader}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => setSelectedRoomId(null)}
-          activeOpacity={0.7}
-        >
-          <ChevronLeft size={22} color="#1C1917" strokeWidth={2.5} />
-        </TouchableOpacity>
-
-        <View style={styles.headerAvatarCol}>
-          {currentRoom.isGroup ? (
-            <View style={styles.headerGroupIconBox}>
-              <Users size={18} color="#FF6B47" strokeWidth={2.2} />
-            </View>
-          ) : (
-            <UserAvatar
-              avatar={currentRoom.avatar}
-              size={36}
-              borderColor={currentRoom.color || '#3B82F6'}
-              style={{ marginRight: 8 }}
-            />
-          )}
-        </View>
-
-        <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle} numberOfLines={1}>
-            {currentRoom.title}
-          </Text>
-          <View style={styles.headerStatusRow}>
-            <View style={styles.headerLiveDot} />
-            <Text style={styles.headerSub}>
-              {currentRoom.subtitle || '대화 가능'}
-            </Text>
-          </View>
-        </View>
-
-        {/* 대화방 내 검색(🔍) & 사진·파일 모아보기 서랍(🖼️) 버튼 */}
-        <View style={styles.headerActionBtnRow}>
-          <TouchableOpacity
-            style={[
-              styles.headerIconBtn,
-              searchVisible && styles.headerIconBtnActive,
-            ]}
-            onPress={() => {
-              setSearchVisible((prev) => {
-                if (prev) setSearchQuery('');
-                return !prev;
-              });
-            }}
-            activeOpacity={0.75}
-          >
-            <Search
-              size={17}
-              color={searchVisible ? '#FF6B47' : '#1C1917'}
-              strokeWidth={2.3}
-            />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.headerIconBtn}
-            onPress={() => setMediaDrawerVisible(true)}
-            activeOpacity={0.75}
-          >
-            <FolderOpen size={17} color="#1C1917" strokeWidth={2.2} />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* 대화방 내 실시간 키워드 검색 바 */}
-      {searchVisible && (
-        <View style={styles.searchBarRow}>
-          <View style={styles.searchInputWrap}>
-            <Search size={15} color="#A8A29E" />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="대화 내용 또는 보낸 사람 검색..."
-              placeholderTextColor="#A8A29E"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              autoFocus
-            />
-            {Boolean(searchQuery.trim()) && (
-              <Text style={styles.searchCountText}>
-                {displayedMessages.length}건
-              </Text>
-            )}
-          </View>
-          <TouchableOpacity
-            style={styles.searchCloseBtn}
-            onPress={() => {
-              setSearchQuery('');
-              setSearchVisible(false);
-            }}
-          >
-            <X size={18} color="#78716C" />
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Pinned Notice Banner */}
-      {pinnedNotice && (
-        <View style={styles.pinnedNoticeBanner}>
-          <TouchableOpacity
-            style={styles.pinnedNoticeLeft}
-            activeOpacity={0.8}
-            onPress={() => scrollToMessage(pinnedNotice.id)}
-          >
-            <View style={styles.pinnedNoticeIconBadge}>
-              <Pin size={13} color="#FF6B47" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.pinnedNoticeTitle}>
-                공지 · {pinnedNotice.author ? `${pinnedNotice.author}님의 글` : '가족 공지'}
-                {pinnedNotice.pinner && pinnedNotice.pinner !== pinnedNotice.author
-                  ? ` (등록: ${pinnedNotice.pinner})`
-                  : ''}
-              </Text>
-              <Text style={styles.pinnedNoticeText} numberOfLines={1}>
-                {pinnedNotice.text}
-              </Text>
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.pinnedNoticeCloseBtn}
-            onPress={handleUnpinNotice}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <X size={15} color="#78716C" />
-          </TouchableOpacity>
-        </View>
-      )}
+      {/* 상단 대화방 헤더 + 검색 바 + 고정 공지 배너 */}
+      <ChatConversationHeader
+        currentRoom={currentRoom}
+        onBack={() => setSelectedRoomId(null)}
+        searchVisible={searchVisible}
+        searchQuery={searchQuery}
+        onToggleSearch={() => {
+          setSearchVisible((prev) => {
+            if (prev) setSearchQuery('');
+            return !prev;
+          });
+        }}
+        onChangeSearchQuery={setSearchQuery}
+        onCloseSearch={() => {
+          setSearchQuery('');
+          setSearchVisible(false);
+        }}
+        searchResultCount={displayedMessages.length}
+        onOpenMediaDrawer={() => setMediaDrawerVisible(true)}
+        pinnedNotice={pinnedNotice}
+        onPressPinnedNotice={scrollToMessage}
+        onUnpinNotice={handleUnpinNotice}
+      />
 
       {/* Messages List or Empty State */}
       {displayedMessages.length === 0 ? (
@@ -1639,142 +1406,18 @@ export default function ChatScreen({
         </View>
       )}
 
-      {/* Image Preview Container */}
-      {selectedPhoto && (
-        <View style={styles.previewContainer}>
-          <Image source={{ uri: selectedPhoto }} style={styles.previewImage} />
-          <View style={styles.previewInfoCol}>
-            <Text style={styles.previewLabel}>사진이 첨부되었습니다</Text>
-            <Text style={styles.previewSubLabel}>전송 버튼을 누르면 공유됩니다</Text>
-          </View>
-          <TouchableOpacity
-            style={styles.removePreview}
-            onPress={() => setSelectedPhoto(null)}
-          >
-            <X size={16} color="#FFFFFF" strokeWidth={2.5} />
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Editing Message Preview Bar */}
-      {editingMessage && (
-        <View style={styles.editingBarContainer}>
-          <View style={styles.replyBarLeft}>
-            <View style={styles.editingBarIconBox}>
-              <Edit3 size={14} color="#059669" strokeWidth={2.4} />
-            </View>
-            <View style={{ flex: 1, minWidth: 0, justifyContent: 'center' }}>
-              <Text style={styles.editingBarTitle} numberOfLines={1}>
-                메시지 수정 중
-              </Text>
-              <Text style={styles.replyBarPreviewText} numberOfLines={1}>
-                {editingMessage.originalBody}
-              </Text>
-            </View>
-          </View>
-          <TouchableOpacity
-            style={styles.replyBarCloseBtn}
-            onPress={() => {
-              setEditingMessage(null);
-              setInputText('');
-            }}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <X size={16} color="#78716C" />
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Replying-To Quote Preview Bar */}
-      {replyingTo && !editingMessage && (
-        <View style={styles.replyBarContainer}>
-          <View style={styles.replyBarLeft}>
-            <View style={styles.replyBarIconBox}>
-              <CornerUpLeft size={14} color="#FF6B47" strokeWidth={2.4} />
-            </View>
-            <View style={{ flex: 1, minWidth: 0, justifyContent: 'center' }}>
-              <Text style={styles.replyBarSenderName} numberOfLines={1}>
-                {replyingTo.senderName}님에게 답장
-              </Text>
-              <Text style={styles.replyBarPreviewText} numberOfLines={1}>
-                {replyingTo.text || (replyingTo.image ? '사진' : '메시지')}
-              </Text>
-            </View>
-          </View>
-          <TouchableOpacity
-            style={styles.replyBarCloseBtn}
-            onPress={() => setReplyingTo(null)}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <X size={16} color="#78716C" />
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Message Input Box */}
-      <View style={styles.inputArea}>
-        <TouchableOpacity
-          style={styles.attachButton}
-          onPress={() => setAttachMenuVisible(true)}
-          activeOpacity={0.7}
-        >
-          <Plus size={22} color="#FF6B47" strokeWidth={2.4} />
-        </TouchableOpacity>
-
-        <TextInput
-          ref={inputRef}
-          style={styles.input}
-          placeholder={
-            editingMessage
-              ? '수정할 메시지 내용을 입력하세요...'
-              : '가족에게 따뜻한 메시지 보내기...'
-          }
-          placeholderTextColor="#A8A29E"
-          value={inputText}
-          onChangeText={setInputText}
-          multiline
-          onKeyPress={(e: any) => {
-            if (Platform.OS === 'web') {
-              const nativeEvent = e?.nativeEvent || {};
-              if (
-                nativeEvent.isComposing ||
-                e?.isComposing ||
-                nativeEvent.keyCode === 229
-              ) {
-                return;
-              }
-              if (nativeEvent.key === 'Enter' && !nativeEvent.shiftKey) {
-                e?.preventDefault?.();
-                handleSend();
-              }
-            }
-          }}
-        />
-
-        <TouchableOpacity
-          style={[
-            styles.sendButton,
-            inputText.trim() || selectedPhoto ? styles.sendActive : null,
-          ]}
-          onPress={handleSend}
-          disabled={!inputText.trim() && !selectedPhoto}
-          activeOpacity={0.8}
-        >
-          {editingMessage ? (
-            <Check
-              size={18}
-              color={inputText.trim() ? '#FFFFFF' : '#A8A29E'}
-              strokeWidth={2.5}
-            />
-          ) : (
-            <Send
-              size={18}
-              color={inputText.trim() || selectedPhoto ? '#FFFFFF' : '#A8A29E'}
-              strokeWidth={2.2}
-            />
-          )}
-        </TouchableOpacity>
-      </View>
+      {/* 하단 입력창 & 사진/답장/수정 프리뷰 바 (타이핑 상태 내부 격리) */}
+      <ChatInputBar
+        selectedRoomId={selectedRoomId}
+        selectedPhoto={selectedPhoto}
+        onClearPhoto={() => setSelectedPhoto(null)}
+        editingMessage={editingMessage}
+        onCancelEdit={() => setEditingMessage(null)}
+        replyingTo={replyingTo}
+        onCancelReply={() => setReplyingTo(null)}
+        onOpenAttachMenu={() => setAttachMenuVisible(true)}
+        onSubmitText={handleSubmitInputText}
+      />
 
       {/* 사진 전체화면 뷰어 & 대화방 사진·파일 모아보기 서랍 모달 */}
       <ChatImageViewerModal
