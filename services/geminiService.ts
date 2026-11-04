@@ -14,6 +14,11 @@ import {
   GeminiGenerationConfig,
 } from '../lib/aiSystemPrompts';
 import { supabase, isSupabaseReady } from '../lib/supabase';
+import {
+  reportError,
+  getErrorLoggerContext,
+  getSystemConfig,
+} from '../utils/errorHandler';
 import { PetmongStylePreset } from '../types/domain';
 import { detectArchetype, PetmongArchetype } from '../lib/petmongEvolution';
 
@@ -28,6 +33,45 @@ export const GEMINI_IMAGE_MODELS = [
 
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
+const dailyImageQuotaMap = new Map<string, number>();
+
+function isValidUuidStr(val?: string | null): boolean {
+  if (!val || typeof val !== 'string') return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+}
+
+/**
+ * AI 호출량 및 비용 감사 로그 적재 (public.ai_usage_logs)
+ */
+function logAiUsage(params: {
+  featureType: string;
+  model: string;
+  status: 'success' | 'fallback' | 'error' | 'rate_limited';
+  latencyMs?: number;
+  errorMessage?: string | null;
+  metadata?: Record<string, any>;
+}): void {
+  if (!isSupabaseReady) return;
+  try {
+    const ctx = getErrorLoggerContext();
+    const familyId = isValidUuidStr(ctx.familyId) ? ctx.familyId : null;
+    const userId = isValidUuidStr(ctx.userId) ? ctx.userId : null;
+    Promise.resolve(
+      supabase.from('ai_usage_logs').insert({
+        family_id: familyId,
+        user_id: userId,
+        user_name: ctx.userName || null,
+        feature_type: params.featureType,
+        model: params.model,
+        status: params.status,
+        latency_ms: params.latencyMs || 0,
+        error_message: params.errorMessage ? String(params.errorMessage).slice(0, 500) : null,
+        metadata: params.metadata || {},
+      })
+    ).catch(() => {});
+  } catch (_) {}
+}
+
 export function getGeminiApiKey(): string {
   if (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_GEMINI_API_KEY) {
     return process.env.EXPO_PUBLIC_GEMINI_API_KEY;
@@ -36,6 +80,9 @@ export function getGeminiApiKey(): string {
 }
 
 export function isGeminiConfigured(): boolean {
+  if (!getSystemConfig().ai_generation_enabled) {
+    return false;
+  }
   // 로컬 API 키가 있거나 Supabase 서버(gemini-proxy Edge Function)가 연결된 경우 활성화
   return Boolean(getGeminiApiKey()) || Boolean(isSupabaseReady);
 }
@@ -45,7 +92,24 @@ export function isGeminiConfigured(): boolean {
  * 1순위: Supabase Edge Function('gemini-proxy')을 통해 서버 측 비밀키(GEMINI_API_KEY Secret)로 안전하게 프록시 호출
  * 2순위: 로컬 오프라인/프록시 미연결 시 로컬 환경변수(EXPO_PUBLIC_GEMINI_API_KEY)가 있을 때만 Fallback 호출
  */
-async function callGeminiModel(model: string, payload: Record<string, any>): Promise<any | null> {
+async function callGeminiModel(
+  model: string,
+  payload: Record<string, any>,
+  featureType: string = 'general'
+): Promise<any | null> {
+  const startMs = Date.now();
+
+  if (!getSystemConfig().ai_generation_enabled) {
+    logAiUsage({
+      featureType,
+      model,
+      status: 'rate_limited',
+      latencyMs: 0,
+      errorMessage: '관리자 원격 설정에 의해 AI 생성이 일시 비활성화됨',
+    });
+    return null;
+  }
+
   // 1. Supabase Edge Function ('gemini-proxy') 최우선 호출 — 모바일 앱 바이너리에 API 키 비노출 보장
   if (isSupabaseReady) {
     try {
@@ -53,6 +117,13 @@ async function callGeminiModel(model: string, payload: Record<string, any>): Pro
         body: { model, payload },
       });
       if (!error && data && !data.error) {
+        logAiUsage({
+          featureType,
+          model,
+          status: 'success',
+          latencyMs: Date.now() - startMs,
+          metadata: { channel: 'edge_proxy' },
+        });
         return data;
       }
     } catch (proxyErr) {
@@ -72,11 +143,47 @@ async function callGeminiModel(model: string, payload: Record<string, any>): Pro
           body: JSON.stringify(payload),
         }
       );
-      if (resp.ok) {
-        return await resp.json();
+      const latencyMs = Date.now() - startMs;
+      if (!resp.ok) {
+        logAiUsage({
+          featureType,
+          model,
+          status: 'error',
+          latencyMs,
+          errorMessage: `HTTP ${resp.status}`,
+          metadata: { channel: 'direct_fetch', status: resp.status },
+        });
+        reportError(new Error(`Gemini HTTP ${resp.status} (${model})`), {
+          severity: 'warn',
+          source: 'gemini_api',
+          metadata: { model, status: resp.status },
+        });
+      } else {
+        const json = await resp.json();
+        logAiUsage({
+          featureType,
+          model,
+          status: 'success',
+          latencyMs,
+          metadata: { channel: 'direct_fetch' },
+        });
+        return json;
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('[geminiService] Direct fetch fallback error:', err);
+      logAiUsage({
+        featureType,
+        model,
+        status: 'error',
+        latencyMs: Date.now() - startMs,
+        errorMessage: err?.message || String(err),
+        metadata: { channel: 'direct_fetch' },
+      });
+      reportError(err, {
+        severity: 'warn',
+        source: 'gemini_api',
+        metadata: { model },
+      });
     }
   }
 
@@ -103,7 +210,7 @@ export async function generateGeminiText(
     { generationConfig: options.generationConfig }
   );
 
-  const data = await callGeminiModel(model, payload);
+  const data = await callGeminiModel(model, payload, 'text_generation');
   if (!data) return null;
 
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
@@ -124,16 +231,20 @@ export async function analyzeImageWithGeminiVision(
 
   for (const model of GEMINI_TEXT_FALLBACK_MODELS) {
     try {
-      const vData = await callGeminiModel(model, {
-        contents: [
-          {
-            parts: [
-              { text: promptText },
-              { inlineData: { mimeType: normalizedMime, data: base64Data } },
-            ],
-          },
-        ],
-      });
+      const vData = await callGeminiModel(
+        model,
+        {
+          contents: [
+            {
+              parts: [
+                { text: promptText },
+                { inlineData: { mimeType: normalizedMime, data: base64Data } },
+              ],
+            },
+          ],
+        },
+        'vision_analysis'
+      );
       if (vData?.candidates?.[0]?.content?.parts?.[0]?.text) {
         return vData.candidates[0].content.parts[0].text.trim();
       }
@@ -153,13 +264,36 @@ export async function generateImageWithGeminiModels(
 ): Promise<string | null> {
   if (!isGeminiConfigured()) return null;
 
+  // 일일 가족별 AI 이미지 생성 한도 체크 (원격 app_system_config.daily_ai_image_limit 기준)
+  const ctx = getErrorLoggerContext();
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const quotaKey = `${todayStr}:${ctx.familyId || 'anon'}`;
+  const usedCount = dailyImageQuotaMap.get(quotaKey) || 0;
+  const maxDailyLimit = getSystemConfig().daily_ai_image_limit || 15;
+
+  if (usedCount >= maxDailyLimit) {
+    logAiUsage({
+      featureType: 'image_generation',
+      model: models[0] || 'gemini-2.5-flash-image',
+      status: 'rate_limited',
+      errorMessage: `일일 AI 이미지 생성 한도 초과 (${usedCount}/${maxDailyLimit})`,
+      metadata: { usedCount, maxDailyLimit },
+    });
+    return null;
+  }
+
   for (const model of models) {
     try {
-      const imgData = await callGeminiModel(model, { contents: [{ parts }] });
+      const imgData = await callGeminiModel(
+        model,
+        { contents: [{ parts }] },
+        'image_generation'
+      );
       if (imgData) {
         const respParts = imgData?.candidates?.[0]?.content?.parts || [];
         const imgPart = respParts.find((p: any) => p?.inlineData?.data);
         if (imgPart?.inlineData?.data) {
+          dailyImageQuotaMap.set(quotaKey, usedCount + 1);
           const outMime = imgPart.inlineData.mimeType || 'image/jpeg';
           return `data:${outMime};base64,${imgPart.inlineData.data}`;
         }

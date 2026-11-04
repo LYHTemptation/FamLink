@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
-  StyleSheet,
   Text,
   View,
   TouchableOpacity,
@@ -14,7 +13,6 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { colors } from '../theme';
-import Svg, { Circle, Line, G, Text as SvgText } from 'react-native-svg';
 import {
   Heart,
   Sparkles,
@@ -23,23 +21,29 @@ import {
   ChevronRight,
   Mail,
   Flame,
-  Star,
-  RotateCcw,
   Moon,
   Sun,
 } from 'lucide-react-native';
 import { getEvolutionStage, getEvolvedEmoji } from '../lib/petmongEvolution';
 import { useTransparentImage } from '../lib/imageTransparencyService';
 import {
-  GUARDIAN_CONSTELLATIONS,
   PETTING_DIALOGUES,
   WarmthFruitIcon,
   FloatingHeartParticle,
   FloorTapRipple,
 } from './petmong/petmongConstants';
 import PetmongWarmthModal from './petmong/PetmongWarmthModal';
+import { PetmongConstellationCanvas } from './petmong/PetmongConstellationCanvas';
 import styles from './petmong/PetmongStyles';
-import { PetmongCharacter, PetmongVitals, PetmongWhisper, ChatMessage, UserProfile } from '../types/domain';
+import type {
+  PetmongCharacter,
+  PetmongVitals,
+  PetmongWhisper,
+  ChatMessage,
+  UserProfile,
+} from '../types/domain';
+
+export type { DragPos } from './petmong/PetmongConstellationCanvas';
 
 export interface FloorRipple {
   id: string;
@@ -51,11 +55,6 @@ export interface FloatingHeart {
   id: string;
   x: number;
   text: string;
-}
-
-export interface DragPos {
-  x: number;
-  y: number;
 }
 
 export interface PetmongGameEngineProps {
@@ -83,7 +82,19 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 const MAX_DAILY_PETTING_EXP_COUNT = 3;
 
-export default function PetmongGameEngine({
+function parseMessageTimeMs(m: any, todayStart: number): number {
+  const raw = m?.created_at || m?.timestamp;
+  if (!raw) return todayStart;
+  if (typeof raw === 'number') return raw;
+  const parsed = Date.parse(raw);
+  if (!Number.isNaN(parsed)) return parsed;
+  if (typeof raw === 'string' && /^(오전|오후)\s*\d{1,2}:\d{2}/.test(raw.trim())) {
+    return todayStart + 1000;
+  }
+  return 0;
+}
+
+function PetmongGameEngine({
   character,
   owner,
   isVisiting = false,
@@ -119,8 +130,7 @@ export default function PetmongGameEngine({
 
   const todayMessages = useMemo(() => {
     return (messages || []).filter((m) => {
-      const t = new Date(m.created_at || m.timestamp || Date.now()).getTime();
-      return t >= todayStart;
+      return parseMessageTimeMs(m, todayStart) >= todayStart;
     });
   }, [messages, todayStart]);
 
@@ -194,7 +204,12 @@ export default function PetmongGameEngine({
   // -------------------------------------------------------------
   const checkIsNightTime = useCallback(() => {
     const currentHour = new Date().getHours();
-    return currentHour >= 22 || currentHour < 7 || theme === 'midnight' || theme === 'night';
+    return (
+      currentHour >= 22 ||
+      currentHour < 7 ||
+      theme === 'midnight' ||
+      theme === 'night'
+    );
   }, [theme]);
 
   const [isNightMode, setIsNightMode] = useState(checkIsNightTime);
@@ -232,81 +247,17 @@ export default function PetmongGameEngine({
   const [floatingHearts, setFloatingHearts] = useState<FloatingHeart[]>([]);
   const comboResetTimerRef = useRef<any>(null);
   const particleTimersRef = useRef<Set<any>>(new Set());
-  const nightReturnTimerRef = useRef<any>(null);
 
   useEffect(() => {
     return () => {
       if (comboResetTimerRef.current) clearTimeout(comboResetTimerRef.current);
-      if (nightReturnTimerRef.current) clearTimeout(nightReturnTimerRef.current);
       particleTimersRef.current.forEach((t) => clearTimeout(t));
       particleTimersRef.current.clear();
     };
   }, []);
 
-  // 오늘의 가족 수호 별자리 인룸 캔버스 상태
-  const [constellationIndex, setConstellationIndex] = useState(() =>
-    Math.floor(Math.random() * GUARDIAN_CONSTELLATIONS.length)
-  );
-  const currentConstellation =
-    GUARDIAN_CONSTELLATIONS[constellationIndex] || GUARDIAN_CONSTELLATIONS[0];
-
-  const [connectedStarIds, setConnectedStarIds] = useState([1]);
-  const [dragCurrentPos, setDragCurrentPos] = useState<DragPos | null>(null);
-  const [isConstCompleted, setIsConstCompleted] = useState(false);
   const { width: windowWidth } = useWindowDimensions();
-  const activeRoomWidth = windowWidth || SCREEN_WIDTH;
-  const [canvasLayout, setCanvasLayout] = useState({
-    width: activeRoomWidth,
-    height: 230,
-  });
-  const roomWidth = canvasLayout.width || activeRoomWidth;
-  const constGlowAnim = useRef(new Animated.Value(1.0)).current;
-  const isMouseActiveRef = useRef(false);
-
-  const [hasAwardedConstExpToday, setHasAwardedConstExpToday] = useState(false);
-
-  // 오늘 별자리 완성 EXP 보상을 이미 수령했는지 DB(petmong_activities) 및 로컬 캐시 확인
-  useEffect(() => {
-    let isMounted = true;
-    const expKey = `@famlink_const_exp_${todayStr}`;
-
-    const checkConstellationCompleted = async () => {
-      if (character?.id) {
-        try {
-          const { data, error } = await supabase
-            .from('petmong_activities')
-            .select('id, action_type')
-            .eq('actor_id', character.id)
-            .gte('created_at', todayStartIso)
-            .ilike('action_type', 'CONSTELLATION:%');
-
-          if (!error && Array.isArray(data) && data.length > 0) {
-            if (isMounted) {
-              setHasAwardedConstExpToday(true);
-              AsyncStorage.setItem(expKey, 'true').catch(() => {});
-            }
-            return;
-          }
-        } catch (e) {
-          console.warn('Constellation db sync note:', e);
-        }
-      }
-
-      AsyncStorage.getItem(expKey)
-        .then((val) => {
-          if (!isMounted) return;
-          if (val === 'true') {
-            setHasAwardedConstExpToday(true);
-          }
-        })
-        .catch(() => {});
-    };
-
-    checkConstellationCompleted();
-    return () => {
-      isMounted = false;
-    };
-  }, [character?.id, todayStr, todayStartIso]);
+  const roomWidth = windowWidth || SCREEN_WIDTH;
 
   const [dialogue, setDialogue] = useState(
     unreadWhispers && unreadWhispers.length > 0
@@ -324,13 +275,12 @@ export default function PetmongGameEngine({
   const petHopY = useRef(new Animated.Value(0)).current;
   const petRotate = useRef(new Animated.Value(0)).current;
 
-  // Fruit & Whisper & Star Bobbing
+  // Fruit & Whisper Bobbing
   const whisperBobAnim = useRef(new Animated.Value(0)).current;
   const fruitFloatAnim = useRef(new Animated.Value(0)).current;
   const lightsDimAnim = useRef(
     new Animated.Value(checkIsNightTime() ? 1 : 0)
   ).current;
-  const starPulseAnim = useRef(new Animated.Value(0)).current;
   const lastActionTimeRef = useRef(0);
 
   // Visitor Pet Autonomous Physics Animations
@@ -401,9 +351,7 @@ export default function PetmongGameEngine({
     if (!isVisiting || !visitorCharacter) return;
 
     const wanderInterval = setInterval(() => {
-      const nextX = Math.round(
-        roomWidth * (0.12 + Math.random() * 0.55)
-      );
+      const nextX = Math.round(roomWidth * (0.12 + Math.random() * 0.55));
       Animated.parallel([
         Animated.timing(visitorScaleX, {
           toValue: Math.random() > 0.5 ? 1 : -1,
@@ -442,7 +390,14 @@ export default function PetmongGameEngine({
     }, 6500);
 
     return () => clearInterval(wanderInterval);
-  }, [isVisiting, visitorCharacter, visitorPosX, visitorHopY, visitorScaleX, roomWidth]);
+  }, [
+    isVisiting,
+    visitorCharacter,
+    visitorPosX,
+    visitorHopY,
+    visitorScaleX,
+    roomWidth,
+  ]);
 
   // -------------------------------------------------------------
   // 4. Idle Breathing & Waddle Walk Physics
@@ -622,22 +577,25 @@ export default function PetmongGameEngine({
   // -------------------------------------------------------------
   // 6. Particle Emitter (애니메이션 하트 파티클 & 바닥 물결 리플)
   // -------------------------------------------------------------
-  const spawnHeartToast = useCallback((text = '+EXP') => {
-    const id = `heart_${Date.now()}_${Math.random()}`;
-    const x = Math.max(
-      20,
-      Math.min(
-        roomWidth - 110,
-        currentPetXRef.current + 45 + (Math.random() * 44 - 22)
-      )
-    );
-    setFloatingHearts((prev) => [...prev.slice(-6), { id, x, text }]);
-    const timer = setTimeout(() => {
-      setFloatingHearts((prev) => prev.filter((h) => h.id !== id));
-      particleTimersRef.current.delete(timer);
-    }, 1300);
-    particleTimersRef.current.add(timer);
-  }, [roomWidth]);
+  const spawnHeartToast = useCallback(
+    (text = '+EXP') => {
+      const id = `heart_${Date.now()}_${Math.random()}`;
+      const x = Math.max(
+        20,
+        Math.min(
+          roomWidth - 110,
+          currentPetXRef.current + 45 + (Math.random() * 44 - 22)
+        )
+      );
+      setFloatingHearts((prev) => [...prev.slice(-6), { id, x, text }]);
+      const timer = setTimeout(() => {
+        setFloatingHearts((prev) => prev.filter((h) => h.id !== id));
+        particleTimersRef.current.delete(timer);
+      }, 1300);
+      particleTimersRef.current.add(timer);
+    },
+    [roomWidth]
+  );
 
   const spawnFloorRipple = useCallback((x: number, y: number) => {
     const id = `ripple_${Date.now()}_${Math.random()}`;
@@ -671,7 +629,6 @@ export default function PetmongGameEngine({
     AsyncStorage.setItem(harvestStorageKey, 'true').catch(() => {});
     const expGain = 25;
 
-    // 크로스 디바이스 1일 1회 잠금을 위해 Supabase petmong_activities에 영구 기록
     const targetFamilyId = character?.family_id || owner?.family_id;
     const targetActorId = character?.id || owner?.id;
     if (targetFamilyId && targetActorId) {
@@ -723,7 +680,6 @@ export default function PetmongGameEngine({
   // 8. 🌙 낮/밤 조명 전환 & 거실 바닥 탭 호출 인터랙션
   // -------------------------------------------------------------
   const handleToggleNightLights = () => {
-    if (nightReturnTimerRef.current) clearTimeout(nightReturnTimerRef.current);
     const nextNight = !isNightMode;
     setIsNightMode(nextNight);
     Animated.timing(lightsDimAnim, {
@@ -735,29 +691,26 @@ export default function PetmongGameEngine({
     if (nextNight) {
       setLivingRoutine('napping');
       setDialogue(
-        isConstCompleted
-          ? '조명을 낮춰 은하수 별빛을 밝혔어요 🌙 몽이가 포근하게 자고 있어요 zZ'
-          : '조명을 살짝 낮췄어요 🌙 천장에 떠오른 수호 별자리를 순서대로 이어보세요 ✨'
+        '조명을 살짝 낮췄어요 🌙 천장에 떠오른 수호 별자리를 순서대로 이어보세요 ✨'
       );
       spawnHeartToast('밤하늘 별자리 모드 🌙');
     } else {
       setLivingRoutine('happy');
-      setDialogue('거실 조명이 환하게 켜졌어요! 바닥을 탭하면 제가 총총 달려가요 🐾');
+      setDialogue(
+        '거실 조명이 환하게 켜졌어요! 바닥을 탭하면 제가 총총 달려가요 🐾'
+      );
       spawnHeartToast('따스한 거실 조명 ☀️');
     }
   };
 
-  // 거실 바닥을 탭하면 해당 위치로 반려몽이 총총걸음으로 달려오는 인터랙션
   const handleRoomFloorTap = (e: any) => {
     const now = Date.now();
     if (now - lastActionTimeRef.current < 420) return;
     lastActionTimeRef.current = now;
 
     const nativeEv = e?.nativeEvent;
-    const tapX =
-      nativeEv?.locationX ?? nativeEv?.pageX ?? roomWidth * 0.5;
-    const tapY =
-      nativeEv?.locationY ?? nativeEv?.pageY ?? 420;
+    const tapX = nativeEv?.locationX ?? nativeEv?.pageX ?? roomWidth * 0.5;
+    const tapY = nativeEv?.locationY ?? nativeEv?.pageY ?? 420;
 
     spawnFloorRipple(tapX, tapY);
 
@@ -793,7 +746,7 @@ export default function PetmongGameEngine({
     );
   };
 
-  // 마운트 시 밤 시간대 조명 동기화: 별자리 완성 여부와 관계없이 밤 시간대라면 아늑한 밤 조명 유지
+  // 마운트 시 밤 시간대 조명 동기화
   useEffect(() => {
     if (checkIsNightTime()) {
       setIsNightMode(true);
@@ -810,258 +763,15 @@ export default function PetmongGameEngine({
     }
   }, [checkIsNightTime, lightsDimAnim]);
 
-  useEffect(() => {
-    let anim: Animated.CompositeAnimation | null = null;
-    if (isNightMode) {
-      anim = Animated.loop(
-        Animated.sequence([
-          Animated.timing(starPulseAnim, {
-            toValue: 1,
-            duration: 1200,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: USE_NATIVE_DRIVER,
-          }),
-          Animated.timing(starPulseAnim, {
-            toValue: 0,
-            duration: 1200,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: USE_NATIVE_DRIVER,
-          }),
-        ])
-      );
-      anim.start();
-    } else {
-      starPulseAnim.setValue(0);
-    }
-    return () => anim?.stop?.();
-  }, [isNightMode, starPulseAnim]);
-
   // -------------------------------------------------------------
-  // 9. 인룸 수호 별자리 잇기 (In-Room Constellation Tracing)
-  // -------------------------------------------------------------
-  const processConstellationPoint = (x: number, y: number) => {
-    if (isConstCompleted) return;
-    setDragCurrentPos({ x, y });
-
-    const stars = currentConstellation.stars;
-    const w = canvasLayout.width || SCREEN_WIDTH;
-    const h = canvasLayout.height || 230;
-
-    const currentList = connectedStarIds;
-    if (currentList.length === 0) {
-      const star1 = stars[0];
-      const s1x = star1.normX * w;
-      const s1y = star1.normY * h;
-      if (Math.hypot(x - s1x, y - s1y) < 38) {
-        setConnectedStarIds([star1.id]);
-        spawnHeartToast('✨ 첫 번째 별 연결!');
-      }
-      return;
-    }
-
-    const lastConnectedId = currentList[currentList.length - 1];
-    if (lastConnectedId < stars.length) {
-      const nextStar = stars.find((s) => s.id === lastConnectedId + 1);
-      if (nextStar) {
-        const nx = nextStar.normX * w;
-        const ny = nextStar.normY * h;
-        if (Math.hypot(x - nx, y - ny) < 38) {
-          const nextList = [...currentList, nextStar.id];
-          setConnectedStarIds(nextList);
-
-          if (nextList.length === stars.length) {
-            handleCompleteInRoomConstellation();
-          } else {
-            spawnHeartToast(`✨ ${nextStar.id}번 별 연결!`);
-          }
-        }
-      }
-    }
-  };
-
-  const handleCompleteInRoomConstellation = () => {
-    setIsConstCompleted(true);
-    setDragCurrentPos(null);
-
-    Animated.parallel([
-      Animated.timing(lightsDimAnim, {
-        toValue: 0,
-        duration: 1100,
-        easing: Easing.out(Easing.ease),
-        useNativeDriver: USE_NATIVE_DRIVER,
-      }),
-      Animated.sequence([
-        Animated.timing(constGlowAnim, {
-          toValue: 1.45,
-          duration: 400,
-          useNativeDriver: USE_NATIVE_DRIVER,
-        }),
-        Animated.timing(constGlowAnim, {
-          toValue: 1.0,
-          duration: 700,
-          useNativeDriver: USE_NATIVE_DRIVER,
-        }),
-      ]),
-    ]).start();
-
-    const isFirstTimeToday = !hasAwardedConstExpToday;
-    const awardedExp = isFirstTimeToday ? 35 : 0;
-    if (awardedExp > 0 && onGainExp) {
-      onGainExp(awardedExp);
-    }
-    if (onUpdateVitals) {
-      onUpdateVitals((prev: any) => ({
-        ...prev,
-        energy: 100,
-        happiness: 100,
-      }));
-    }
-
-    if (isFirstTimeToday) {
-      setHasAwardedConstExpToday(true);
-      const expKey = `@famlink_const_exp_${todayStr}`;
-      AsyncStorage.setItem(expKey, 'true').catch(() => {});
-      spawnHeartToast(`+${awardedExp} EXP [${currentConstellation.name}] 완성! 🌟`);
-      setDialogue(
-        `별자리가 완성되어 은하수가 환하게 빛났어요! "${currentConstellation.meaning}"의 별빛 축복으로 몽이의 꿀잠 에너지가 충전됐어요 몽 🌟✨`
-      );
-
-      // Supabase petmong_activities 정규 컬럼(family_id, actor_id, action_type)으로 저장
-      if (character?.id && character?.family_id) {
-        supabase
-          .from('petmong_activities')
-          .insert({
-            family_id: character.family_id,
-            actor_id: character.id,
-            action_type: `CONSTELLATION:${currentConstellation.id}`,
-          })
-          .then(
-            () => {},
-            (e) => console.warn('Constellation log error:', e)
-          );
-      }
-    } else {
-      spawnHeartToast(`[${currentConstellation.name}] 완성! 🌟`);
-      setDialogue(
-        `새로운 별자리가 완성되어 은하수가 포근하게 빛났어요! "${currentConstellation.meaning}"의 별빛을 받으며 몽이가 쉬고 있어요 몽 🌟✨`
-      );
-    }
-
-    // 🌟 5초간 환한 축하 후, 다음 별자리로 자동 리셋되어 언제든 새로 이을 수 있게 전환
-    if (nightReturnTimerRef.current) clearTimeout(nightReturnTimerRef.current);
-    nightReturnTimerRef.current = setTimeout(() => {
-      const nextIdx = (constellationIndex + 1) % GUARDIAN_CONSTELLATIONS.length;
-      setConstellationIndex(nextIdx);
-      setIsConstCompleted(false);
-      setConnectedStarIds([1]);
-      setDragCurrentPos(null);
-
-      if (checkIsNightTime() || isNightMode) {
-        Animated.timing(lightsDimAnim, {
-          toValue: 1,
-          duration: 1500,
-          easing: Easing.out(Easing.ease),
-          useNativeDriver: USE_NATIVE_DRIVER,
-        }).start();
-        setLivingRoutine('napping');
-        setDialogue(
-          `몽이가 은하수 별빛을 받으며 다시 포근하게 잠들었어요 zZ 🌙 새로운 별자리 "${GUARDIAN_CONSTELLATIONS[nextIdx]?.name}"를 이어보세요 ✨`
-        );
-        spawnHeartToast(`새로운 별자리: ${GUARDIAN_CONSTELLATIONS[nextIdx]?.name} ✨`);
-      }
-    }, 5000);
-  };
-
-  const handleResetConstellation = () => {
-    if (nightReturnTimerRef.current) clearTimeout(nightReturnTimerRef.current);
-    const nextIdx = (constellationIndex + 1) % GUARDIAN_CONSTELLATIONS.length;
-    setConstellationIndex(nextIdx);
-    setIsConstCompleted(false);
-    setConnectedStarIds([1]);
-    setDragCurrentPos(null);
-    Animated.timing(lightsDimAnim, {
-      toValue: 1,
-      duration: 600,
-      useNativeDriver: USE_NATIVE_DRIVER,
-    }).start();
-    spawnHeartToast(
-      `새로운 수호 별자리: ${GUARDIAN_CONSTELLATIONS[nextIdx]?.name} ✨`
-    );
-    setDialogue(
-      `새로운 수호 별자리 "${GUARDIAN_CONSTELLATIONS[nextIdx]?.name}"가 밤하늘에 떠올랐어요 🌙 별을 순서대로 이어보세요 ✨`
-    );
-  };
-
-  const handleConstellationTouch = (e: any) => {
-    if (isConstCompleted) return;
-    const t = e.nativeEvent?.touches?.[0] || e.nativeEvent;
-    const x = t.locationX != null ? t.locationX : t.pageX || 0;
-    const y = t.locationY != null ? t.locationY : t.pageY ? t.pageY - 55 : 0;
-    processConstellationPoint(x, y);
-  };
-
-  const handleConstellationWebMouse = (e: any) => {
-    if (isConstCompleted) return;
-    const x =
-      e.nativeEvent?.offsetX ?? (e.nativeEvent?.locationX ?? (e.clientX || 0));
-    const y =
-      e.nativeEvent?.offsetY ??
-      (e.nativeEvent?.locationY ?? (e.clientY ? e.clientY - 55 : 0));
-    processConstellationPoint(x, y);
-  };
-
-  const handleConstellationTouchEnd = () => {
-    isMouseActiveRef.current = false;
-    setDragCurrentPos(null);
-  };
-
-  const connectedConstellationLines = useMemo(() => {
-    const lines = [];
-    const stars = currentConstellation.stars;
-    const w = canvasLayout.width || SCREEN_WIDTH;
-    const h = canvasLayout.height || 230;
-
-    for (let i = 0; i < connectedStarIds.length - 1; i++) {
-      const s1 = stars.find((s) => s.id === connectedStarIds[i]);
-      const s2 = stars.find((s) => s.id === connectedStarIds[i + 1]);
-      if (s1 && s2) {
-        lines.push({
-          id: `line_${s1.id}_${s2.id}`,
-          x1: s1.normX * w,
-          y1: s1.normY * h,
-          x2: s2.normX * w,
-          y2: s2.normY * h,
-        });
-      }
-    }
-    return lines;
-  }, [connectedStarIds, currentConstellation, canvasLayout]);
-
-  const lastConnectedStar = useMemo(() => {
-    const lastId = connectedStarIds[connectedStarIds.length - 1];
-    return currentConstellation.stars.find((s) => s.id === lastId);
-  }, [connectedStarIds, currentConstellation]);
-
-  const dragStartPoint = useMemo(() => {
-    if (!lastConnectedStar) return null;
-    const w = canvasLayout.width || SCREEN_WIDTH;
-    const h = canvasLayout.height || 230;
-    return {
-      x: lastConnectedStar.normX * w,
-      y: lastConnectedStar.normY * h,
-    };
-  }, [lastConnectedStar, canvasLayout]);
-
-  const nextTargetStarId = useMemo(() => {
-    const lastId = connectedStarIds[connectedStarIds.length - 1] || 0;
-    return lastId < currentConstellation.stars.length ? lastId + 1 : null;
-  }, [connectedStarIds, currentConstellation]);
-
-  // -------------------------------------------------------------
-  // 10. 반려몽 2D 젤리 스쿼시 & 쓰다듬기 콤보 물리 (Petting Combo Engine)
+  // 9. 반려몽 2D 젤리 스쿼시 & 쓰다듬기 콤보 물리 (Petting Combo Engine)
   // -------------------------------------------------------------
   const handlePetPress = () => {
-    if (unreadWhispers && unreadWhispers.length > 0 && typeof onOpenWhisper === 'function') {
+    if (
+      unreadWhispers &&
+      unreadWhispers.length > 0 &&
+      typeof onOpenWhisper === 'function'
+    ) {
       onOpenWhisper(unreadWhispers[0]);
       return;
     }
@@ -1074,7 +784,6 @@ export default function PetmongGameEngine({
       setPettingCombo(0);
     }, 3500);
 
-    // 2D Jelly Squash & Stretch + Happy Waggle Physics
     Animated.parallel([
       Animated.sequence([
         Animated.timing(petScaleY, {
@@ -1126,10 +835,14 @@ export default function PetmongGameEngine({
       if (dailyPettingExpCount < MAX_DAILY_PETTING_EXP_COUNT) {
         const nextCount = dailyPettingExpCount + 1;
         setDailyPettingExpCount(nextCount);
-        AsyncStorage.setItem(pettingExpStorageKey, String(nextCount)).catch(() => {});
+        AsyncStorage.setItem(pettingExpStorageKey, String(nextCount)).catch(
+          () => {}
+        );
 
         if (onGainExp) onGainExp(5);
-        spawnHeartToast(`🔥 ${nextCombo}콤보 행복 폭발! +5 EXP 💖 (${nextCount}/${MAX_DAILY_PETTING_EXP_COUNT}회)`);
+        spawnHeartToast(
+          `🔥 ${nextCombo}콤보 행복 폭발! +5 EXP 💖 (${nextCount}/${MAX_DAILY_PETTING_EXP_COUNT}회)`
+        );
         setDialogue(
           `${nextCombo}번 연속 쓰담쓰담이라니! 사랑이 넘쳐서 경험치(+5 EXP)가 쑥 올랐어요 몽 💖✨ (오늘 ${nextCount}/${MAX_DAILY_PETTING_EXP_COUNT}회 달성)`
         );
@@ -1173,147 +886,21 @@ export default function PetmongGameEngine({
         pointerEvents="none"
       />
 
-      {/* 🌟 밤 시간대 / 야간 모드: 인룸 천장 수호 별자리 캔버스 */}
+      {/* 🌟 밤 시간대 / 야간 모드: 인룸 천장 수호 별자리 캔버스 (드래그 상태 격리) */}
       {isNightMode && (
-        <View
-          style={[styles.inRoomConstellationCanvas, { width: '100%' }]}
-          onLayout={(e) => {
-            const { width, height } = e.nativeEvent.layout;
-            if (width > 0 && height > 0) {
-              setCanvasLayout({ width, height });
-            }
-          }}
-          onTouchStart={handleConstellationTouch}
-          onTouchMove={handleConstellationTouch}
-          onTouchEnd={handleConstellationTouchEnd}
-          {...({
-            onMouseDown: (e: any) => {
-              isMouseActiveRef.current = true;
-              handleConstellationWebMouse(e);
-            },
-            onMouseMove: (e: any) => {
-              if (isMouseActiveRef.current) handleConstellationWebMouse(e);
-            },
-            onMouseUp: handleConstellationTouchEnd,
-            onMouseLeave: handleConstellationTouchEnd,
-          } as any)}
-        >
-          <View style={styles.constellationHeaderRow} pointerEvents="box-none">
-            {!isConstCompleted ? (
-              <View style={styles.constellationHeaderPill}>
-                <Sparkles size={12} color="#FDE047" fill="#FDE047" />
-                <Text
-                  style={styles.constellationHeaderText}
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                >
-                  수호 별자리: {currentConstellation.name} · 별을 순서대로 이어보세요
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.constellationCompletedRow}>
-                <View style={styles.constellationHeaderPillDone}>
-                  <Star size={12} color="#FDE047" fill="#FDE047" />
-                  <Text
-                    style={styles.constellationHeaderTextDone}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                  >
-                    {currentConstellation.name} 완성! ✨ {currentConstellation.meaning}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  onPress={handleResetConstellation}
-                  style={styles.constellationResetBtn}
-                  activeOpacity={0.7}
-                >
-                  <RotateCcw size={11} color="#FEF08A" />
-                  <Text style={styles.constellationResetText}>다음 별자리</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-
-          <Svg
-            width={canvasLayout.width}
-            height={canvasLayout.height}
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
-          >
-            {connectedConstellationLines.map((line) => (
-              <Line
-                key={line.id}
-                x1={line.x1}
-                y1={line.y1}
-                x2={line.x2}
-                y2={line.y2}
-                stroke={isConstCompleted ? '#FDE047' : '#93C5FD'}
-                strokeWidth={isConstCompleted ? 2.8 : 2.2}
-                strokeLinecap="round"
-                opacity={isConstCompleted ? 0.95 : 0.85}
-              />
-            ))}
-
-            {dragStartPoint && dragCurrentPos && (
-              <Line
-                x1={dragStartPoint.x}
-                y1={dragStartPoint.y}
-                x2={dragCurrentPos.x}
-                y2={dragCurrentPos.y}
-                stroke="#FDE047"
-                strokeWidth={2.2}
-                strokeDasharray="4, 4"
-                strokeLinecap="round"
-                opacity={0.9}
-              />
-            )}
-
-            {currentConstellation.stars.map((star) => {
-              const sx = star.normX * canvasLayout.width;
-              const sy = star.normY * canvasLayout.height;
-              const isConnected = connectedStarIds.includes(star.id);
-              const isNext = star.id === nextTargetStarId;
-
-              return (
-                <G key={`star_${star.id}`}>
-                  {isConnected && (
-                    <Circle
-                      cx={sx}
-                      cy={sy}
-                      r={isConstCompleted ? 14 : 11}
-                      fill={
-                        isConstCompleted
-                          ? 'rgba(253, 224, 71, 0.35)'
-                          : 'rgba(147, 197, 253, 0.35)'
-                      }
-                    />
-                  )}
-                  {isNext && (
-                    <Circle cx={sx} cy={sy} r={13} fill="rgba(253, 224, 71, 0.3)" />
-                  )}
-                  <Circle
-                    cx={sx}
-                    cy={sy}
-                    r={isConnected ? (isConstCompleted ? 6.5 : 5.5) : isNext ? 5.5 : 4}
-                    fill={isConnected ? '#FDE047' : isNext ? '#FEF08A' : '#CBD5E1'}
-                    stroke={isConnected ? '#FFFFFF' : '#94A3B8'}
-                    strokeWidth={1.5}
-                  />
-                  <SvgText
-                    x={sx}
-                    y={sy - 9}
-                    fill={isConnected ? '#FEF08A' : isNext ? '#FDE047' : '#94A3B8'}
-                    fontSize="10"
-                    fontWeight="bold"
-                    textAnchor="middle"
-                  >
-                    {star.id}
-                  </SvgText>
-                </G>
-              );
-            })}
-          </Svg>
-        </View>
+        <PetmongConstellationCanvas
+          character={character}
+          todayStr={todayStr}
+          todayStartIso={todayStartIso}
+          isNightMode={isNightMode}
+          lightsDimAnim={lightsDimAnim}
+          checkIsNightTime={checkIsNightTime}
+          onGainExp={onGainExp}
+          onUpdateVitals={onUpdateVitals}
+          onSpawnHeartToast={spawnHeartToast}
+          onSetDialogue={setDialogue}
+          onSetLivingRoutine={setLivingRoutine}
+        />
       )}
 
       {/* 2. Fullscreen Interactive Room Canvas (바닥 탭 시 반려몽 호출 이동) */}
@@ -1370,7 +957,9 @@ export default function PetmongGameEngine({
                       비밀 귓속말 ({unreadWhispers.length})
                     </Text>
                   </View>
-                  <Text style={styles.whisperDeliveryHint}>탭해서 편지 열기 🤫</Text>
+                  <Text style={styles.whisperDeliveryHint}>
+                    탭해서 편지 열기 🤫
+                  </Text>
                 </Animated.View>
               </TouchableOpacity>
             )}
@@ -1382,7 +971,9 @@ export default function PetmongGameEngine({
                 onPress={handleHarvestWarmth}
                 activeOpacity={0.8}
               >
-                <Animated.View style={{ transform: [{ translateY: fruitFloatAnim }] }}>
+                <Animated.View
+                  style={{ transform: [{ translateY: fruitFloatAnim }] }}
+                >
                   <View style={styles.warmthFruitGlow}>
                     <WarmthFruitIcon size={34} />
                     <View style={styles.warmthFruitPill}>
@@ -1481,7 +1072,9 @@ export default function PetmongGameEngine({
                       />
                     ) : (
                       <Image
-                        source={{ uri: transparentCharImageUrl || character.image_url }}
+                        source={{
+                          uri: transparentCharImageUrl || character.image_url,
+                        }}
                         style={styles.petImageSprite}
                         resizeMode="contain"
                       />
@@ -1689,3 +1282,5 @@ export default function PetmongGameEngine({
     </View>
   );
 }
+
+export default React.memo(PetmongGameEngine);

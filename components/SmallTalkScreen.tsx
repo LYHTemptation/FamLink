@@ -89,7 +89,7 @@ export interface SmallTalkScreenProps {
   onAwardPoints?: ((amount: number, reason?: string) => void) | null;
 }
 
-export default function SmallTalkScreen({
+function SmallTalkScreen({
   smallTalkState = {},
   currentUser,
   currentUserProfile,
@@ -1058,4 +1058,6 @@ export default function SmallTalkScreen({
     </View>
   );
 }
+
+export default React.memo(SmallTalkScreen);
 

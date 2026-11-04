@@ -1,34 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
-  StyleSheet,
   Text,
   View,
   ScrollView,
-  TextInput,
   TouchableOpacity,
   Alert,
-  Modal,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
-import { ShoppingCart, Award, ChevronDown, ChevronUp, Trash2, Clock } from 'lucide-react-native';
+import {
+  Award,
+  ChevronDown,
+  ChevronUp,
+  Trash2,
+  Clock,
+} from 'lucide-react-native';
 import {
   IconPlus,
   IconTrash,
-  IconClose,
   IconSquare,
   IconCheckCircle,
   IconRepeat,
 } from './icons';
-import { colors, typography, commonStyles } from '../theme';
-import UserAvatar from './UserAvatar';
-import { ShoppingItem, UserProfile, FamilyMember } from '../types/domain';
+import { styles } from './shopping/ShoppingStyles';
+import {
+  ShoppingAddModal,
+  type NewShoppingItemPayload,
+} from './shopping/ShoppingAddModal';
+import type { ShoppingItem, UserProfile, FamilyMember } from '../types/domain';
 
-export interface NewShoppingItemPayload {
-  title: string;
-  assignee: string;
-  repeat_type: 'none' | 'daily' | 'weekly' | string;
-}
+export type { NewShoppingItemPayload };
 
 export interface ShoppingListScreenProps {
   shoppingItems: ShoppingItem[];
@@ -42,9 +41,40 @@ export interface ShoppingListScreenProps {
   embedded?: boolean;
 }
 
-export default function ShoppingListScreen({
+function getTodayString(dateObj = new Date()): string {
+  const y = dateObj.getFullYear();
+  const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const d = String(dateObj.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function formatItemDateTime(dateVal: any): string {
+  if (!dateVal) return '';
+  try {
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return String(dateVal);
+
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    const isYesterday = d.toDateString() === yesterday.toDateString();
+
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    const timeStr = `${hours}:${minutes}`;
+
+    if (isToday) return `오늘 ${timeStr}`;
+    if (isYesterday) return `어제 ${timeStr}`;
+    return `${d.getMonth() + 1}/${d.getDate()} ${timeStr}`;
+  } catch (e) {
+    return String(dateVal);
+  }
+}
+
+function ShoppingListScreen({
   shoppingItems = [],
-  currentUserProfile,
   familyMembers = [],
   onAddItem,
   onToggleItem,
@@ -54,147 +84,128 @@ export default function ShoppingListScreen({
   embedded = false,
 }: ShoppingListScreenProps) {
   const [modalVisible, setModalVisible] = useState(false);
-  const [itemTitle, setItemTitle] = useState('');
-  const [selectedAssignee, setSelectedAssignee] = useState('가족 전체');
-  const [repeatType, setRepeatType] = useState('none'); // 'none', 'daily', 'weekly'
   const [isCompletedExpanded, setIsCompletedExpanded] = useState(true);
   const [showAllCompleted, setShowAllCompleted] = useState(false);
 
-  const handleCreateItem = () => {
-    if (!itemTitle.trim()) {
-      Alert.alert('알림', '구매/할 일 항목을 입력해 주세요.');
-      return;
+  const todayStr = useMemo(() => getTodayString(), []);
+
+  const isDateToday = useCallback(
+    (dateVal: any) => {
+      if (!dateVal) return false;
+      try {
+        const d = new Date(dateVal);
+        if (isNaN(d.getTime())) return String(dateVal).startsWith(todayStr);
+        const now = new Date();
+        return (
+          d.getFullYear() === now.getFullYear() &&
+          d.getMonth() === now.getMonth() &&
+          d.getDate() === now.getDate()
+        );
+      } catch {
+        return false;
+      }
+    },
+    [todayStr]
+  );
+
+  const { activeItems, completedItems, todayEarnedCount } = useMemo(() => {
+    const active: ShoppingItem[] = [];
+    const completed: ShoppingItem[] = [];
+    let rawEarned = 0;
+
+    for (const i of shoppingItems || []) {
+      if (i.is_completed) {
+        completed.push(i);
+        const isDoneToday =
+          i.completed_date === todayStr || isDateToday(i.completed_at);
+        if (isDoneToday && (i.points_earned || isDoneToday)) {
+          rawEarned++;
+        }
+      } else {
+        active.push(i);
+      }
     }
 
-    onAddItem({
-      title: itemTitle.trim(),
-      assignee: selectedAssignee,
-      repeat_type: repeatType,
-    });
+    return {
+      activeItems: active,
+      completedItems: completed,
+      todayEarnedCount: Math.min(3, rawEarned),
+    };
+  }, [shoppingItems, todayStr, isDateToday]);
 
-    setItemTitle('');
-    setSelectedAssignee('가족 전체');
-    setRepeatType('none');
-    setModalVisible(false);
-  };
+  const handleDeleteConfirm = useCallback(
+    (item: ShoppingItem) => {
+      const isRepeating = item.repeat_type && item.repeat_type !== 'none';
+      Alert.alert(
+        '항목 삭제',
+        isRepeating
+          ? `'${item.title}' (${
+              item.repeat_type === 'daily' ? '매일' : '매주'
+            } 반복) 항목을 삭제하시겠습니까?\n삭제 시 더 이상 반복되지 않습니다.`
+          : `'${item.title}' 항목을 삭제하시겠습니까?`,
+        [
+          { text: '취소', style: 'cancel' },
+          {
+            text: '삭제',
+            style: 'destructive',
+            onPress: () => onDeleteItem(item.id),
+          },
+        ]
+      );
+    },
+    [onDeleteItem]
+  );
 
-  const handleDeleteConfirm = (item: ShoppingItem) => {
-    const isRepeating = item.repeat_type && item.repeat_type !== 'none';
-    Alert.alert(
-      '항목 삭제',
-      isRepeating
-        ? `'${item.title}' (${item.repeat_type === 'daily' ? '매일' : '매주'} 반복) 항목을 삭제하시겠습니까?\n삭제 시 더 이상 반복되지 않습니다.`
-        : `'${item.title}' 항목을 삭제하시겠습니까?`,
-      [
-        { text: '취소', style: 'cancel' },
-        {
-          text: '삭제',
-          style: 'destructive',
-          onPress: () => onDeleteItem(item.id),
-        },
-      ]
-    );
-  };
-
-  const handleClearCompletedConfirm = () => {
+  const handleClearCompletedConfirm = useCallback(() => {
     if (!completedItems || completedItems.length === 0) return;
-    const recurringCount = completedItems.filter(i => i.repeat_type && i.repeat_type !== 'none').length;
+    const recurringCount = completedItems.filter(
+      (i) => i.repeat_type && i.repeat_type !== 'none'
+    ).length;
     const oneTimeCount = completedItems.length - recurringCount;
 
-    const message = recurringCount > 0
-      ? `완료된 1회성 항목(${oneTimeCount}개)을 모두 삭제하시겠습니까?\n(매일/반복 할 일 ${recurringCount}개는 삭제되지 않고 내일 다시 등록됩니다)`
-      : `완료된 ${completedItems.length}개의 항목을 모두 삭제하시겠습니까?`;
+    const message =
+      recurringCount > 0
+        ? `완료된 1회성 항목(${oneTimeCount}개)을 모두 삭제하시겠습니까?\n(매일/반복 할 일 ${recurringCount}개는 삭제되지 않고 내일 다시 등록됩니다)`
+        : `완료된 ${completedItems.length}개의 항목을 모두 삭제하시겠습니까?`;
 
-    Alert.alert(
-      '완료 목록 비우기',
-      message,
-      [
-        { text: '취소', style: 'cancel' },
-        {
-          text: '모두 비우기',
-          style: 'destructive',
-          onPress: () => {
-            if (onClearCompleted) {
-              onClearCompleted();
-            } else {
-              completedItems.forEach(i => onDeleteItem(i.id));
-            }
-          },
+    Alert.alert('완료 목록 비우기', message, [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '모두 비우기',
+        style: 'destructive',
+        onPress: () => {
+          if (onClearCompleted) {
+            onClearCompleted();
+          } else {
+            completedItems.forEach((i) => onDeleteItem(i.id));
+          }
         },
-      ]
-    );
-  };
-
-  const formatItemDateTime = (dateVal: any) => {
-    if (!dateVal) return '';
-    try {
-      const d = new Date(dateVal);
-      if (isNaN(d.getTime())) return String(dateVal);
-
-      const now = new Date();
-      const isToday = d.toDateString() === now.toDateString();
-
-      const yesterday = new Date(now);
-      yesterday.setDate(now.getDate() - 1);
-      const isYesterday = d.toDateString() === yesterday.toDateString();
-
-      const hours = String(d.getHours()).padStart(2, '0');
-      const minutes = String(d.getMinutes()).padStart(2, '0');
-      const timeStr = `${hours}:${minutes}`;
-
-      if (isToday) return `오늘 ${timeStr}`;
-      if (isYesterday) return `어제 ${timeStr}`;
-      return `${d.getMonth() + 1}/${d.getDate()} ${timeStr}`;
-    } catch (e) {
-      return String(dateVal);
-    }
-  };
-
-  const getTodayString = (dateObj = new Date()) => {
-    const y = dateObj.getFullYear();
-    const m = String(dateObj.getMonth() + 1).padStart(2, '0');
-    const d = String(dateObj.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  };
-
-  const todayStr = getTodayString();
-
-  const isDateToday = (dateVal: any) => {
-    if (!dateVal) return false;
-    try {
-      const d = new Date(dateVal);
-      if (isNaN(d.getTime())) return String(dateVal).startsWith(todayStr);
-      const now = new Date();
-      return d.getFullYear() === now.getFullYear() &&
-             d.getMonth() === now.getMonth() &&
-             d.getDate() === now.getDate();
-    } catch {
-      return false;
-    }
-  };
-
-  const activeItems = shoppingItems ? shoppingItems.filter(i => !i.is_completed) : [];
-  const completedItems = shoppingItems ? shoppingItems.filter(i => i.is_completed) : [];
-  const rawEarnedCount = shoppingItems
-    ? shoppingItems.filter(i =>
-        i.is_completed &&
-        (i.points_earned || i.completed_date === todayStr || isDateToday(i.completed_at)) &&
-        (i.completed_date === todayStr || isDateToday(i.completed_at))
-      ).length
-    : 0;
-  const todayEarnedCount = Math.min(3, rawEarnedCount);
+      },
+    ]);
+  }, [completedItems, onClearCompleted, onDeleteItem]);
 
   return (
-    <View style={[styles.container, embedded && { backgroundColor: 'transparent' }]}>
+    <View
+      style={[
+        styles.container,
+        embedded && { backgroundColor: 'transparent' },
+      ]}
+    >
       {/* Sub-header Bar */}
       {!embedded ? (
         <View style={styles.subHeaderBar}>
           <View>
             <Text style={styles.subHeaderTitle}>장보기</Text>
-            <Text style={styles.subHeaderSub}>미완료 {activeItems.length}개 · 완료 {completedItems.length}개</Text>
+            <Text style={styles.subHeaderSub}>
+              미완료 {activeItems.length}개 · 완료 {completedItems.length}개
+            </Text>
           </View>
 
-          <TouchableOpacity style={styles.addBtn} onPress={() => setModalVisible(true)} activeOpacity={0.8}>
+          <TouchableOpacity
+            style={styles.addBtn}
+            onPress={() => setModalVisible(true)}
+            activeOpacity={0.8}
+          >
             <IconPlus size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
             <Text style={styles.addBtnText}>품목 추가</Text>
           </TouchableOpacity>
@@ -204,7 +215,11 @@ export default function ShoppingListScreen({
           <Text style={styles.embeddedHeaderCount}>
             미완료 {activeItems.length}개 · 완료 {completedItems.length}개
           </Text>
-          <TouchableOpacity style={styles.addBtn} onPress={() => setModalVisible(true)} activeOpacity={0.8}>
+          <TouchableOpacity
+            style={styles.addBtn}
+            onPress={() => setModalVisible(true)}
+            activeOpacity={0.8}
+          >
             <IconPlus size={16} color="#FFFFFF" style={{ marginRight: 4 }} />
             <Text style={styles.addBtnText}>품목 추가</Text>
           </TouchableOpacity>
@@ -222,10 +237,14 @@ export default function ShoppingListScreen({
 
         {/* Active Items Section */}
         <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>구매 / 할 일 목록 ({activeItems.length})</Text>
+          <Text style={styles.sectionTitle}>
+            구매 / 할 일 목록 ({activeItems.length})
+          </Text>
 
           {activeItems.length === 0 ? (
-            <Text style={styles.emptyText}>아직 등록된 장보기 항목이 없습니다.</Text>
+            <Text style={styles.emptyText}>
+              아직 등록된 장보기 항목이 없습니다.
+            </Text>
           ) : (
             activeItems.map((item) => (
               <View key={item.id} style={styles.itemRow}>
@@ -239,24 +258,39 @@ export default function ShoppingListScreen({
                 <View style={styles.itemInfo}>
                   <Text style={styles.itemTitleText}>{item.title}</Text>
                   <View style={styles.tagRow}>
-                    <Text style={styles.assigneeBadge}>담당: {item.assignee}</Text>
+                    <Text style={styles.assigneeBadge}>
+                      담당: {item.assignee}
+                    </Text>
                     {item.repeat_type && item.repeat_type !== 'none' ? (
                       <TouchableOpacity
                         style={styles.repeatBadge}
                         onPress={() => onToggleRepeat && onToggleRepeat(item)}
                         activeOpacity={0.7}
                       >
-                        <IconRepeat size={10} color="#FF6B47" style={{ marginRight: 3 }} />
+                        <IconRepeat
+                          size={10}
+                          color="#FF6B47"
+                          style={{ marginRight: 3 }}
+                        />
                         <Text style={styles.repeatBadgeText}>
-                          {item.repeat_type === 'daily' ? '매일 반복' : '매주 반복'}
+                          {item.repeat_type === 'daily'
+                            ? '매일 반복'
+                            : '매주 반복'}
                         </Text>
                       </TouchableOpacity>
                     ) : null}
-                    {(item.created_at || item.created_time) ? (
+                    {item.created_at || item.created_time ? (
                       <View style={styles.metaTimeRow}>
-                        <Clock size={11} color="#8E8E93" style={{ marginRight: 3 }} />
+                        <Clock
+                          size={11}
+                          color="#8E8E93"
+                          style={{ marginRight: 3 }}
+                        />
                         <Text style={styles.metaTimeText}>
-                          {formatItemDateTime(item.created_at || item.created_time)} 등록
+                          {formatItemDateTime(
+                            item.created_at || item.created_time
+                          )}{' '}
+                          등록
                         </Text>
                       </View>
                     ) : null}
@@ -280,16 +314,24 @@ export default function ShoppingListScreen({
             <View style={styles.completedHeaderRow}>
               <TouchableOpacity
                 style={styles.completedHeaderToggle}
-                onPress={() => setIsCompletedExpanded(prev => !prev)}
+                onPress={() => setIsCompletedExpanded((prev) => !prev)}
                 activeOpacity={0.7}
               >
                 <Text style={styles.sectionTitleDone}>
                   완료된 목록 ({completedItems.length})
                 </Text>
                 {isCompletedExpanded ? (
-                  <ChevronUp size={16} color="#2ECC71" style={{ marginLeft: 4 }} />
+                  <ChevronUp
+                    size={16}
+                    color="#2ECC71"
+                    style={{ marginLeft: 4 }}
+                  />
                 ) : (
-                  <ChevronDown size={16} color="#8E8E93" style={{ marginLeft: 4 }} />
+                  <ChevronDown
+                    size={16}
+                    color="#8E8E93"
+                    style={{ marginLeft: 4 }}
+                  />
                 )}
               </TouchableOpacity>
 
@@ -305,7 +347,10 @@ export default function ShoppingListScreen({
 
             {isCompletedExpanded ? (
               <View>
-                {(showAllCompleted ? completedItems : completedItems.slice(0, 3)).map((item) => (
+                {(showAllCompleted
+                  ? completedItems
+                  : completedItems.slice(0, 3)
+                ).map((item) => (
                   <View key={item.id} style={styles.itemRowDone}>
                     <TouchableOpacity
                       style={styles.checkboxTouch}
@@ -318,22 +363,41 @@ export default function ShoppingListScreen({
                       <Text style={styles.itemTitleTextDone}>{item.title}</Text>
                       <View style={styles.tagRow}>
                         <Text style={styles.completedByText}>
-                          {item.completed_by ? `${item.completed_by}님이 완료함` : '완료됨'}
+                          {item.completed_by
+                            ? `${item.completed_by}님이 완료함`
+                            : '완료됨'}
                           {item.points_earned ? ` (+${item.points || 20}P)` : ''}
                         </Text>
                         {item.repeat_type && item.repeat_type !== 'none' ? (
                           <View style={styles.repeatBadgeDone}>
-                            <IconRepeat size={10} color="#2ECC71" style={{ marginRight: 3 }} />
+                            <IconRepeat
+                              size={10}
+                              color="#2ECC71"
+                              style={{ marginRight: 3 }}
+                            />
                             <Text style={styles.repeatBadgeTextDone}>
-                              {item.repeat_type === 'daily' ? '매일 반복' : '매주 반복'}
+                              {item.repeat_type === 'daily'
+                                ? '매일 반복'
+                                : '매주 반복'}
                             </Text>
                           </View>
                         ) : null}
-                        {(item.completed_at || item.completed_time || item.created_at) ? (
+                        {item.completed_at ||
+                        item.completed_time ||
+                        item.created_at ? (
                           <View style={styles.metaTimeRow}>
-                            <Clock size={11} color="#A0A0A5" style={{ marginRight: 3 }} />
+                            <Clock
+                              size={11}
+                              color="#A0A0A5"
+                              style={{ marginRight: 3 }}
+                            />
                             <Text style={styles.metaTimeTextDone}>
-                              {formatItemDateTime(item.completed_at || item.completed_time || item.created_at)} 완료
+                              {formatItemDateTime(
+                                item.completed_at ||
+                                  item.completed_time ||
+                                  item.created_at
+                              )}{' '}
+                              완료
                             </Text>
                           </View>
                         ) : null}
@@ -352,7 +416,7 @@ export default function ShoppingListScreen({
                 {completedItems.length > 3 && (
                   <TouchableOpacity
                     style={styles.showMoreBtn}
-                    onPress={() => setShowAllCompleted(prev => !prev)}
+                    onPress={() => setShowAllCompleted((prev) => !prev)}
                     activeOpacity={0.7}
                   >
                     <Text style={styles.showMoreBtnText}>
@@ -378,471 +442,15 @@ export default function ShoppingListScreen({
         )}
       </ScrollView>
 
-      {/* Add Item Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
+      {/* Add Item Modal (타이핑 상태 격리) */}
+      <ShoppingAddModal
         visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalOverlay}
-        >
-          <View style={styles.modalView}>
-            <View style={styles.modalHeaderRow}>
-              <Text style={styles.modalHeader}>새 장보기/할 일 추가</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <IconClose size={20} color="#8E8E93" />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.modalLabel}>항목 명칭</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="예: 우유 2팩, 라면, 음식물 쓰레기 버리기"
-              placeholderTextColor="#AEAEB2"
-              value={itemTitle}
-              onChangeText={setItemTitle}
-            />
-
-            <Text style={styles.modalLabel}>담당 가족 지정</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.assigneeScroll}>
-              {[
-                { key: 'all', name: '가족 전체', avatar: '👨‍👩‍👧‍👦' },
-                ...(familyMembers && Array.isArray(familyMembers) && familyMembers.length > 0
-                  ? familyMembers.map((m, idx) => ({
-                      key: m.id || `${m.name || m.role}_${idx}`,
-                      name: m.name || m.role,
-                      avatar: m.avatar || '👦',
-                    }))
-                  : [
-                      { key: 'mom', name: '엄마', avatar: '👩‍🦰' },
-                      { key: 'dad', name: '아빠', avatar: '👨‍💼' },
-                      { key: 'son', name: '아들', avatar: '👦' },
-                      { key: 'daughter', name: '딸', avatar: '👧' },
-                    ])
-              ].map((item) => {
-                const isSelected = selectedAssignee === item.name;
-                return (
-                  <TouchableOpacity
-                    key={item.key}
-                    style={[styles.assigneeChip, isSelected && styles.assigneeChipActive]}
-                    onPress={() => setSelectedAssignee(item.name || '')}
-                  >
-                    <UserAvatar avatar={item.avatar} size={18} style={{ marginRight: 6 }} />
-                    <Text style={[styles.assigneeChipText, isSelected && styles.assigneeChipTextActive]}>
-                      {item.name}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-
-            <Text style={styles.modalLabel}>반복 설정</Text>
-            <View style={styles.repeatSelectorRow}>
-              {[
-                { key: 'none', label: '반복 없음' },
-                { key: 'daily', label: '매일 반복' },
-                { key: 'weekly', label: '매주 반복' },
-              ].map((opt) => {
-                const isSelected = repeatType === opt.key;
-                return (
-                  <TouchableOpacity
-                    key={opt.key}
-                    style={[styles.repeatOptionChip, isSelected && styles.repeatOptionChipActive]}
-                    onPress={() => setRepeatType(opt.key)}
-                    activeOpacity={0.7}
-                  >
-                    {opt.key !== 'none' && (
-                      <IconRepeat
-                        size={12}
-                        color={isSelected ? '#FF6B47' : '#8E8E93'}
-                        style={{ marginRight: 4 }}
-                      />
-                    )}
-                    <Text style={[styles.repeatOptionText, isSelected && styles.repeatOptionTextActive]}>
-                      {opt.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            {repeatType === 'daily' && (
-              <View style={styles.repeatHintBox}>
-                <Text style={styles.repeatHintText}>
-                  💡 매일 자정이 지나면 오늘 할 일로 자동 갱신됩니다.
-                </Text>
-              </View>
-            )}
-            {repeatType === 'weekly' && (
-              <View style={styles.repeatHintBox}>
-                <Text style={styles.repeatHintText}>
-                  💡 완료 후 7일이 지나면 자동으로 새 할 일로 갱신됩니다.
-                </Text>
-              </View>
-            )}
-
-            <TouchableOpacity style={styles.modalConfirmBtn} onPress={handleCreateItem}>
-              <Text style={styles.modalConfirmBtnText}>등록하기 (+20P 미션)</Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+        familyMembers={familyMembers}
+        onClose={() => setModalVisible(false)}
+        onAddItem={onAddItem}
+      />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: commonStyles.screenContainer,
-  scrollContent: commonStyles.scrollContent,
-  subHeaderBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  subHeaderTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.text.primary,
-  },
-  subHeaderSub: {
-    fontSize: 13,
-    color: colors.text.secondary,
-    marginTop: 2,
-  },
-  addBtn: {
-    flexDirection: 'row',
-    backgroundColor: '#FF6B47',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  addBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  dailyRewardCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF5F2',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 14,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#FFE8E0',
-  },
-  dailyRewardText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#FF6B47',
-  },
-  sectionCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 18,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#F5F0E8',
-  },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#1C1917',
-    marginBottom: 14,
-  },
-  sectionTitleDone: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#2ECC71',
-    marginBottom: 14,
-  },
-  emptyText: {
-    fontSize: 12,
-    color: '#A8A29E',
-    textAlign: 'center',
-    paddingVertical: 16,
-    fontStyle: 'italic',
-  },
-  itemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F5F0E8',
-  },
-  itemRowDone: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F5F0E8',
-    opacity: 0.7,
-  },
-  checkboxTouch: {
-    paddingRight: 10,
-  },
-  itemInfo: {
-    flex: 1,
-  },
-  itemTitleText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1C1917',
-    marginBottom: 2,
-  },
-  itemTitleTextDone: {
-    fontSize: 14,
-    color: '#78716C',
-    textDecorationLine: 'line-through',
-    marginBottom: 2,
-  },
-  tagRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  assigneeBadge: {
-    fontSize: 11,
-    color: '#FF6B47',
-    backgroundColor: '#FFF5F2',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    fontWeight: '600',
-  },
-  completedByText: {
-    fontSize: 11,
-    color: '#2ECC71',
-    fontWeight: '600',
-  },
-  completedHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  completedHeaderToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 4,
-  },
-  clearAllBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    backgroundColor: '#FFF5F2',
-  },
-  clearAllBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#FF6B47',
-  },
-  metaTimeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  metaTimeText: {
-    fontSize: 11,
-    color: '#A8A29E',
-  },
-  metaTimeTextDone: {
-    fontSize: 11,
-    color: '#A8A29E',
-  },
-  showMoreBtn: {
-    paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-    backgroundColor: '#FAF8F3',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#F5F0E8',
-  },
-  showMoreBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#78716C',
-  },
-  collapsedSummaryTouch: {
-    paddingVertical: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FAF8F3',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#F5F0E8',
-  },
-  collapsedSummaryText: {
-    fontSize: 12,
-    color: '#78716C',
-    fontWeight: '600',
-  },
-  deleteBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#FAF8F3',
-  },
-  modalOverlay: commonStyles.modalOverlay,
-  modalView: commonStyles.modalBottomSheet,
-  modalHeaderRow: commonStyles.modalHeaderRow,
-  modalHeader: commonStyles.modalHeaderTitle,
-  modalLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#78716C',
-    marginBottom: 6,
-    marginTop: 10,
-  },
-  modalInput: {
-    backgroundColor: '#FAF8F3',
-    borderRadius: 12,
-    padding: 12,
-    fontSize: 14,
-    color: '#1C1917',
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#F5F0E8',
-  },
-  assigneeScroll: {
-    flexDirection: 'row',
-    marginBottom: 16,
-    paddingVertical: 4,
-  },
-  assigneeChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#F5F0E8',
-    marginRight: 8,
-    backgroundColor: '#FFFFFF',
-  },
-  assigneeAvatar: {
-    fontSize: 13,
-    marginRight: 4,
-  },
-  assigneeChipActive: {
-    borderColor: '#FF6B47',
-    backgroundColor: '#FFF5F2',
-  },
-  assigneeChipText: {
-    fontSize: 12,
-    color: '#78716C',
-    fontWeight: '600',
-  },
-  assigneeChipTextActive: {
-    color: '#FF6B47',
-    fontWeight: '700',
-  },
-  modalConfirmBtn: {
-    backgroundColor: '#FF6B47',
-    padding: 14,
-    borderRadius: 16,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  modalConfirmBtnText: {
-    fontSize: 14,
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  embeddedHeaderBar: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: 'transparent',
-  },
-  embeddedHeaderCount: {
-    fontSize: 13,
-    color: '#78716C',
-    fontWeight: '600',
-  },
-  repeatBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF5F2',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    borderWidth: 0.5,
-    borderColor: '#FFE8E0',
-  },
-  repeatBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#FF6B47',
-  },
-  repeatBadgeDone: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#EDFAF1',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    borderWidth: 0.5,
-    borderColor: '#D4F5DE',
-  },
-  repeatBadgeTextDone: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#2ECC71',
-  },
-  repeatSelectorRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 8,
-  },
-  repeatOptionChip: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 9,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#F5F0E8',
-    backgroundColor: '#FAF8F3',
-  },
-  repeatOptionChipActive: {
-    borderColor: '#FF6B47',
-    backgroundColor: '#FFF5F2',
-  },
-  repeatOptionText: {
-    fontSize: 12,
-    color: '#78716C',
-    fontWeight: '600',
-  },
-  repeatOptionTextActive: {
-    color: '#FF6B47',
-    fontWeight: '700',
-  },
-  repeatHintBox: {
-    backgroundColor: '#FAF8F3',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#F5F0E8',
-  },
-  repeatHintText: {
-    fontSize: 11,
-    color: '#78716C',
-  },
-});
+export default React.memo(ShoppingListScreen);

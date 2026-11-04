@@ -262,7 +262,7 @@ const getRandomDialogue = (personality?: string): string => {
   return list[Math.floor(Math.random() * list.length)];
 };
 
-export default function InteriorScreen({
+function InteriorScreen({
   points = 0,
   onDeductPoints,
   onAwardPoints,
@@ -2214,4 +2214,6 @@ export default function InteriorScreen({
     </View>
   );
 }
+
+export default React.memo(InteriorScreen);
 

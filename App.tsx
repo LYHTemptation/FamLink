@@ -50,7 +50,14 @@ import { supabase, isSupabaseReady } from './lib/supabase';
 import { getTopicForToday, stripEmojis } from './utils/topics';
 import { fetchSmallTalkTopicsFromDB, getTopicForDateFromList } from './services/smallTalkService';
 import { preloadFamilyPhotobookData } from './services/photobookService';
-import { showError } from './utils/errorHandler';
+import {
+  showError,
+  setErrorLoggerContext,
+  fetchSystemConfig,
+  DEFAULT_SYSTEM_CONFIG,
+  AppSystemConfig,
+} from './utils/errorHandler';
+import { AppErrorBoundary } from './components/app/AppErrorBoundary';
 import * as Notifications from 'expo-notifications';
 import { registerForPushNotificationsAsync, sendExpoPushNotification } from './utils/notifications';
 
@@ -87,6 +94,12 @@ import type {
   PetmongVitals,
   PointHistoryItem,
 } from './types/domain';
+
+function useStableCallback<T extends (...args: any[]) => any>(fn: T): T {
+  const fnRef = useRef<T>(fn);
+  fnRef.current = fn;
+  return useCallback(((...args: any[]) => fnRef.current(...args)) as T, []);
+}
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -125,6 +138,7 @@ export default function App() {
 
   const [currentScreen, setCurrentScreen] = useState<string>('home'); // home, chat, interior, smalltalk, calendar, album, family
   const [isKeyboardVisible, setIsKeyboardVisible] = useState<boolean>(false);
+  const [systemConfig, setSystemConfig] = useState<AppSystemConfig>(DEFAULT_SYSTEM_CONFIG);
 
   useEffect(() => {
     if (Platform.OS === 'web') return undefined;
@@ -140,6 +154,15 @@ export default function App() {
   const [visitedScreens, setVisitedScreens] = useState<Set<string>>(new Set(['home', 'chat', 'interior']));
 
   useEffect(() => {
+    setErrorLoggerContext({
+      familyId: profile?.family_id || null,
+      userId: profile?.id || session?.user?.id || null,
+      userName: profile?.name || currentUser || null,
+      screen: currentScreen,
+    });
+  }, [profile?.family_id, profile?.id, profile?.name, session?.user?.id, currentUser, currentScreen]);
+
+  useEffect(() => {
     if (currentScreen) {
       setVisitedScreens(prev => {
         if (prev.has(currentScreen)) return prev;
@@ -153,6 +176,12 @@ export default function App() {
   const [celebrationVisible, setCelebrationVisible] = useState<boolean>(false);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   const familyMembersListRef = useRef<FamilyMember[]>([]);
+  const petmongOptimisticGuardRef = useRef<{
+    id: string;
+    level: number;
+    exp: number;
+    updatedAt: number;
+  } | null>(null);
 
   useEffect(() => {
     familyMembersListRef.current = familyMembersList;
@@ -214,6 +243,7 @@ export default function App() {
     };
 
     initializeAuth();
+    fetchSystemConfig().then(setSystemConfig).catch(() => {});
 
     AsyncStorage.getItem('FAMLINK_CUSTOM_ROOMS').then(val => {
       if (val) {
@@ -463,6 +493,18 @@ export default function App() {
       setProfile(formatted);
       setCurrentUser(formatted.role || 'mom');
       AsyncStorage.setItem(cacheKey, JSON.stringify(formatted)).catch(() => {});
+
+      // 활성 유저 지표(DAU/MAU) 및 접속 플랫폼 비동기 기록
+      Promise.resolve(
+        supabase
+          .from('profiles')
+          .update({
+            last_active_at: new Date().toISOString(),
+            platform: Platform.OS,
+            app_version: '1.0.0',
+          })
+          .eq('id', currentSession.user.id)
+      ).catch(() => {});
     } catch (e) {
       console.log('Error fetching user profile from database', e);
     }
@@ -559,8 +601,19 @@ export default function App() {
       }
 
       if (data && data.length > 0) {
-        setPetmongCharacters(data);
-        persistPetmongCache(familyId, data);
+        const guard = petmongOptimisticGuardRef.current;
+        const isGuardFresh = guard && Date.now() - guard.updatedAt < 8000;
+        const merged = isGuardFresh
+          ? data.map((c: any) => {
+              if (c.id !== guard.id) return c;
+              const isGuardAhead =
+                guard.level > (c.level || 1) ||
+                (guard.level === (c.level || 1) && guard.exp > (c.exp || 0));
+              return isGuardAhead ? { ...c, level: guard.level, exp: guard.exp } : c;
+            })
+          : data;
+        setPetmongCharacters(merged);
+        persistPetmongCache(familyId, merged);
       } else if (familyId && (userId || session?.user?.id)) {
         const creatorId = userId || session?.user?.id;
         // DB에 가족 대표 반려몽이 없을 경우, 초기 기본 수호 반려몽('몽이') 자동 입주 & DB 저장
@@ -719,6 +772,34 @@ export default function App() {
       .eq('family_id', familyId)
       .single();
     if (data) setPoints(data.points);
+
+    // 포인트 원장(point_transactions) 이력 동기화
+    try {
+      const { data: txRows } = await supabase
+        .from('point_transactions')
+        .select('*')
+        .eq('family_id', familyId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (Array.isArray(txRows) && txRows.length > 0) {
+        const mappedHistory: PointHistoryItem[] = txRows.map((row: any) => {
+          const dt = row.created_at ? new Date(row.created_at) : new Date();
+          const dateStr = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')} ${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
+          return {
+            id: row.id,
+            type: row.tx_type === 'spend' ? 'spend' : 'earn',
+            amount: row.amount,
+            balance: row.balance_after,
+            title: row.title,
+            category: row.category || 'etc',
+            date: dateStr,
+            user: row.user_name || '가족',
+          };
+        });
+        setPointHistory(mappedHistory);
+      }
+    } catch (_) {}
   };
 
   const fetchRealMessages = async (familyId: string) => {
@@ -1063,6 +1144,22 @@ export default function App() {
       saveLocalState(newBalance, messages, events, smallTalk, shoppingItems, updated);
       return updated;
     });
+
+    // Supabase 포인트 원장 테이블(point_transactions)에 비동기 적재
+    if (isSupabaseReady && profile?.family_id) {
+      Promise.resolve(
+        supabase.from('point_transactions').insert({
+          family_id: profile.family_id,
+          user_id: profile.id || session?.user?.id || null,
+          user_name: actorName,
+          tx_type: type,
+          amount,
+          balance_after: newBalance,
+          title,
+          category,
+        })
+      ).catch(() => {});
+    }
   };
 
   // Feature Action Handlers
@@ -1202,8 +1299,19 @@ export default function App() {
 
     if (!targetChar) return;
 
-    let newExp = (targetChar.exp || 0) + expGain;
-    let newLevel = targetChar.level || 1;
+    const guard = petmongOptimisticGuardRef.current;
+    const useGuard =
+      guard &&
+      guard.id === targetChar.id &&
+      Date.now() - guard.updatedAt < 8000 &&
+      (guard.level > (targetChar.level || 1) ||
+        (guard.level === (targetChar.level || 1) && guard.exp > (targetChar.exp || 0)));
+
+    const baseExp = useGuard ? guard.exp : targetChar.exp || 0;
+    const baseLevel = useGuard ? guard.level : targetChar.level || 1;
+
+    let newExp = baseExp + expGain;
+    let newLevel = baseLevel;
     const oldLevel = newLevel;
     let leveledUp = false;
 
@@ -1215,6 +1323,13 @@ export default function App() {
       leveledUp = true;
       reqExp = getRequiredExpForLevel(newLevel);
     }
+
+    petmongOptimisticGuardRef.current = {
+      id: targetChar.id,
+      level: newLevel,
+      exp: newExp,
+      updatedAt: Date.now(),
+    };
 
     const updatedChar = { ...targetChar, exp: newExp, level: newLevel };
 
@@ -1996,6 +2111,29 @@ export default function App() {
     setUserModalVisible(false);
   };
 
+  const stableHandleToggleItem = useStableCallback(handleToggleItem);
+  const stableHandleAddItem = useStableCallback(handleAddItem);
+  const stableHandleDeleteItem = useStableCallback(handleDeleteItem);
+  const stableHandleClearCompletedItems = useStableCallback(handleClearCompletedItems);
+  const stableHandleToggleRepeat = useStableCallback(handleToggleRepeat);
+  const stableHandleSendOrderNotice = useStableCallback(handleSendOrderNotice);
+  const stableHandleDeductPoints = useStableCallback(handleDeductPoints);
+  const stableHandleAwardFamilyPoints = useStableCallback(handleAwardFamilyPoints);
+  const stableHandleSendMessage = useStableCallback(handleSendMessage);
+  const stableHandleMarkMessagesAsRead = useStableCallback(handleMarkMessagesAsRead);
+  const stableHandleCreateCustomRoom = useStableCallback(handleCreateCustomRoom);
+  const stableHandleAddEvent = useStableCallback(handleAddEvent);
+  const stableHandleDeleteEvent = useStableCallback(handleDeleteEvent);
+  const stableHandleUpdateEvent = useStableCallback(handleUpdateEvent);
+  const stableHandleAddResponse = useStableCallback(handleAddResponse);
+  const stableHandleAwardPetmongExp = useStableCallback(handleAwardPetmongExp);
+  const stableHandleUpdatePetVitals = useStableCallback(handleUpdatePetVitals);
+  const stableHandleUpdateMood = useStableCallback(handleUpdateMood);
+  const stableHandleUpdateProfile = useStableCallback(handleUpdateProfile);
+  const stableHandleLogout = useStableCallback(handleLogout);
+  const stableHandleDeleteAccount = useStableCallback(handleDeleteAccount);
+  const handleNavigateFamily = useCallback(() => setCurrentScreen('family'), []);
+
   const renderActiveScreen = () => {
     return (
       <View style={styles.flexOne}>
@@ -2018,10 +2156,15 @@ export default function App() {
               petmongCharacters={petmongCharacters}
               petVitals={petVitals}
               smallTalkState={smallTalk}
+              noticeBannerText={
+                systemConfig.notice_banner_enabled
+                  ? systemConfig.notice_banner_text
+                  : ''
+              }
               onNavigateScreen={setCurrentScreen}
-              onToggleQuest={handleToggleItem}
-              onAwardPoints={handleAwardFamilyPoints}
-              onAddResponse={handleAddResponse}
+              onToggleQuest={stableHandleToggleItem}
+              onAwardPoints={stableHandleAwardFamilyPoints}
+              onAddResponse={stableHandleAddResponse}
             />
           </View>
         )}
@@ -2038,17 +2181,17 @@ export default function App() {
               messages={messages}
               currentUser={currentUser}
               currentUserProfile={profile}
-              onSendMessage={handleSendMessage}
-              onMarkAsRead={handleMarkMessagesAsRead}
+              onSendMessage={stableHandleSendMessage}
+              onMarkAsRead={stableHandleMarkMessagesAsRead}
               memberCount={familyMembersList.length}
               familyMembers={familyMembersList}
               smallTalk={smallTalk}
               onNavigateScreen={setCurrentScreen}
               customRooms={customRooms}
-              onCreateCustomRoom={handleCreateCustomRoom}
-              onAddEvent={handleAddEvent}
-              onAddShoppingItem={handleAddItem}
-              onAddChore={handleAddItem}
+              onCreateCustomRoom={stableHandleCreateCustomRoom}
+              onAddEvent={stableHandleAddEvent}
+              onAddShoppingItem={stableHandleAddItem}
+              onAddChore={stableHandleAddItem}
               onUpdateMessageVote={handleUpdateMessageVote}
               onDeleteMessage={handleDeleteMessage}
             />
@@ -2064,18 +2207,18 @@ export default function App() {
           >
             <InteriorScreen
               points={points}
-              onDeductPoints={(cost) => handleDeductPoints(cost, '반려몽 외형 변경')}
-              onAwardPoints={handleAwardFamilyPoints}
+              onDeductPoints={stableHandleDeductPoints}
+              onAwardPoints={stableHandleAwardFamilyPoints}
               currentUser={currentUser}
               currentUserProfile={profile}
               familyId={profile?.family_id}
               petmongCharacters={petmongCharacters}
               setPetmongCharacters={setPetmongCharacters}
               isPetmongLoading={!isPetmongReady}
-              onAwardExp={handleAwardPetmongExp}
+              onAwardExp={stableHandleAwardPetmongExp}
               familyMembers={familyMembersList}
               petVitals={petVitals}
-              onUpdateVitals={handleUpdatePetVitals}
+              onUpdateVitals={stableHandleUpdatePetVitals}
               messages={messages}
               smallTalkState={smallTalk}
               onNavigateScreen={setCurrentScreen}
@@ -2096,19 +2239,19 @@ export default function App() {
               currentUserProfile={profile}
               points={points}
               pointHistory={pointHistory}
-              onAddResponse={handleAddResponse}
+              onAddResponse={stableHandleAddResponse}
               familyMembers={familyMembersList}
               messages={messages}
-              onSendOrderNotice={handleSendOrderNotice}
+              onSendOrderNotice={stableHandleSendOrderNotice}
               shoppingItems={shoppingItems}
-              onAddItem={handleAddItem}
-              onToggleItem={handleToggleItem}
-              onDeleteItem={handleDeleteItem}
-              onClearCompleted={handleClearCompletedItems}
-              onToggleRepeat={handleToggleRepeat}
+              onAddItem={stableHandleAddItem}
+              onToggleItem={stableHandleToggleItem}
+              onDeleteItem={stableHandleDeleteItem}
+              onClearCompleted={stableHandleClearCompletedItems}
+              onToggleRepeat={stableHandleToggleRepeat}
               petCharacter={petmongCharacters && petmongCharacters.length > 0 ? petmongCharacters[0] : null}
-              onAwardPetExp={handleAwardPetmongExp}
-              onAwardPoints={handleAwardFamilyPoints}
+              onAwardPetExp={stableHandleAwardPetmongExp}
+              onAwardPoints={stableHandleAwardFamilyPoints}
             />
           </View>
         )}
@@ -2125,9 +2268,9 @@ export default function App() {
               currentUser={currentUser}
               currentUserProfile={profile}
               familyMembers={familyMembersList}
-              onAddEvent={handleAddEvent}
-              onUpdateEvent={handleUpdateEvent}
-              onDeleteEvent={handleDeleteEvent}
+              onAddEvent={stableHandleAddEvent}
+              onUpdateEvent={stableHandleUpdateEvent}
+              onDeleteEvent={stableHandleDeleteEvent}
             />
           </View>
         )}
@@ -2145,9 +2288,9 @@ export default function App() {
               messages={messages}
               smallTalkState={smallTalk}
               currentUserProfile={profile}
-              onSendOrderNotice={handleSendOrderNotice}
+              onSendOrderNotice={stableHandleSendOrderNotice}
               points={points}
-              onDeductPoints={handleDeductPoints}
+              onDeductPoints={stableHandleDeductPoints}
               petmongCharacters={petmongCharacters}
             />
           </View>
@@ -2164,13 +2307,13 @@ export default function App() {
               familyCode={profile?.family_code}
               familyMembersList={familyMembersList}
               currentUserProfile={profile}
-              onUpdateMood={handleUpdateMood}
-              onUpdateProfile={handleUpdateProfile}
+              onUpdateMood={stableHandleUpdateMood}
+              onUpdateProfile={stableHandleUpdateProfile}
               onlineUsers={onlineUsers}
-              onLogout={handleLogout}
-              onDeleteAccount={handleDeleteAccount}
+              onLogout={stableHandleLogout}
+              onDeleteAccount={stableHandleDeleteAccount}
               onNavigateScreen={setCurrentScreen}
-              onAwardPoints={handleAwardFamilyPoints}
+              onAwardPoints={stableHandleAwardFamilyPoints}
             />
           </View>
         )}
@@ -2186,11 +2329,11 @@ export default function App() {
               shoppingItems={shoppingItems}
               currentUserProfile={profile}
               familyMembers={familyMembersList}
-              onAddItem={handleAddItem}
-              onToggleItem={handleToggleItem}
-              onDeleteItem={handleDeleteItem}
-              onClearCompleted={handleClearCompletedItems}
-              onToggleRepeat={handleToggleRepeat}
+              onAddItem={stableHandleAddItem}
+              onToggleItem={stableHandleToggleItem}
+              onDeleteItem={stableHandleDeleteItem}
+              onClearCompleted={stableHandleClearCompletedItems}
+              onToggleRepeat={stableHandleToggleRepeat}
             />
           </View>
         )}
@@ -2221,6 +2364,25 @@ export default function App() {
     );
   }
 
+  // 원격 긴급 점검 모드 제어 (관리자 계정은 점검 중에도 통과)
+  if (systemConfig.maintenance_mode && profile.role !== 'admin') {
+    return (
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.container} edges={['top', 'bottom', 'left', 'right']}>
+          <View style={[styles.loadingContainer, { paddingHorizontal: 28 }]}>
+            <Text style={{ fontSize: 18, fontWeight: '800', color: '#1C1917', marginBottom: 10 }}>
+              시스템 점검 안내 🛠️
+            </Text>
+            <Text style={{ fontSize: 14, color: '#78716C', textAlign: 'center', lineHeight: 21 }}>
+              {systemConfig.maintenance_message ||
+                '현재 서비스 안정화를 위한 시스템 점검 중입니다. 잠시 후 다시 이용해 주세요.'}
+            </Text>
+          </View>
+        </SafeAreaView>
+      </SafeAreaProvider>
+    );
+  }
+
   const activeMember = profile || { name: currentUser, avatar: '👦', color: '#8E8E93' };
 
   return (
@@ -2234,7 +2396,7 @@ export default function App() {
           isSupabaseReady={isSupabaseReady}
           activeMember={activeMember}
           profileName={profile.name}
-          onPressProfile={() => setCurrentScreen('family')}
+          onPressProfile={handleNavigateFamily}
         />
 
         {/* 본문 영역만 KeyboardAvoidingView로 감싸고 하단 탭바(Footer)는 외부로 분리 */}
@@ -2244,7 +2406,9 @@ export default function App() {
           style={styles.flexOne}
         >
           <View style={styles.screenArea}>
-            {renderActiveScreen()}
+            <AppErrorBoundary onReset={() => setCurrentScreen('home')}>
+              {renderActiveScreen()}
+            </AppErrorBoundary>
           </View>
         </KeyboardAvoidingView>
 

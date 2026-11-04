@@ -8,6 +8,7 @@
 import { Image, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
+import { reportError } from '../utils/errorHandler';
 import type {
   PhotobookSyncPayload,
   PhotobookOrderRecord,
@@ -261,9 +262,19 @@ export async function saveFamilyPhotobookToDB(params: {
         '⚠️ family_photobooks upsert 실패 (RLS 권한 또는 테이블 설정을 확인하세요):',
         upsertErr.message
       );
+      reportError(upsertErr, {
+        severity: 'error',
+        source: 'photobook_sync',
+        metadata: { familyId, volumeId },
+      });
     }
   } catch (dbErr) {
     console.warn('family_photobooks upsert sync note:', dbErr);
+    reportError(dbErr, {
+      severity: 'error',
+      source: 'photobook_sync',
+      metadata: { familyId, volumeId },
+    });
   }
 }
 
@@ -358,6 +369,15 @@ export async function createPhotobookOrderInDB(
 
     if (orderError) {
       console.warn('photobook_orders insert error:', orderError);
+      reportError(orderError, {
+        severity: 'error',
+        source: 'photobook_order',
+        metadata: {
+          familyId: orderRecord.family_id,
+          volumeId: orderRecord.volume_id,
+          bookTitle: orderRecord.book_title,
+        },
+      });
       return null;
     }
     console.log(
@@ -384,6 +404,14 @@ export async function createPhotobookOrderInDB(
     return insertedOrder;
   } catch (err) {
     console.warn('Exception during photobook order insert:', err);
+    reportError(err, {
+      severity: 'error',
+      source: 'photobook_order',
+      metadata: {
+        familyId: orderRecord.family_id,
+        volumeId: orderRecord.volume_id,
+      },
+    });
     return null;
   }
 }

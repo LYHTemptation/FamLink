@@ -503,3 +503,313 @@ END;
 $$;
 GRANT EXECUTE ON FUNCTION public.admin_delete_user(UUID) TO authenticated;
 
+-- ==========================================
+-- 23. 전역 클라이언트·비즈니스 에러 로그 관제 테이블 (app_error_logs)
+-- ==========================================
+CREATE TABLE IF NOT EXISTS public.app_error_logs (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  family_id UUID REFERENCES public.families(id) ON DELETE SET NULL,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  user_name TEXT,
+  severity TEXT DEFAULT 'error' NOT NULL, -- 'fatal' | 'error' | 'warn'
+  source TEXT DEFAULT 'app' NOT NULL,     -- 'ui_boundary' | 'show_error' | 'gemini_api' | 'photobook_order' 등
+  screen TEXT,
+  error_code TEXT,
+  error_message TEXT NOT NULL,
+  stack_trace TEXT,
+  platform TEXT,
+  metadata JSONB DEFAULT '{}'::jsonb,
+  is_resolved BOOLEAN DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_app_error_logs_created ON public.app_error_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_app_error_logs_family ON public.app_error_logs(family_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_app_error_logs_resolved ON public.app_error_logs(is_resolved, created_at DESC);
+
+ALTER TABLE public.app_error_logs ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "app_error_logs_insert_any" ON public.app_error_logs;
+CREATE POLICY "app_error_logs_insert_any" ON public.app_error_logs
+  FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "app_error_logs_select_admin_or_family" ON public.app_error_logs;
+CREATE POLICY "app_error_logs_select_admin_or_family" ON public.app_error_logs
+  FOR SELECT USING (
+    public.is_admin()
+    OR family_id = public.get_my_family_id()
+    OR user_id = auth.uid()
+  );
+
+DROP POLICY IF EXISTS "app_error_logs_update_admin_or_family" ON public.app_error_logs;
+CREATE POLICY "app_error_logs_update_admin_or_family" ON public.app_error_logs
+  FOR UPDATE USING (
+    public.is_admin()
+    OR family_id = public.get_my_family_id()
+  );
+
+DROP POLICY IF EXISTS "app_error_logs_delete_admin_or_family" ON public.app_error_logs;
+CREATE POLICY "app_error_logs_delete_admin_or_family" ON public.app_error_logs
+  FOR DELETE USING (
+    public.is_admin()
+    OR family_id = public.get_my_family_id()
+  );
+
+-- ==========================================
+-- 24. 가족 포인트 원장 / 입출금 거래 내역 테이블 (point_transactions)
+-- ==========================================
+CREATE TABLE IF NOT EXISTS public.point_transactions (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  family_id UUID REFERENCES public.families(id) ON DELETE CASCADE NOT NULL,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  user_name TEXT,
+  tx_type TEXT DEFAULT 'earn' NOT NULL, -- 'earn' | 'spend' | 'refund' | 'admin'
+  amount INTEGER NOT NULL,
+  balance_after INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  category TEXT DEFAULT 'etc' NOT NULL, -- 'quest' | 'smalltalk' | 'petmong' | 'photobook' | 'feedback' | 'admin' | 'etc'
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_point_transactions_family_created ON public.point_transactions(family_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_point_transactions_type_created ON public.point_transactions(tx_type, created_at DESC);
+
+ALTER TABLE public.point_transactions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "point_transactions_family_or_admin" ON public.point_transactions;
+CREATE POLICY "point_transactions_family_or_admin" ON public.point_transactions
+  FOR ALL
+  USING (family_id = public.get_my_family_id() OR public.is_admin())
+  WITH CHECK (family_id = public.get_my_family_id() OR public.is_admin());
+
+DO $$
+BEGIN
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.point_transactions; EXCEPTION WHEN OTHERS THEN NULL; END;
+END $$;
+
+-- ==========================================
+-- 25. 고객 피드백 및 1:1 개선 의견 테이블 (user_feedbacks)
+-- ==========================================
+CREATE TABLE IF NOT EXISTS public.user_feedbacks (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  family_id UUID REFERENCES public.families(id) ON DELETE SET NULL,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  user_name TEXT,
+  category_chip TEXT,
+  content TEXT NOT NULL,
+  reward_claimed BOOLEAN DEFAULT false NOT NULL,
+  points_awarded INTEGER DEFAULT 0 NOT NULL,
+  platform TEXT,
+  admin_memo TEXT,
+  is_resolved BOOLEAN DEFAULT false NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_feedbacks_created ON public.user_feedbacks(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_feedbacks_family ON public.user_feedbacks(family_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_feedbacks_resolved ON public.user_feedbacks(is_resolved, created_at DESC);
+
+ALTER TABLE public.user_feedbacks ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "user_feedbacks_insert_policy" ON public.user_feedbacks;
+CREATE POLICY "user_feedbacks_insert_policy" ON public.user_feedbacks
+  FOR INSERT WITH CHECK (auth.uid() IS NOT NULL OR public.is_admin());
+
+DROP POLICY IF EXISTS "user_feedbacks_select_policy" ON public.user_feedbacks;
+CREATE POLICY "user_feedbacks_select_policy" ON public.user_feedbacks
+  FOR SELECT USING (
+    public.is_admin()
+    OR family_id = public.get_my_family_id()
+    OR user_id = auth.uid()
+  );
+
+DROP POLICY IF EXISTS "user_feedbacks_admin_modify" ON public.user_feedbacks;
+CREATE POLICY "user_feedbacks_admin_modify" ON public.user_feedbacks
+  FOR UPDATE USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
+DROP POLICY IF EXISTS "user_feedbacks_admin_delete" ON public.user_feedbacks;
+CREATE POLICY "user_feedbacks_admin_delete" ON public.user_feedbacks
+  FOR DELETE USING (public.is_admin());
+
+-- ==========================================
+-- 26. Gemini AI 호출량·비용 감사 로그 테이블 (ai_usage_logs)
+-- ==========================================
+CREATE TABLE IF NOT EXISTS public.ai_usage_logs (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  family_id UUID REFERENCES public.families(id) ON DELETE SET NULL,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  user_name TEXT,
+  feature_type TEXT DEFAULT 'general' NOT NULL, -- 'text_generation' | 'vision_analysis' | 'image_generation' | 'petmong_mascot' | 'photobook_essay'
+  model TEXT NOT NULL,
+  status TEXT DEFAULT 'success' NOT NULL,       -- 'success' | 'fallback' | 'error' | 'rate_limited'
+  latency_ms INTEGER DEFAULT 0,
+  error_message TEXT,
+  metadata JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_created ON public.ai_usage_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_family_created ON public.ai_usage_logs(family_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_usage_logs_model_status ON public.ai_usage_logs(model, status, created_at DESC);
+
+ALTER TABLE public.ai_usage_logs ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "ai_usage_logs_insert_any" ON public.ai_usage_logs;
+CREATE POLICY "ai_usage_logs_insert_any" ON public.ai_usage_logs
+  FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "ai_usage_logs_select_admin_or_family" ON public.ai_usage_logs;
+CREATE POLICY "ai_usage_logs_select_admin_or_family" ON public.ai_usage_logs
+  FOR SELECT USING (
+    public.is_admin()
+    OR family_id = public.get_my_family_id()
+  );
+
+DROP POLICY IF EXISTS "ai_usage_logs_admin_delete" ON public.ai_usage_logs;
+CREATE POLICY "ai_usage_logs_admin_delete" ON public.ai_usage_logs
+  FOR DELETE USING (public.is_admin());
+
+-- ==========================================
+-- 27. 원격 공지사항 · 긴급 점검 · 강제 업데이트 · AI 한도 제어 테이블 (app_system_config)
+-- ==========================================
+CREATE TABLE IF NOT EXISTS public.app_system_config (
+  id TEXT PRIMARY KEY DEFAULT 'global',
+  maintenance_mode BOOLEAN DEFAULT false NOT NULL,
+  maintenance_message TEXT DEFAULT '현재 서비스 안정화를 위한 시스템 점검 중입니다. 잠시 후 다시 이용해 주세요.' NOT NULL,
+  min_required_version TEXT DEFAULT '1.0.0' NOT NULL,
+  notice_banner_enabled BOOLEAN DEFAULT false NOT NULL,
+  notice_banner_text TEXT DEFAULT '' NOT NULL,
+  ai_generation_enabled BOOLEAN DEFAULT true NOT NULL,
+  daily_ai_image_limit INTEGER DEFAULT 15 NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+INSERT INTO public.app_system_config (
+  id,
+  maintenance_mode,
+  maintenance_message,
+  min_required_version,
+  notice_banner_enabled,
+  notice_banner_text,
+  ai_generation_enabled,
+  daily_ai_image_limit
+)
+VALUES (
+  'global',
+  false,
+  '현재 서비스 안정화를 위한 시스템 점검 중입니다. 잠시 후 다시 이용해 주세요.',
+  '1.0.0',
+  false,
+  '',
+  true,
+  15
+)
+ON CONFLICT (id) DO NOTHING;
+
+ALTER TABLE public.app_system_config ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "app_system_config_select_all" ON public.app_system_config;
+CREATE POLICY "app_system_config_select_all" ON public.app_system_config
+  FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "app_system_config_admin_write" ON public.app_system_config;
+CREATE POLICY "app_system_config_admin_write" ON public.app_system_config
+  FOR ALL
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
+-- ==========================================
+-- 28. 활성 유저 지표(DAU/MAU) 및 접속 환경 추적 컬럼 (profiles 확장)
+-- ==========================================
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now());
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS platform TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS app_version TEXT DEFAULT '1.0.0';
+
+CREATE INDEX IF NOT EXISTS idx_profiles_last_active_at ON public.profiles(last_active_at DESC);
+
+-- ==========================================
+-- 29. 포토북 실물 주문 CS · 발송 · 취소/환불 관리 컬럼 및 RPC (photobook_orders 확장)
+-- ==========================================
+ALTER TABLE public.photobook_orders ADD COLUMN IF NOT EXISTS admin_memo TEXT;
+ALTER TABLE public.photobook_orders ADD COLUMN IF NOT EXISTS cancel_reason TEXT;
+ALTER TABLE public.photobook_orders ADD COLUMN IF NOT EXISTS shipped_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE public.photobook_orders ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE public.photobook_orders ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE public.photobook_orders ADD COLUMN IF NOT EXISTS refunded_points INTEGER DEFAULT 0 NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_photobook_orders_status ON public.photobook_orders(status, created_at DESC);
+
+-- 관리자 전용: 포토북 주문 취소 및 차감 포인트 자동 환급 RPC
+CREATE OR REPLACE FUNCTION public.admin_cancel_photobook_order(
+  target_order_id UUID,
+  reason TEXT DEFAULT '관리자 주문 취소'
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_order RECORD;
+  v_new_balance INTEGER;
+BEGIN
+  IF NOT public.is_admin() THEN
+    RAISE EXCEPTION '관리자 권한이 필요합니다.';
+  END IF;
+
+  SELECT * INTO v_order
+  FROM public.photobook_orders
+  WHERE id = target_order_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION '주문 내역을 찾을 수 없습니다.';
+  END IF;
+
+  IF v_order.status = 'cancelled' THEN
+    RETURN;
+  END IF;
+
+  -- 차감되었던 포인트가 있고 아직 환불되지 않았다면 가족 포인트 원복 및 원장 기록
+  IF COALESCE(v_order.points_deducted, 0) > 0 AND COALESCE(v_order.refunded_points, 0) = 0 AND v_order.family_id IS NOT NULL THEN
+    UPDATE public.family_points
+    SET points = points + v_order.points_deducted,
+        updated_at = timezone('utc'::text, now())
+    WHERE family_id = v_order.family_id
+    RETURNING points INTO v_new_balance;
+
+    INSERT INTO public.point_transactions (
+      family_id,
+      user_id,
+      user_name,
+      tx_type,
+      amount,
+      balance_after,
+      title,
+      category
+    ) VALUES (
+      v_order.family_id,
+      v_order.profile_id,
+      '관리자 환불',
+      'refund',
+      v_order.points_deducted,
+      COALESCE(v_new_balance, v_order.points_deducted),
+      '포토북 주문 취소 포인트 환급 (' || v_order.order_number || ')',
+      'photobook'
+    );
+  END IF;
+
+  UPDATE public.photobook_orders
+  SET status = 'cancelled',
+      cancel_reason = reason,
+      cancelled_at = timezone('utc'::text, now()),
+      refunded_points = COALESCE(v_order.points_deducted, 0),
+      updated_at = timezone('utc'::text, now())
+  WHERE id = target_order_id;
+END;
+$$;
+GRANT EXECUTE ON FUNCTION public.admin_cancel_photobook_order(UUID, TEXT) TO authenticated;
+
+
+

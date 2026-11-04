@@ -1,39 +1,51 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  StyleSheet,
   Text,
   View,
   ScrollView,
   TouchableOpacity,
   Alert,
-  Modal,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
-  Image,
-  Linking,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Clipboard from 'expo-clipboard';
-import * as ImagePicker from 'expo-image-picker';
-import { Users, Heart, Award, ShieldCheck, Smile, Edit3, LogOut, Sparkles, Check, Camera, Trash2, FileText, Gift, MessageSquare, ExternalLink } from 'lucide-react-native';
-import { MoodIcon, MOOD_ITEMS, IconCopy, IconShare, IconClose, IconChevronRight } from './icons';
-import { colors, typography, commonStyles } from '../theme';
+import {
+  Users,
+  Heart,
+  Award,
+  ShieldCheck,
+  Edit3,
+  LogOut,
+  Sparkles,
+  Trash2,
+  FileText,
+  Gift,
+  MessageSquare,
+} from 'lucide-react-native';
+import {
+  MoodIcon,
+  IconCopy,
+  IconShare,
+  IconChevronRight,
+} from './icons';
 import { supabase, isSupabaseReady } from '../lib/supabase';
 import UserAvatar from './UserAvatar';
+import { styles } from './family/FamilyStyles';
+import {
+  FamilyPolicyModal,
+  FamilyProfileEditModal,
+  FamilyFeedbackModal,
+} from './family/FamilyModals';
+import type { FamilyMember, UserProfile } from '../types/domain';
 
-const EDIT_AVATAR_PRESETS = [
-  '👩‍🦰', '👨‍💼', '👦', '👧', '👵', '👴', '🧑', '👱', '👶', '🐱', '🐶', '🐰', '🐻', '🐼', '🦊', '🐣'
-];
-
-const FAMILY_MEMBERS_STATIC = {
+const FAMILY_MEMBERS_STATIC: Record<
+  string,
+  { name: string; avatar: string; color: string }
+> = {
   mom: { name: '엄마', avatar: '👩‍🦰', color: '#FF6B47' },
   dad: { name: '아빠', avatar: '👨‍💼', color: '#4A90E2' },
   son: { name: '아들', avatar: '👦', color: '#2ECC71' },
   daughter: { name: '딸', avatar: '👧', color: '#F39C12' },
 };
-
-import { FamilyMember, UserProfile } from '../types/domain';
 
 export interface FamilyScreenProps {
   familyCode?: string | null;
@@ -45,17 +57,13 @@ export interface FamilyScreenProps {
   onLogout?: () => void;
   onDeleteAccount?: () => void;
   onNavigateScreen?: (screen: string) => void;
-  onAwardPoints?: (amount: number, reason?: string) => Promise<boolean> | boolean | void;
+  onAwardPoints?: (
+    amount: number,
+    reason?: string
+  ) => Promise<boolean> | boolean | void;
 }
 
-const FEEDBACK_QUICK_CHIPS = [
-  '가족과 대화가 늘었어요 ❤️',
-  '반려몽 키우기가 귀여워요 🐾',
-  '스몰톡 질문이 따뜻해요 💬',
-  '포토북 제작이 기대돼요 📖',
-];
-
-export default function FamilyScreen({
+function FamilyScreen({
   familyCode,
   familyMembersList = [],
   currentUserProfile,
@@ -69,14 +77,13 @@ export default function FamilyScreen({
 }: FamilyScreenProps) {
   const [modalVisible, setModalVisible] = useState(false);
   const [policyModalVisible, setPolicyModalVisible] = useState(false);
-  const [activePolicyTab, setActivePolicyTab] = useState('terms'); // 'terms' | 'privacy'
+  const [activePolicyTab, setActivePolicyTab] = useState('terms');
   const [feedbackModalVisible, setFeedbackModalVisible] = useState(false);
-  const [feedbackText, setFeedbackText] = useState('');
-  const [selectedFeedbackChip, setSelectedFeedbackChip] = useState<string>(FEEDBACK_QUICK_CHIPS[0]);
-  const [hasClaimedFeedbackReward, setHasClaimedFeedbackReward] = useState(false);
-  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
+  const [hasClaimedFeedbackReward, setHasClaimedFeedbackReward] =
+    useState(false);
 
-  const familyKey = currentUserProfile?.family_id || familyCode || 'default-family';
+  const familyKey =
+    currentUserProfile?.family_id || familyCode || 'default-family';
   const feedbackStorageKey = `@famlink_feedback_reward_1000p_${familyKey}`;
 
   useEffect(() => {
@@ -91,10 +98,10 @@ export default function FamilyScreen({
 
     if (isSupabaseReady && currentUserProfile?.family_id) {
       supabase
-        .from('petmong_activities')
+        .from('user_feedbacks')
         .select('id')
         .eq('family_id', currentUserProfile.family_id)
-        .eq('action_type', 'FEEDBACK_REWARD_1000P')
+        .eq('reward_claimed', true)
         .limit(1)
         .then(({ data }) => {
           if (isMounted && Array.isArray(data) && data.length > 0) {
@@ -109,84 +116,15 @@ export default function FamilyScreen({
     };
   }, [feedbackStorageKey, currentUserProfile?.family_id]);
 
-  const handleSubmitFeedback = async (openStoreLink: boolean = false) => {
-    const finalNote = [selectedFeedbackChip, feedbackText.trim()].filter(Boolean).join(' | ');
-    if (!finalNote) {
-      Alert.alert('알림', '응원 한마디나 피드백 항목을 선택해 주세요.');
-      return;
+  // O(1) 온라인 접속자 Set
+  const onlineUserSet = useMemo<Set<string>>(() => {
+    if (!Array.isArray(onlineUsers) || onlineUsers.length === 0) {
+      return new Set<string>();
     }
+    return new Set<string>(onlineUsers);
+  }, [onlineUsers]);
 
-    setIsSubmittingFeedback(true);
-    try {
-      // 스토어 이동 선택 시 플랫폼별 스토어 URL 연결 시도
-      if (openStoreLink) {
-        const storeUrl =
-          Platform.OS === 'android'
-            ? 'market://details?id=com.yon_know.familymessenger'
-            : 'https://apps.apple.com/kr/search?term=FamLink';
-        Linking.openURL(storeUrl).catch(() => {});
-      }
-
-      if (!hasClaimedFeedbackReward) {
-        await AsyncStorage.setItem(feedbackStorageKey, 'true');
-        setHasClaimedFeedbackReward(true);
-
-        if (isSupabaseReady && currentUserProfile?.family_id) {
-          await supabase
-            .from('petmong_activities')
-            .insert({
-              family_id: currentUserProfile.family_id,
-              user_id: currentUserProfile.id,
-              action_type: 'FEEDBACK_REWARD_1000P',
-              notes: `[피드백] ${finalNote}`,
-              exp_gained: 0,
-              points_awarded: 1000,
-            })
-            .then(() => {}, () => {});
-        }
-
-        if (onAwardPoints) {
-          await onAwardPoints(1000, '소중한 피드백 보내기 (+1,000P)');
-        }
-
-        setFeedbackModalVisible(false);
-        setFeedbackText('');
-        Alert.alert(
-          '소중한 피드백 감사합니다! 🎁',
-          '보내주신 따뜻한 의견을 바탕으로 더 좋은 FamLink를 만들어갈게요.\n\n우리 가족방에 감사 선물로 +1,000 포인트가 즉시 적립되었습니다!'
-        );
-      } else {
-        if (isSupabaseReady && currentUserProfile?.family_id) {
-          await supabase
-            .from('petmong_activities')
-            .insert({
-              family_id: currentUserProfile.family_id,
-              user_id: currentUserProfile.id,
-              action_type: 'USER_FEEDBACK_NOTE',
-              notes: `[추가피드백] ${finalNote}`,
-              exp_gained: 0,
-              points_awarded: 0,
-            })
-            .then(() => {}, () => {});
-        }
-        setFeedbackModalVisible(false);
-        setFeedbackText('');
-        Alert.alert(
-          '피드백 전달 완료 💌',
-          '소중한 의견이 FamLink 팀에 잘 전달되었습니다! (1,000P 첫 피드백 보상은 이미 우리 가족방에 지급 완료되었습니다 ✨)'
-        );
-      }
-    } finally {
-      setIsSubmittingFeedback(false);
-    }
-  };
-  const [editName, setEditName] = useState(currentUserProfile?.name || '');
-  const [editRole, setEditRole] = useState(currentUserProfile?.role || '');
-  const [selectedAvatar, setSelectedAvatar] = useState(currentUserProfile?.avatar || '👦');
-  const [selectedMood, setSelectedMood] = useState(currentUserProfile?.mood || '😊');
-  const [statusText, setStatusText] = useState(currentUserProfile?.status_text || '');
-
-  const handleDeleteAccountClick = () => {
+  const handleDeleteAccountClick = useCallback(() => {
     Alert.alert(
       '회원 탈퇴 ⚠️',
       '정말로 FamLink를 탈퇴하시겠습니까?\n\n탈퇴 시 내 프로필, 작성한 대화 및 모든 가족 데이터가 영구히 삭제되며 복구할 수 없습니다.',
@@ -218,81 +156,48 @@ export default function FamilyScreen({
         },
       ]
     );
-  };
+  }, [onDeleteAccount, onLogout]);
 
-  const openEditModal = () => {
-    setEditName(currentUserProfile?.name || '');
-    setEditRole(currentUserProfile?.role || '');
-    setSelectedAvatar(currentUserProfile?.avatar || '👦');
-    setSelectedMood(currentUserProfile?.mood || '😊');
-    setStatusText(currentUserProfile?.status_text || '');
+  const openEditModal = useCallback(() => {
     setModalVisible(true);
-  };
-
-  const handlePickProfileImage = async () => {
-    try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (permissionResult.granted === false) {
-        Alert.alert('권한 필요', '프로필 사진 설정을 위해 사진첩 접근 권한이 필요합니다.');
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.5,
-        base64: true,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        const imageUri = asset.base64
-          ? `data:image/jpeg;base64,${asset.base64}`
-          : asset.uri;
-        setSelectedAvatar(imageUri);
-      }
-    } catch (e) {
-      console.log('Error picking profile image:', e);
-      Alert.alert('오류', '사진을 불러오는 중 문제가 발생했습니다.');
-    }
-  };
+  }, []);
 
   const isFamilyFull = (familyMembersList?.length || 0) >= 10;
 
-  const handleCopyCode = async () => {
+  const handleCopyCode = useCallback(async () => {
     if (isFamilyFull) {
-      Alert.alert('정원 마감 안내', '우리 가족의 최대 정원(10명)이 모두 찼습니다. 추가 가입이 제한됩니다.');
+      Alert.alert(
+        '정원 마감 안내',
+        '우리 가족의 최대 정원(10명)이 모두 찼습니다. 추가 가입이 제한됩니다.'
+      );
       return;
     }
     await Clipboard.setStringAsync(familyCode || '');
-    Alert.alert('복사 완료', '가족 코드가 클립보드에 복사되었습니다. 다른 가족에게 보내 가입하도록 하세요!');
-  };
+    Alert.alert(
+      '복사 완료',
+      '가족 코드가 클립보드에 복사되었습니다. 다른 가족에게 보내 가입하도록 하세요!'
+    );
+  }, [isFamilyFull, familyCode]);
 
-  const handleCopyInviteMessage = async () => {
+  const handleCopyInviteMessage = useCallback(async () => {
     if (isFamilyFull) {
-      Alert.alert('정원 마감 안내', '우리 가족의 최대 정원(10명)이 모두 찼습니다. 추가 가입이 제한됩니다.');
+      Alert.alert(
+        '정원 마감 안내',
+        '우리 가족의 최대 정원(10명)이 모두 찼습니다. 추가 가입이 제한됩니다.'
+      );
       return;
     }
     const inviteMsg = `[FamLink] 우리 가족만의 소통 공간에 당신을 초대합니다! ❤️\n\n앱을 설치하고 가입하실 때 아래 가족 코드를 입력하시면 같이 채팅과 일정을 공유할 수 있어요.\n\n가족 코드: ${familyCode}`;
     await Clipboard.setStringAsync(inviteMsg);
-    Alert.alert('초대문구 복사', '초대 메시지가 복사되었습니다. 카카오톡이나 메시지로 가족에게 전송해 보세요!');
-  };
+    Alert.alert(
+      '초대문구 복사',
+      '초대 메시지가 복사되었습니다. 카카오톡이나 메시지로 가족에게 전송해 보세요!'
+    );
+  }, [isFamilyFull, familyCode]);
 
-  const handleSaveProfile = () => {
-    if (onUpdateProfile) {
-      onUpdateProfile({
-        name: editName.trim() || currentUserProfile?.name,
-        role: editRole.trim() || currentUserProfile?.role,
-        avatar: selectedAvatar,
-        mood: selectedMood,
-        status_text: statusText.trim(),
-      });
-    } else if (onUpdateMood) {
-      onUpdateMood(selectedMood, statusText.trim());
-    }
-    setModalVisible(false);
-  };
+  const handleClaimedFeedbackReward = useCallback(() => {
+    setHasClaimedFeedbackReward(true);
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -307,7 +212,9 @@ export default function FamilyScreen({
               </View>
             )}
           </View>
-          <Text style={styles.subHeaderSub}>가족 멤버 {familyMembersList.length} / 10명</Text>
+          <Text style={styles.subHeaderSub}>
+            가족 멤버 {familyMembersList.length} / 10명
+          </Text>
         </View>
 
         <View style={styles.subHeaderRightGroup}>
@@ -323,1423 +230,404 @@ export default function FamilyScreen({
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-      {/* Family Code Card */}
-      <View style={styles.codeCard}>
-        <View style={styles.cardHeader}>
-          <Users size={20} color="#FF6B47" style={{ marginRight: 6 }} />
-          <Text style={styles.cardHeaderTitle}>우리 가족 연결 코드</Text>
-        </View>
-        <Text style={styles.codeText}>{familyCode}</Text>
-        <Text style={styles.codeDesc}>
-          {isFamilyFull
-            ? '⚠️ 현재 최대 정원(10명)이 모두 찼습니다. 새 멤버 가입이 제한됩니다.'
-            : '다른 가족들이 가입 시 이 코드를 입력하면 이 방으로 자동 연결됩니다. (최대 10명)'}
-        </Text>
-
-        <View style={styles.actionRow}>
-          <TouchableOpacity style={styles.actionButton} onPress={handleCopyCode}>
-            <IconCopy size={14} color="#FF6B47" style={{ marginRight: 4 }} />
-            <Text style={styles.actionButtonText}>코드 복사</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.actionButton} onPress={handleCopyInviteMessage}>
-            <IconShare size={14} color="#FF6B47" style={{ marginRight: 4 }} />
-            <Text style={styles.actionButtonText}>초대 링크 복사</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Family Mission Promotion Banner */}
-      <TouchableOpacity
-        style={styles.inviteGuideCard}
-        onPress={() => onNavigateScreen && onNavigateScreen('smalltalk')}
-        activeOpacity={0.85}
-      >
-        <View style={styles.guideIconWrap}>
-          <Award size={22} color="#FF6B47" />
-        </View>
-
-        <View style={styles.guideTextCol}>
-          <View style={styles.guideTitleRow}>
-            <Text style={styles.guideTitle}>가족 단합 미션 시작하기!</Text>
-            <View style={styles.guideTag}>
-              <Sparkles size={10} color="#FF6B47" style={{ marginRight: 2 }} />
-              <Text style={styles.guideTagText}>포인트 적립</Text>
-            </View>
+        {/* Family Code Card */}
+        <View style={styles.codeCard}>
+          <View style={styles.cardHeader}>
+            <Users size={20} color="#FF6B47" style={{ marginRight: 6 }} />
+            <Text style={styles.cardHeaderTitle}>우리 가족 연결 코드</Text>
           </View>
-          <Text style={styles.guideDesc}>
-            가족이 함께 스몰톡·장보기 미션을 수행할수록 보너스 포인트가 쑥쑥 쌓여요.
+          <Text style={styles.codeText}>{familyCode}</Text>
+          <Text style={styles.codeDesc}>
+            {isFamilyFull
+              ? '⚠️ 현재 최대 정원(10명)이 모두 찼습니다. 새 멤버 가입이 제한됩니다.'
+              : '다른 가족들이 가입 시 이 코드를 입력하면 이 방으로 자동 연결됩니다. (최대 10명)'}
           </Text>
-        </View>
 
-        <View style={styles.guideActionBtn}>
-          <IconChevronRight size={16} color="#FF6B47" />
-        </View>
-      </TouchableOpacity>
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={handleCopyCode}
+            >
+              <IconCopy size={14} color="#FF6B47" style={{ marginRight: 4 }} />
+              <Text style={styles.actionButtonText}>코드 복사</Text>
+            </TouchableOpacity>
 
-      {/* 소중한 피드백 보내기 (+1,000P 1회 지급 이벤트 배너) */}
-      <TouchableOpacity
-        style={styles.inviteGuideCard}
-        onPress={() => setFeedbackModalVisible(true)}
-        activeOpacity={0.85}
-      >
-        <View style={[styles.guideIconWrap, { backgroundColor: '#FFF5F2' }]}>
-          <Gift size={22} color="#FF6B47" />
-        </View>
-
-        <View style={styles.guideTextCol}>
-          <View style={styles.guideTitleRow}>
-            <Text style={styles.guideTitle}>소중한 피드백 보내기</Text>
-            <View style={styles.guideTag}>
-              <Sparkles size={10} color="#FF6B47" style={{ marginRight: 2 }} />
-              <Text style={styles.guideTagText}>
-                {hasClaimedFeedbackReward ? '참여 완료 ✓' : '+1,000P 선물'}
-              </Text>
-            </View>
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={handleCopyInviteMessage}
+            >
+              <IconShare size={14} color="#FF6B47" style={{ marginRight: 4 }} />
+              <Text style={styles.actionButtonText}>초대 링크 복사</Text>
+            </TouchableOpacity>
           </View>
-          <Text style={styles.guideDesc}>
-            {hasClaimedFeedbackReward
-              ? '우리 가족의 따뜻한 응원으로 +1,000P 선물이 적립되었습니다! 언제든 의견을 더 남겨주세요.'
-              : 'FamLink 사용 소감이나 응원 메시지를 보내주시면 우리 가족방에 1,000 포인트를 즉시 선물해 드려요.'}
-          </Text>
         </View>
 
-        <View style={styles.guideActionBtn}>
-          <IconChevronRight size={16} color="#FF6B47" />
-        </View>
-      </TouchableOpacity>
+        {/* Family Mission Promotion Banner */}
+        <TouchableOpacity
+          style={styles.inviteGuideCard}
+          onPress={() => onNavigateScreen && onNavigateScreen('smalltalk')}
+          activeOpacity={0.85}
+        >
+          <View style={styles.guideIconWrap}>
+            <Award size={22} color="#FF6B47" />
+          </View>
 
-      {/* Member List Section */}
-      <View style={styles.sectionCard}>
-        <View style={styles.sectionHeader}>
-          <Heart size={18} color="#FF6B47" fill="#FF6B47" style={{ marginRight: 6 }} />
-          <Text style={styles.sectionTitle}>
-            가입된 가족 멤버 ({familyMembersList.length} / 10명)
-          </Text>
-        </View>
-
-        {familyMembersList.map((member: FamilyMember | any, index: number) => {
-          const isDbProfile = member && typeof member === 'object' && 'name' in member;
-          const roleKey = isDbProfile ? (member.role || 'son') : member;
-          const staticInfo = (FAMILY_MEMBERS_STATIC as Record<string, { name: string; avatar: string; color: string }>)[roleKey] || { name: '가족', avatar: '👦', color: '#8E8E93' };
-          
-          const memberName = isDbProfile ? member.name : staticInfo.name;
-          const memberAvatar = isDbProfile ? member.avatar : staticInfo.avatar;
-          const memberColor = isDbProfile ? member.color : staticInfo.color;
-          const moodEmoji = isDbProfile ? (member.mood || '😊') : '😊';
-          const memberStatusText = isDbProfile ? (member.status_text || '') : '';
-
-          const isMe = isDbProfile ? currentUserProfile && currentUserProfile.id === member.id : index === 0;
-          const isOnline = onlineUsers && onlineUsers.length > 0 ? (
-            isDbProfile
-              ? ((member.id ? onlineUsers.includes(member.id) : onlineUsers.includes(member.role)) || isMe)
-              : index === 0 || onlineUsers.includes(roleKey)
-          ) : isMe;
-
-          return (
-            <View key={isDbProfile ? member.id : roleKey} style={styles.memberItem}>
-              <UserAvatar avatar={memberAvatar} size={42} style={{ marginRight: 12 }} />
-
-              <View style={styles.memberInfo}>
-                <View style={styles.memberNameRow}>
-                  <Text style={[styles.memberName, { color: memberColor }]}>{memberName}</Text>
-                  {isMe && (
-                    <View style={styles.meBadge}>
-                      <Text style={styles.meBadgeText}>나</Text>
-                    </View>
-                  )}
-                </View>
-
-                {/* Mood & Status Message Badge */}
-                <View style={styles.moodBadgeRow}>
-                  <MoodIcon mood={moodEmoji} size={14} style={{ marginRight: 5 }} />
-                  <Text style={styles.moodStatusText}>
-                    {memberStatusText || '오늘도 화이팅!'}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={[styles.statusBox, isOnline ? styles.statusBoxOnline : styles.statusBoxOffline]}>
-                <View style={[styles.statusDot, isOnline ? styles.statusDotOnline : styles.statusDotOffline]} />
-                <Text style={[styles.statusText, isOnline ? styles.statusTextOnline : styles.statusTextOffline]}>
-                  {isOnline ? '접속 중' : '오프라인'}
-                </Text>
+          <View style={styles.guideTextCol}>
+            <View style={styles.guideTitleRow}>
+              <Text style={styles.guideTitle}>가족 단합 미션 시작하기!</Text>
+              <View style={styles.guideTag}>
+                <Sparkles
+                  size={10}
+                  color="#FF6B47"
+                  style={{ marginRight: 2 }}
+                />
+                <Text style={styles.guideTagText}>포인트 적립</Text>
               </View>
             </View>
-          );
-        })}
-      </View>
-
-      {/* Account & Settings Card */}
-      <View style={styles.accountCard}>
-        <View style={styles.accountHeader}>
-          <Users size={16} color="#78716C" style={{ marginRight: 6 }} />
-          <Text style={styles.accountHeaderTitle}>내 계정 정보</Text>
-        </View>
-
-        {/* 1. 프로필 정보 및 수정 버튼 (가로 정렬, 계정 정보 최대 너비 확보) */}
-        <View style={styles.accountProfileRow}>
-          <UserAvatar avatar={currentUserProfile?.avatar} size={46} style={{ marginRight: 12 }} />
-          <View style={styles.accountInfoCol}>
-            <Text style={styles.accountNameText} numberOfLines={1}>
-              {currentUserProfile?.name || '내 계정'}
-              <Text style={styles.accountRoleTagText}> ({currentUserProfile?.role || '가족'})</Text>
+            <Text style={styles.guideDesc}>
+              가족이 함께 스몰톡·장보기 미션을 수행할수록 보너스 포인트가 쑥쑥 쌓여요.
             </Text>
-            {currentUserProfile?.email ? (
-              <Text style={styles.accountEmailText} numberOfLines={1}>
-                {currentUserProfile.email.endsWith('@famlink.local')
-                  ? currentUserProfile.email.replace('@famlink.local', '')
-                  : currentUserProfile.email}
-              </Text>
-            ) : null}
           </View>
-          <TouchableOpacity
-            style={styles.accountEditBtn}
-            onPress={openEditModal}
-            activeOpacity={0.8}
-          >
-            <Edit3 size={13} color="#FF6B47" style={{ marginRight: 4 }} />
-            <Text style={styles.accountEditBtnText}>프로필 수정</Text>
-          </TouchableOpacity>
-        </View>
 
-        {/* 2. 약관 및 운영 정책 전용 페이지 바로가기 (리스트형) */}
-        <View style={styles.accountPolicyBox}>
-          <TouchableOpacity
-            style={styles.accountPolicyRow}
-            onPress={() => setFeedbackModalVisible(true)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.accountPolicyLeft}>
-              <MessageSquare size={14} color="#FF6B47" style={{ marginRight: 8 }} />
-              <Text style={[styles.accountPolicyTitle, { color: '#1C1917', fontWeight: '700' }]}>
-                소중한 피드백 보내기 {hasClaimedFeedbackReward ? '(참여 완료)' : '(+1,000P)'}
-              </Text>
-            </View>
-            <IconChevronRight size={14} color="#FF6B47" />
-          </TouchableOpacity>
-
-          <View style={styles.accountPolicyDivider} />
-
-          <TouchableOpacity
-            style={styles.accountPolicyRow}
-            onPress={() => {
-              setActivePolicyTab('terms');
-              setPolicyModalVisible(true);
-            }}
-            activeOpacity={0.7}
-          >
-            <View style={styles.accountPolicyLeft}>
-              <FileText size={14} color="#78716C" style={{ marginRight: 8 }} />
-              <Text style={styles.accountPolicyTitle}>서비스 이용약관</Text>
-            </View>
-            <IconChevronRight size={14} color="#A8A29E" />
-          </TouchableOpacity>
-
-          <View style={styles.accountPolicyDivider} />
-
-          <TouchableOpacity
-            style={styles.accountPolicyRow}
-            onPress={() => {
-              setActivePolicyTab('privacy');
-              setPolicyModalVisible(true);
-            }}
-            activeOpacity={0.7}
-          >
-            <View style={styles.accountPolicyLeft}>
-              <ShieldCheck size={14} color="#78716C" style={{ marginRight: 8 }} />
-              <Text style={styles.accountPolicyTitle}>개인정보 처리방침</Text>
-            </View>
-            <IconChevronRight size={14} color="#A8A29E" />
-          </TouchableOpacity>
-        </View>
-
-        {/* 3. 하단 계정 액션 (로그아웃 & 회원 탈퇴) */}
-        <View style={styles.accountBottomActionRow}>
-          {onLogout && (
-            <TouchableOpacity
-              style={styles.accountLogoutBtn}
-              onPress={onLogout}
-              activeOpacity={0.8}
-            >
-              <LogOut size={13} color="#78716C" style={{ marginRight: 4 }} />
-              <Text style={styles.accountLogoutBtnText}>로그아웃</Text>
-            </TouchableOpacity>
-          )}
-
-          <TouchableOpacity
-            style={styles.accountDeleteBtn}
-            onPress={handleDeleteAccountClick}
-            activeOpacity={0.8}
-          >
-            <Trash2 size={13} color="#EF4444" style={{ marginRight: 4 }} />
-            <Text style={styles.accountDeleteBtnText}>회원 탈퇴</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* 4. 전자상거래 사업자 정보 및 POD 고지 푸터 */}
-        <View style={{ marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#F5F0E8' }}>
-          <Text style={{ fontSize: 11, fontWeight: '700', color: '#78716C', marginBottom: 2 }}>
-            팸링크(FamLink) | 맞춤형 가족 포토북 & 라이프스타일
-          </Text>
-          <Text style={{ fontSize: 10, color: '#A8A29E', lineHeight: 15 }}>
-            사업자등록번호: 302-42-01661 | 업종: 전자상거래 소매업 (525101) | 고객센터: 카카오톡 @팸링크FamLink{'\n'}
-            실물 포토북은 1:1 주문 제작(POD) 상품으로 인쇄 착수 후 단순 변심 환불이 제한되며, 파본·불량 시 100% 무료 재제작됩니다.
-          </Text>
-        </View>
-      </View>
-
-      {/* Terms & Privacy Policy Dedicated Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={policyModalVisible}
-        onRequestClose={() => setPolicyModalVisible(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.modalOverlay}
-        >
-          <View style={[styles.modalView, { maxHeight: '88%', paddingBottom: 20 }]}>
-            {/* Header */}
-            <View style={styles.modalHeaderRow}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <ShieldCheck size={18} color="#FF6B47" />
-                <Text style={styles.modalHeader}>운영 정책 및 약관</Text>
-              </View>
-              <TouchableOpacity onPress={() => setPolicyModalVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <IconClose size={20} color="#8E8E93" />
-              </TouchableOpacity>
-            </View>
-
-            {/* 2-Tab Bar (1. 서비스 이용약관, 2. 개인정보 처리방침) */}
-            <View style={styles.policyTabBar}>
-              <TouchableOpacity
-                style={[styles.policyTabBtn, activePolicyTab === 'terms' && styles.policyTabBtnActive]}
-                onPress={() => setActivePolicyTab('terms')}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.policyTabBtnText, activePolicyTab === 'terms' && styles.policyTabBtnTextActive]}>
-                  서비스 이용약관
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.policyTabBtn, activePolicyTab === 'privacy' && styles.policyTabBtnActive]}
-                onPress={() => setActivePolicyTab('privacy')}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.policyTabBtnText, activePolicyTab === 'privacy' && styles.policyTabBtnTextActive]}>
-                  개인정보 처리방침
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Content Body */}
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 12 }}>
-              {activePolicyTab === 'privacy' ? (
-                <View style={styles.policyContentCard}>
-                  <Text style={styles.policySectionHeading}>FamLink 개인정보 처리방침</Text>
-                  <Text style={styles.policyMetaText}>최종 수정일: 2026년 10월 9일 (Apple Guideline 5.1.1 준수)</Text>
-
-                  <Text style={styles.policyArticleTitle}>제1조 (개인정보 수집 항목 및 방법)</Text>
-                  <Text style={styles.policyBodyText}>
-                    FamLink는 가족 간 프라이빗 소통 및 실물 포토북 배송을 위한 최소한의 개인정보만을 수집합니다.{'\n'}
-                    • 필수 수집 항목: 로그인 이메일, 가족 내 호칭/이름, 프로필 아바타{'\n'}
-                    • 서비스 이용 시 생성 정보: 가족 대화 내역, 공유 캘린더 일정, 스몰톡 답변, 업로드 사진{'\n'}
-                    • 포토북 제작 주문 시: 수령인 이름, 배송지 주소, 연락처 전화번호
-                  </Text>
-
-                  <Text style={styles.policyArticleTitle}>제2조 (개인정보 수집 및 이용 목적)</Text>
-                  <Text style={styles.policyBodyText}>
-                    1. 가족 구성원 간의 실시간 암호화 대화 및 스몰톡 질문 매칭{'\n'}
-                    2. 반려몽 가상 펫 육성 게이미피케이션 및 온기 데이터 동기화{'\n'}
-                    3. 실물 양장본 포토북 POD(Print on Demand) 주문 제작 및 배송
-                  </Text>
-
-                  <Text style={styles.policyArticleTitle}>제3조 (개인정보의 보유 및 파기 - 회원 탈퇴 연동)</Text>
-                  <Text style={styles.policyBodyText}>
-                    FamLink는 이용자가 회원 탈퇴를 요청하는 즉시 해당 이용자의 계정, 프로필, 작성 데이터 일체를 서버 및 로컬 데이터베이스에서 지체 없이 영구 파기합니다.{'\n'}
-                    회원 탈퇴는 앱 내 [가족] 탭의 [내 계정 정보] → [회원 탈퇴] 버튼을 통해 언제든 즉시 실행할 수 있습니다.
-                  </Text>
-
-                  <Text style={styles.policyArticleTitle}>제4조 (제3자 데이터 판매 금지 및 보안)</Text>
-                  <Text style={styles.policyBodyText}>
-                    FamLink는 어떠한 경우에도 가족들의 사진, 대화, 개인정보를 광고 목적으로 제3자에게 판매하거나 마케팅 데이터로 제공하지 않습니다. 모든 데이터는 엄격한 접근 제어(RLS) 하에 안전하게 보호됩니다.
-                  </Text>
-
-                  <Text style={styles.policyArticleTitle}>제5조 (개인정보 보호책임자 및 문의처)</Text>
-                  <Text style={styles.policyBodyText}>
-                    • 개인정보 보호책임 부서: FamLink Privacy Team{'\n'}
-                    • 문의 이메일: privacy@famlink.com
-                  </Text>
-                </View>
-              ) : (
-                <View style={styles.policyContentCard}>
-                  <Text style={styles.policySectionHeading}>FamLink 서비스 이용약관</Text>
-                  <Text style={styles.policyMetaText}>최종 수정일: 2026년 10월 9일</Text>
-
-                  <Text style={styles.policyArticleTitle}>제1조 (목적)</Text>
-                  <Text style={styles.policyBodyText}>
-                    본 약관은 FamLink(이하 "서비스")가 제공하는 가족 전용 메신저, 스몰톡 문답, 반려몽 육성, 공유 캘린더 및 AI 포토북 출판 서비스의 이용 조건 및 절차를 규정함을 목적으로 합니다.
-                  </Text>
-
-                  <Text style={styles.policyArticleTitle}>제2조 (가족 그룹 및 계정 관리)</Text>
-                  <Text style={styles.policyBodyText}>
-                    1. 이용자는 초대 코드(Family Code)를 통해 가족 구성원과 비공개 그룹을 형성합니다.{'\n'}
-                    2. 계정 정보는 본인이 직접 관리하여야 하며, 타인에게 양도하거나 대여할 수 없습니다.
-                  </Text>
-
-                  <Text style={styles.policyArticleTitle}>제3조 (실물 양장본 포토북 POD 주문 제작 및 청약철회·환불 규정)</Text>
-                  <Text style={styles.policyBodyText}>
-                    1. 가족 스튜디오에서 편집한 150×210mm A5 하드커버 양장본은 주문 시 1:1 맞춤 POD(Print on Demand) 방식으로 개별 생산됩니다.{'\n'}
-                    2. 가족들이 모은 포인트(12,000 P)로 100% 무료 교환하거나, 보유 포인트를 전액 할인 적용한 뒤 차액만 계좌이체로 결제할 수 있습니다.{'\n'}
-                    3. [청약철회 및 취소 기준] 주문 접수 후 '인쇄 준비중' 단계 이전(접수 후 1시간 이내)에는 100% 즉시 취소 및 차감 포인트·결제액 전액 복구가 가능합니다. 단, 전자상거래법 제17조 제2항 제6호에 따라 인쇄소 데이터 전송 및 제작이 착수된 이후에는 맞춤 제작 상품 특성상 단순 변심에 의한 취소·환불이 불가합니다.{'\n'}
-                    4. [품질 보증 및 무료 재제작] 파본, 제본 불량, 인쇄 결함 또는 배송 중 파손 발생 시 수령 후 7일 이내 접수하시면 당사 부담으로 100% 무료 재제작 및 재배송해 드립니다.
-                  </Text>
-
-                  <Text style={styles.policyArticleTitle}>제4조 (이용자의 의무)</Text>
-                  <Text style={styles.policyBodyText}>
-                    이용자는 음란, 폭력, 타인의 권리를 침해하는 유해 콘텐츠를 게시할 수 없으며, 플랫폼의 건전한 가족 소통 환경을 준수해야 합니다.
-                  </Text>
-
-                  <Text style={styles.policyArticleTitle}>제5조 (서비스 종료 및 회원 탈퇴)</Text>
-                  <Text style={styles.policyBodyText}>
-                    이용자는 언제든지 앱 내 설정을 통해 회원 탈퇴를 진행할 수 있으며, 탈퇴 시 계정(auth.users) 및 프로필·대화 데이터는 관련 법령이 정한 바에 따라 즉시 영구 파기 처리됩니다.
-                  </Text>
-
-                  <Text style={styles.policyArticleTitle}>제6조 (사업자 정보 및 고객센터)</Text>
-                  <Text style={styles.policyBodyText}>
-                    • 상호명: 팸링크(FamLink){'\n'}
-                    • 사업자등록번호: 302-42-01661{'\n'}
-                    • 주요 종목: 전자상거래 소매업 (525101) / 맞춤형 포토북 제작{'\n'}
-                    • 고객센터: 카카오톡 채널 @팸링크FamLink / support@famlink.com (평일 10:00~18:00)
-                  </Text>
-                </View>
-              )}
-            </ScrollView>
-
-            {/* Bottom Close CTA */}
-            <TouchableOpacity
-              style={styles.policyModalCloseCta}
-              onPress={() => setPolicyModalVisible(false)}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.policyModalCloseCtaText}>확인</Text>
-            </TouchableOpacity>
+          <View style={styles.guideActionBtn}>
+            <IconChevronRight size={16} color="#FF6B47" />
           </View>
-        </KeyboardAvoidingView>
-      </Modal>
+        </TouchableOpacity>
 
-      {/* Profile & Mood Edit Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalOverlay}
+        {/* 소중한 피드백 보내기 (+1,000P 1회 지급 이벤트 배너) */}
+        <TouchableOpacity
+          style={styles.inviteGuideCard}
+          onPress={() => setFeedbackModalVisible(true)}
+          activeOpacity={0.85}
         >
-          <View style={[styles.modalView, { maxHeight: '88%' }]}>
-            <View style={styles.modalHeaderRow}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Edit3 size={18} color="#FF6B47" />
-                <Text style={styles.modalHeader}>내 프로필 설정</Text>
-              </View>
-              <TouchableOpacity onPress={() => setModalVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <IconClose size={20} color="#8E8E93" />
-              </TouchableOpacity>
-            </View>
+          <View style={[styles.guideIconWrap, { backgroundColor: '#FFF5F2' }]}>
+            <Gift size={22} color="#FF6B47" />
+          </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
-              {/* 1. KakaoTalk-style Avatar Preview & Photo Picker */}
-              <Text style={styles.modalLabel}>프로필 사진 / 아바타</Text>
-              <View style={styles.avatarPreviewWrap}>
-                <TouchableOpacity
-                  style={styles.avatarLargeCircleTouchable}
-                  onPress={handlePickProfileImage}
-                  activeOpacity={0.85}
+          <View style={styles.guideTextCol}>
+            <View style={styles.guideTitleRow}>
+              <Text style={styles.guideTitle}>소중한 피드백 보내기</Text>
+              <View style={styles.guideTag}>
+                <Sparkles
+                  size={10}
+                  color="#FF6B47"
+                  style={{ marginRight: 2 }}
+                />
+                <Text style={styles.guideTagText}>
+                  {hasClaimedFeedbackReward ? '참여 완료 ✓' : '+1,000P 선물'}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.guideDesc}>
+              {hasClaimedFeedbackReward
+                ? '우리 가족의 따뜻한 응원으로 +1,000P 선물이 적립되었습니다! 언제든 의견을 더 남겨주세요.'
+                : 'FamLink 사용 소감이나 응원 메시지를 보내주시면 우리 가족방에 1,000 포인트를 즉시 선물해 드려요.'}
+            </Text>
+          </View>
+
+          <View style={styles.guideActionBtn}>
+            <IconChevronRight size={16} color="#FF6B47" />
+          </View>
+        </TouchableOpacity>
+
+        {/* Member List Section */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Heart
+              size={18}
+              color="#FF6B47"
+              fill="#FF6B47"
+              style={{ marginRight: 6 }}
+            />
+            <Text style={styles.sectionTitle}>
+              가입된 가족 멤버 ({familyMembersList.length} / 10명)
+            </Text>
+          </View>
+
+          {familyMembersList.map(
+            (member: FamilyMember | any, index: number) => {
+              const isDbProfile =
+                member && typeof member === 'object' && 'name' in member;
+              const roleKey = isDbProfile ? member.role || 'son' : member;
+              const staticInfo = FAMILY_MEMBERS_STATIC[roleKey] || {
+                name: '가족',
+                avatar: '👦',
+                color: '#8E8E93',
+              };
+
+              const memberName = isDbProfile ? member.name : staticInfo.name;
+              const memberAvatar = isDbProfile
+                ? member.avatar
+                : staticInfo.avatar;
+              const memberColor = isDbProfile ? member.color : staticInfo.color;
+              const moodEmoji = isDbProfile ? member.mood || '😊' : '😊';
+              const memberStatusText = isDbProfile
+                ? member.status_text || ''
+                : '';
+
+              const isMe = isDbProfile
+                ? Boolean(
+                    currentUserProfile && currentUserProfile.id === member.id
+                  )
+                : index === 0;
+              const isOnline =
+                onlineUserSet.size > 0
+                  ? isDbProfile
+                    ? (member.id
+                        ? onlineUserSet.has(member.id)
+                        : onlineUserSet.has(member.role)) || isMe
+                    : index === 0 || onlineUserSet.has(roleKey)
+                  : isMe;
+
+              return (
+                <View
+                  key={isDbProfile ? member.id : roleKey}
+                  style={styles.memberItem}
                 >
-                  <View style={styles.avatarLargeCircle}>
-                    {selectedAvatar && (selectedAvatar.startsWith('http') || selectedAvatar.startsWith('data:') || selectedAvatar.length > 50) ? (
-                      <Image
-                        source={{
-                          uri:
-                            selectedAvatar.startsWith('http') || selectedAvatar.startsWith('data:')
-                              ? selectedAvatar
-                              : `data:image/jpeg;base64,${selectedAvatar}`,
-                        }}
-                        style={styles.avatarLargeImage}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <Text style={styles.avatarLargeText}>
-                        {typeof selectedAvatar === 'string' && selectedAvatar.length <= 10 ? selectedAvatar : '👦'}
+                  <UserAvatar
+                    avatar={memberAvatar}
+                    size={42}
+                    style={{ marginRight: 12 }}
+                  />
+
+                  <View style={styles.memberInfo}>
+                    <View style={styles.memberNameRow}>
+                      <Text style={[styles.memberName, { color: memberColor }]}>
+                        {memberName}
                       </Text>
-                    )}
-                  </View>
-                  <View style={styles.avatarCameraBadge}>
-                    <Camera size={14} color="#FFFFFF" strokeWidth={2.5} />
-                  </View>
-                </TouchableOpacity>
-
-                {/* Photo Action Buttons */}
-                <View style={styles.avatarActionBtnsRow}>
-                  <TouchableOpacity
-                    style={styles.avatarUploadBtn}
-                    onPress={handlePickProfileImage}
-                    activeOpacity={0.8}
-                  >
-                    <Camera size={14} color="#FF6B47" style={{ marginRight: 5 }} />
-                    <Text style={styles.avatarUploadBtnText}>앨범에서 사진 선택</Text>
-                  </TouchableOpacity>
-
-                  {(selectedAvatar && (selectedAvatar.startsWith('http') || selectedAvatar.startsWith('data:'))) && (
-                    <TouchableOpacity
-                      style={styles.avatarResetBtn}
-                      onPress={() => setSelectedAvatar('👦')}
-                      activeOpacity={0.8}
-                    >
-                      <Trash2 size={13} color="#8E8E93" style={{ marginRight: 4 }} />
-                      <Text style={styles.avatarResetBtnText}>기본 이모지로</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-
-                <Text style={styles.avatarSubText}>
-                  카카오톡처럼 사진첩에서 사진을 등록하거나 아래 캐릭터를 골라보세요
-                </Text>
-              </View>
-
-              {/* Emoji Character Presets */}
-              <Text style={[styles.modalLabel, { marginTop: 10, marginBottom: 8 }]}>또는 기본 캐릭터 이모티콘 선택</Text>
-              <View style={styles.avatarGridWrap}>
-                {EDIT_AVATAR_PRESETS.map((emoji) => {
-                  const isSelected = selectedAvatar === emoji;
-                  return (
-                    <TouchableOpacity
-                      key={emoji}
-                      style={[
-                        styles.avatarGridCell,
-                        isSelected && styles.avatarGridCellActive,
-                      ]}
-                      onPress={() => setSelectedAvatar(emoji)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.avatarGridEmoji}>{emoji}</Text>
-                      {isSelected && (
-                        <View style={styles.avatarCheckBadge}>
-                          <Check size={10} color="#FFFFFF" strokeWidth={3} />
+                      {isMe && (
+                        <View style={styles.meBadge}>
+                          <Text style={styles.meBadgeText}>나</Text>
                         </View>
                       )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
+                    </View>
 
-              {/* 2. Name & Role Input */}
-              <View style={styles.modalRowInputs}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.modalLabel}>내 이름 (실명)</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    placeholder="이름 입력"
-                    placeholderTextColor="#AEAEB2"
-                    value={editName}
-                    onChangeText={setEditName}
-                    maxLength={10}
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.modalLabel}>가족 내 호칭/역할</Text>
-                  <TextInput
-                    style={styles.modalInput}
-                    placeholder="예: 엄마, 큰아들"
-                    placeholderTextColor="#AEAEB2"
-                    value={editRole}
-                    onChangeText={setEditRole}
-                    maxLength={10}
-                  />
-                </View>
-              </View>
-
-              {/* 3. Mood Selector */}
-              <Text style={[styles.modalLabel, { marginTop: 14 }]}>오늘의 기분 스티커</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.emojiScroll} contentContainerStyle={{ paddingVertical: 4 }}>
-                {MOOD_ITEMS.map((item) => {
-                  const isSelected = selectedMood === item.id;
-                  return (
-                    <TouchableOpacity
-                      key={item.id}
-                      style={[
-                        styles.emojiChip,
-                        isSelected && {
-                          borderColor: item.color,
-                          backgroundColor: item.color + '15',
-                          borderWidth: 2,
-                        }
-                      ]}
-                      onPress={() => setSelectedMood(item.id)}
-                    >
-                      <MoodIcon mood={item.id} size={22} color={item.color} />
-                      <Text style={[styles.moodChipLabel, isSelected && { color: item.color, fontWeight: '800' }]}>
-                        {item.label}
+                    <View style={styles.moodBadgeRow}>
+                      <MoodIcon
+                        mood={moodEmoji}
+                        size={14}
+                        style={{ marginRight: 5 }}
+                      />
+                      <Text style={styles.moodStatusText}>
+                        {memberStatusText || '오늘도 화이팅!'}
                       </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
+                    </View>
+                  </View>
 
-              {/* 4. Status Message */}
-              <Text style={[styles.modalLabel, { marginTop: 14 }]}>한 줄 상태 메시지</Text>
-              <TextInput
-                style={styles.modalInput}
-                placeholder="예: 공부 중, 퇴근길 피곤함, 헬스장 도착!"
-                placeholderTextColor="#AEAEB2"
-                value={statusText}
-                onChangeText={setStatusText}
-                maxLength={30}
-              />
-            </ScrollView>
-
-            <TouchableOpacity style={styles.modalConfirmBtn} onPress={handleSaveProfile} activeOpacity={0.85}>
-              <Sparkles size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.modalConfirmBtnText}>프로필 저장 완료</Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* 소중한 피드백 보내기 (+1,000P 선물) 모달 */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={feedbackModalVisible}
-        onRequestClose={() => setFeedbackModalVisible(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.modalOverlay}
-        >
-          <View style={styles.modalView}>
-            <View style={styles.modalHeaderRow}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Gift size={18} color="#FF6B47" />
-                <Text style={styles.modalHeader}>소중한 피드백 보내기</Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => setFeedbackModalVisible(false)}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <IconClose size={20} color="#8E8E93" />
-              </TouchableOpacity>
-            </View>
-
-            <View
-              style={{
-                backgroundColor: '#FFF5F2',
-                borderRadius: 14,
-                padding: 12,
-                borderWidth: 1,
-                borderColor: '#FFE8E0',
-                marginBottom: 12,
-              }}
-            >
-              <Text style={{ fontSize: 13, fontWeight: '800', color: '#FF6B47', marginBottom: 4 }}>
-                {hasClaimedFeedbackReward
-                  ? '✨ 우리 가족 첫 피드백 선물(+1,000P) 지급 완료'
-                  : '🎁 우리 가족 첫 피드백 감사 선물: +1,000 포인트 즉시 지급!'}
-              </Text>
-              <Text style={{ fontSize: 12, color: '#78716C', lineHeight: 17 }}>
-                가족분들의 따뜻한 응원 한마디와 개선 의견이 FamLink를 더욱 다정한 공간으로 만듭니다.
-              </Text>
-            </View>
-
-            <Text style={styles.modalLabel}>어떤 점이 가장 좋으셨나요?</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
-              {FEEDBACK_QUICK_CHIPS.map((chip) => {
-                const isSelected = selectedFeedbackChip === chip;
-                return (
-                  <TouchableOpacity
-                    key={chip}
-                    onPress={() => setSelectedFeedbackChip(chip)}
-                    activeOpacity={0.8}
-                    style={{
-                      paddingHorizontal: 12,
-                      paddingVertical: 8,
-                      borderRadius: 14,
-                      borderWidth: 1.5,
-                      borderColor: isSelected ? '#FF6B47' : '#F5F0E8',
-                      backgroundColor: isSelected ? '#FFF5F2' : '#FFFFFF',
-                    }}
+                  <View
+                    style={[
+                      styles.statusBox,
+                      isOnline
+                        ? styles.statusBoxOnline
+                        : styles.statusBoxOffline,
+                    ]}
                   >
+                    <View
+                      style={[
+                        styles.statusDot,
+                        isOnline
+                          ? styles.statusDotOnline
+                          : styles.statusDotOffline,
+                      ]}
+                    />
                     <Text
-                      style={{
-                        fontSize: 12,
-                        fontWeight: isSelected ? '800' : '600',
-                        color: isSelected ? '#FF6B47' : '#78716C',
-                      }}
+                      style={[
+                        styles.statusText,
+                        isOnline
+                          ? styles.statusTextOnline
+                          : styles.statusTextOffline,
+                      ]}
                     >
-                      {chip}
+                      {isOnline ? '접속 중' : '오프라인'}
                     </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+                  </View>
+                </View>
+              );
+            }
+          )}
+        </View>
 
-            <Text style={styles.modalLabel}>자유로운 응원 또는 개선 의견 (선택)</Text>
-            <TextInput
-              style={[styles.modalInput, { minHeight: 76, textAlignVertical: 'top' }]}
-              placeholder="더 추가되었으면 하는 기능이나 따뜻한 응원 한마디를 남겨주세요!"
-              placeholderTextColor="#AEAEB2"
-              value={feedbackText}
-              onChangeText={setFeedbackText}
-              multiline
-              maxLength={200}
+        {/* Account & Settings Card */}
+        <View style={styles.accountCard}>
+          <View style={styles.accountHeader}>
+            <Users size={16} color="#78716C" style={{ marginRight: 6 }} />
+            <Text style={styles.accountHeaderTitle}>내 계정 정보</Text>
+          </View>
+
+          <View style={styles.accountProfileRow}>
+            <UserAvatar
+              avatar={currentUserProfile?.avatar}
+              size={46}
+              style={{ marginRight: 12 }}
             />
-
-            <TouchableOpacity
-              style={[styles.modalConfirmBtn, isSubmittingFeedback && { opacity: 0.6 }]}
-              onPress={() => handleSubmitFeedback(false)}
-              disabled={isSubmittingFeedback}
-              activeOpacity={0.85}
-            >
-              <Sparkles size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.modalConfirmBtnText}>
-                {hasClaimedFeedbackReward ? '소중한 피드백 전달하기' : '피드백 보내고 +1,000P 즉시 받기'}
+            <View style={styles.accountInfoCol}>
+              <Text style={styles.accountNameText} numberOfLines={1}>
+                {currentUserProfile?.name || '내 계정'}
+                <Text style={styles.accountRoleTagText}>
+                  {' '}
+                  ({currentUserProfile?.role || '가족'})
+                </Text>
               </Text>
-            </TouchableOpacity>
-
+              {currentUserProfile?.email ? (
+                <Text style={styles.accountEmailText} numberOfLines={1}>
+                  {currentUserProfile.email.endsWith('@famlink.local')
+                    ? currentUserProfile.email.replace('@famlink.local', '')
+                    : currentUserProfile.email}
+                </Text>
+              ) : null}
+            </View>
             <TouchableOpacity
-              style={{
-                flexDirection: 'row',
-                justifyContent: 'center',
-                alignItems: 'center',
-                paddingVertical: 11,
-                marginTop: 6,
-                borderRadius: 14,
-                backgroundColor: '#FAF8F3',
-                borderWidth: 1,
-                borderColor: '#F5F0E8',
-              }}
-              onPress={() => handleSubmitFeedback(true)}
-              disabled={isSubmittingFeedback}
+              style={styles.accountEditBtn}
+              onPress={openEditModal}
               activeOpacity={0.8}
             >
-              <ExternalLink size={14} color="#78716C" style={{ marginRight: 6 }} />
-              <Text style={{ fontSize: 12, fontWeight: '700', color: '#78716C' }}>
-                스토어에서도 응원 남기기 {hasClaimedFeedbackReward ? '' : '(+1,000P 적립)'}
-              </Text>
+              <Edit3 size={13} color="#FF6B47" style={{ marginRight: 4 }} />
+              <Text style={styles.accountEditBtnText}>프로필 수정</Text>
             </TouchableOpacity>
           </View>
-        </KeyboardAvoidingView>
-      </Modal>
+
+          <View style={styles.accountPolicyBox}>
+            <TouchableOpacity
+              style={styles.accountPolicyRow}
+              onPress={() => setFeedbackModalVisible(true)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.accountPolicyLeft}>
+                <MessageSquare
+                  size={14}
+                  color="#FF6B47"
+                  style={{ marginRight: 8 }}
+                />
+                <Text
+                  style={[
+                    styles.accountPolicyTitle,
+                    { color: '#1C1917', fontWeight: '700' },
+                  ]}
+                >
+                  소중한 피드백 보내기{' '}
+                  {hasClaimedFeedbackReward ? '(참여 완료)' : '(+1,000P)'}
+                </Text>
+              </View>
+              <IconChevronRight size={14} color="#FF6B47" />
+            </TouchableOpacity>
+
+            <View style={styles.accountPolicyDivider} />
+
+            <TouchableOpacity
+              style={styles.accountPolicyRow}
+              onPress={() => {
+                setActivePolicyTab('terms');
+                setPolicyModalVisible(true);
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={styles.accountPolicyLeft}>
+                <FileText
+                  size={14}
+                  color="#78716C"
+                  style={{ marginRight: 8 }}
+                />
+                <Text style={styles.accountPolicyTitle}>서비스 이용약관</Text>
+              </View>
+              <IconChevronRight size={14} color="#A8A29E" />
+            </TouchableOpacity>
+
+            <View style={styles.accountPolicyDivider} />
+
+            <TouchableOpacity
+              style={styles.accountPolicyRow}
+              onPress={() => {
+                setActivePolicyTab('privacy');
+                setPolicyModalVisible(true);
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={styles.accountPolicyLeft}>
+                <ShieldCheck
+                  size={14}
+                  color="#78716C"
+                  style={{ marginRight: 8 }}
+                />
+                <Text style={styles.accountPolicyTitle}>개인정보 처리방침</Text>
+              </View>
+              <IconChevronRight size={14} color="#A8A29E" />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.accountBottomActionRow}>
+            {onLogout && (
+              <TouchableOpacity
+                style={styles.accountLogoutBtn}
+                onPress={onLogout}
+                activeOpacity={0.8}
+              >
+                <LogOut size={13} color="#78716C" style={{ marginRight: 4 }} />
+                <Text style={styles.accountLogoutBtnText}>로그아웃</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={styles.accountDeleteBtn}
+              onPress={handleDeleteAccountClick}
+              activeOpacity={0.8}
+            >
+              <Trash2 size={13} color="#EF4444" style={{ marginRight: 4 }} />
+              <Text style={styles.accountDeleteBtnText}>회원 탈퇴</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View
+            style={{
+              marginTop: 14,
+              paddingTop: 12,
+              borderTopWidth: 1,
+              borderTopColor: '#F5F0E8',
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 11,
+                fontWeight: '700',
+                color: '#78716C',
+                marginBottom: 2,
+              }}
+            >
+              팸링크(FamLink) | 맞춤형 가족 포토북 & 라이프스타일
+            </Text>
+            <Text style={{ fontSize: 10, color: '#A8A29E', lineHeight: 15 }}>
+              사업자등록번호: 302-42-01661 | 업종: 전자상거래 소매업 (525101) | 고객센터: 카카오톡 @팸링크FamLink{'\n'}
+              실물 포토북은 1:1 주문 제작(POD) 상품으로 인쇄 착수 후 단순 변심 환불이 제한되며, 파본·불량 시 100% 무료 재제작됩니다.
+            </Text>
+          </View>
+        </View>
       </ScrollView>
+
+      {/* Modals */}
+      <FamilyPolicyModal
+        visible={policyModalVisible}
+        initialTab={activePolicyTab}
+        onClose={() => setPolicyModalVisible(false)}
+      />
+
+      <FamilyProfileEditModal
+        visible={modalVisible}
+        currentUserProfile={currentUserProfile}
+        onClose={() => setModalVisible(false)}
+        onUpdateProfile={onUpdateProfile}
+        onUpdateMood={onUpdateMood}
+      />
+
+      <FamilyFeedbackModal
+        visible={feedbackModalVisible}
+        currentUserProfile={currentUserProfile}
+        feedbackStorageKey={feedbackStorageKey}
+        hasClaimedFeedbackReward={hasClaimedFeedbackReward}
+        onClaimedReward={handleClaimedFeedbackReward}
+        onAwardPoints={onAwardPoints}
+        onClose={() => setFeedbackModalVisible(false)}
+      />
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: commonStyles.screenContainer,
-  subHeaderBar: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    minHeight: 64,
-    backgroundColor: colors.card,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.divider,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 12,
-  },
-  subHeaderLeftGroup: {
-    flex: 1,
-    minWidth: 110,
-    marginRight: 8,
-  },
-  subHeaderTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#1C1917',
-  },
-  subHeaderSub: {
-    fontSize: 12,
-    color: '#78716C',
-    marginTop: 2,
-  },
-  limitFullBadge: {
-    backgroundColor: '#FFF1F0',
-    borderColor: '#FFA39E',
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-    marginLeft: 8,
-  },
-  limitFullBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#FF4D4F',
-  },
-  subHeaderRightGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexShrink: 0,
-  },
-  headerActionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FF6B47',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 12,
-    flexShrink: 0,
-    shadowColor: '#FF6B47',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  headerActionBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 30,
-  },
-  codeCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#F5F0E8',
-    alignItems: 'center',
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  cardHeaderTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#78716C',
-  },
-  codeText: {
-    fontSize: 32,
-    fontWeight: '900',
-    color: '#FF6B47',
-    letterSpacing: 2,
-    marginVertical: 10,
-  },
-  codeDesc: {
-    fontSize: 12,
-    color: '#78716C',
-    textAlign: 'center',
-    lineHeight: 18,
-    paddingHorizontal: 20,
-    marginBottom: 16,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    width: '100%',
-  },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF5F2',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 12,
-    marginHorizontal: 6,
-    borderWidth: 1,
-    borderColor: '#FFE8E0',
-  },
-  actionButtonText: {
-    fontSize: 12,
-    color: '#FF6B47',
-    fontWeight: '700',
-  },
-  sectionCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 18,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#F5F0E8',
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#1C1917',
-  },
-  memberItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F5F0E8',
-  },
-  avatarBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-    borderWidth: 0.5,
-    borderColor: 'rgba(0,0,0,0.05)',
-  },
-  avatarText: {
-    fontSize: 20,
-  },
-  memberInfo: {
-    flex: 1,
-  },
-  memberNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 2,
-  },
-  memberName: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  meBadge: {
-    backgroundColor: '#FF6B47',
-    borderRadius: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    marginLeft: 6,
-  },
-  meBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 9,
-    fontWeight: '800',
-  },
-  moodBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 2,
-  },
-  moodEmoji: {
-    fontSize: 12,
-    marginRight: 4,
-  },
-  moodStatusText: {
-    fontSize: 12,
-    color: '#78716C',
-    fontWeight: '500',
-  },
-  statusBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  statusBoxOnline: {
-    backgroundColor: '#E8F8F5',
-    borderColor: '#D1F2EB',
-  },
-  statusBoxOffline: {
-    backgroundColor: '#FAF8F3',
-    borderColor: '#F5F0E8',
-  },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginRight: 4,
-  },
-  statusDotOnline: {
-    backgroundColor: '#2ECC71',
-  },
-  statusDotOffline: {
-    backgroundColor: '#A8A29E',
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  statusTextOnline: {
-    color: '#2ECC71',
-  },
-  statusTextOffline: {
-    color: '#78716C',
-  },
-  inviteGuideCard: {
-    backgroundColor: '#FFF5F2',
-    borderWidth: 1,
-    borderColor: '#FFE8E0',
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  guideIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: '#FFE8E0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  guideTextCol: {
-    flex: 1,
-    paddingRight: 6,
-  },
-  guideTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 3,
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  guideTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#1C1917',
-  },
-  guideTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    borderWidth: 0.5,
-    borderColor: '#FFE8E0',
-  },
-  guideTagText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#FF6B47',
-  },
-  guideDesc: {
-    fontSize: 11,
-    color: '#78716C',
-    lineHeight: 15,
-  },
-  guideActionBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#FFE8E0',
-  },
-  accountCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 18,
-    marginTop: 14,
-    borderWidth: 1,
-    borderColor: '#F5F0E8',
-  },
-  accountHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  accountHeaderTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#78716C',
-  },
-  accountProfileRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  accountInfoCol: {
-    flex: 1,
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  accountNameText: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#1C1917',
-  },
-  accountRoleTagText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#78716C',
-  },
-  accountEmailText: {
-    fontSize: 11,
-    color: '#78716C',
-    marginTop: 2,
-  },
-  accountEditBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF5F2',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#FFE8E0',
-  },
-  accountEditBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#FF6B47',
-  },
-  accountPolicyBox: {
-    backgroundColor: '#FAF8F3',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#F5F0E8',
-    overflow: 'hidden',
-    marginBottom: 14,
-  },
-  accountPolicyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-  },
-  accountPolicyLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  accountPolicyTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#44403C',
-  },
-  accountPolicyDivider: {
-    height: 1,
-    backgroundColor: '#F5F0E8',
-    marginHorizontal: 12,
-  },
-  accountBottomActionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: 8,
-  },
-  accountLogoutBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FAF8F3',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#F5F0E8',
-  },
-  accountLogoutBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#78716C',
-  },
-  accountDeleteBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FEF2F2',
-    paddingHorizontal: 11,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#FEE2E2',
-  },
-  accountDeleteBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#EF4444',
-  },
-  policyTabBar: {
-    flexDirection: 'row',
-    backgroundColor: '#FAF8F3',
-    borderRadius: 12,
-    padding: 4,
-    marginVertical: 10,
-    borderWidth: 1,
-    borderColor: '#F5F0E8',
-  },
-  policyTabBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-    borderRadius: 8,
-  },
-  policyTabBtnActive: {
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  policyTabBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#78716C',
-  },
-  policyTabBtnTextActive: {
-    fontWeight: '800',
-    color: '#FF6B47',
-  },
-  policyContentCard: {
-    backgroundColor: '#FAF8F3',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#F5F0E8',
-  },
-  policySectionHeading: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#1C1917',
-    marginBottom: 4,
-  },
-  policyMetaText: {
-    fontSize: 11,
-    color: '#A8A29E',
-    marginBottom: 14,
-    fontWeight: '500',
-  },
-  policyArticleTitle: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#292524',
-    marginTop: 10,
-    marginBottom: 4,
-  },
-  policyBodyText: {
-    fontSize: 12,
-    lineHeight: 18,
-    color: '#57534E',
-    fontWeight: '500',
-  },
-  policyModalCloseCta: {
-    backgroundColor: '#FF6B47',
-    height: 48,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  policyModalCloseCtaText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  modalOverlay: commonStyles.modalOverlay,
-  modalView: commonStyles.modalBottomSheet,
-  modalHeaderRow: commonStyles.modalHeaderRow,
-  modalHeader: commonStyles.modalHeaderTitle,
-  modalLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#78716C',
-    marginBottom: 6,
-    marginTop: 10,
-  },
-  avatarPreviewWrap: {
-    alignItems: 'center',
-    paddingVertical: 10,
-    backgroundColor: '#FAF8F3',
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#F5F0E8',
-    marginBottom: 10,
-  },
-  avatarLargeCircleTouchable: {
-    position: 'relative',
-    marginBottom: 8,
-  },
-  avatarLargeCircle: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#FF6B47',
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  avatarLargeImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 38,
-  },
-  avatarCameraBadge: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#FF6B47',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  avatarActionBtnsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 6,
-  },
-  avatarUploadBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFF5F2',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#FFE8E0',
-  },
-  avatarUploadBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#FF6B47',
-  },
-  avatarResetBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FAF8F3',
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#F5F0E8',
-  },
-  avatarResetBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#78716C',
-  },
-  avatarLargeText: {
-    fontSize: 40,
-  },
-  avatarSubText: {
-    fontSize: 11,
-    color: '#78716C',
-    fontWeight: '500',
-  },
-  avatarGridWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    paddingVertical: 6,
-    marginBottom: 8,
-  },
-  avatarGridCell: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: '#F5F0E8',
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  avatarGridCellActive: {
-    borderColor: '#FF6B47',
-    backgroundColor: '#FFF5F2',
-  },
-  avatarGridEmoji: {
-    fontSize: 22,
-  },
-  avatarCheckBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#FF6B47',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: '#FFFFFF',
-  },
-  modalRowInputs: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 4,
-  },
-  emojiScroll: {
-    flexDirection: 'row',
-    marginBottom: 6,
-    paddingVertical: 4,
-  },
-  emojiChip: {
-    width: 52,
-    height: 58,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: '#F5F0E8',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 4,
-  },
-  emojiChipActive: {
-    borderColor: '#FF6B47',
-    backgroundColor: '#FFF5F2',
-  },
-  moodChipLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#78716C',
-    marginTop: 3,
-  },
-  modalInput: {
-    backgroundColor: '#FAF8F3',
-    borderRadius: 12,
-    padding: 12,
-    fontSize: 14,
-    color: '#1C1917',
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#F5F0E8',
-  },
-  modalConfirmBtn: {
-    flexDirection: 'row',
-    backgroundColor: '#FF6B47',
-    padding: 14,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  modalConfirmBtnText: {
-    fontSize: 15,
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-});
+export default React.memo(FamilyScreen);
