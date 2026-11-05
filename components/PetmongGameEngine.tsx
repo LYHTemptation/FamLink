@@ -1052,7 +1052,6 @@ function PetmongGameEngine({
                 <Animated.View
                   style={{
                     transform: [{ scaleX: petScaleX }, { scale: stage.scale }],
-                    mixBlendMode: 'multiply',
                   }}
                 >
                   {character.image_url ? (
@@ -1064,7 +1063,6 @@ function PetmongGameEngine({
                           width: 132,
                           height: 132,
                           objectFit: 'contain',
-                          mixBlendMode: 'multiply',
                           display: 'block',
                           pointerEvents: 'none',
                           userSelect: 'none',

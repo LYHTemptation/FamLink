@@ -1405,12 +1405,10 @@ const styles = StyleSheet.create({
   },
   petBox: {
     alignItems: 'center',
-    mixBlendMode: 'multiply',
   },
   petImageSprite: {
     width: 90,
     height: 90,
-    mixBlendMode: 'multiply',
   },
   petEmojiSprite: {
     fontSize: 65,

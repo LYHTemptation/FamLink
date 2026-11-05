@@ -2,7 +2,7 @@
   "expo": {
     "name": "FamLink",
     "slug": "family-messenger",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -28,7 +28,7 @@
         "backgroundImage": "./assets/android-icon-background.png"
       },
       "package": "com.yonknow.familymessenger",
-      "versionCode": 2,
+      "versionCode": 4,
       "permissions": [
         "CAMERA",
         "READ_MEDIA_IMAGES",

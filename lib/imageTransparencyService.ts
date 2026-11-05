@@ -81,108 +81,154 @@ export async function makeBackgroundTransparentOnDevice(imageSource: string, thr
     if (!width || !height || !rgbaData) return imageSource;
 
     // Ultra-fast zero-allocation BFS Flood Fill from all 4 borders
+    // with White-Character Silhouette Protection (흰색 반려몽 몸통 투명화 침식 방지)
     const totalPixels = width * height;
-    const visited = new Uint8Array(totalPixels);
-    const queueX = new Int32Array(totalPixels);
-    const queueY = new Int32Array(totalPixels);
-    let head = 0;
-    let tail = 0;
 
-    const isWhitePixel = (idx: number): boolean => {
-      // If already transparent, treat as transparent background so BFS traverses through
-      if (rgbaData[idx + 3] < 50) return true;
-      const r = rgbaData[idx];
-      const g = rgbaData[idx + 1];
-      const b = rgbaData[idx + 2];
-      // Pure or near-white background (threshold default: 228)
-      if (r >= threshold && g >= threshold && b >= threshold) return true;
-      // Checkerboard fake transparency tiles (r, g, b almost identical and bright)
+    // 1. Identify character feature/contour pixels (non-pure-white: outlines, eyes, nose, shading, color)
+    const isFeature = new Uint8Array(totalPixels);
+    const rowMinX = new Int32Array(height).fill(width);
+    const rowMaxX = new Int32Array(height).fill(-1);
+    const colMinY = new Int32Array(width).fill(height);
+    const colMaxY = new Int32Array(width).fill(-1);
+
+    for (let y = 0; y < height; y++) {
+      const rowOffset = y * width;
+      for (let x = 0; x < width; x++) {
+        const pIdx = rowOffset + x;
+        const dIdx = pIdx * 4;
+        const a = rgbaData[dIdx + 3];
+        if (a < 50) continue;
+
+        const r = rgbaData[dIdx];
+        const g = rgbaData[dIdx + 1];
+        const b = rgbaData[dIdx + 2];
+        const maxVal = Math.max(r, g, b);
+        const minVal = Math.min(r, g, b);
+
+        // Character contour, shading, or colored pixel (not pure studio white background)
+        if (minVal < 238 || maxVal - minVal > 12) {
+          isFeature[pIdx] = 1;
+          if (x < rowMinX[y]) rowMinX[y] = x;
+          if (x > rowMaxX[y]) rowMaxX[y] = x;
+          if (y < colMinY[x]) colMinY[x] = y;
+          if (y > colMaxY[x]) colMaxY[x] = y;
+        }
+      }
+    }
+
+    // 2. Build 1px dilated edge barrier to seal micro-gaps in light outlines of white pets
+    const isBarrier = new Uint8Array(totalPixels);
+    for (let y = 0; y < height; y++) {
+      const rowOffset = y * width;
+      for (let x = 0; x < width; x++) {
+        const pIdx = rowOffset + x;
+        if (isFeature[pIdx]) {
+          isBarrier[pIdx] = 1;
+          if (x > 0) isBarrier[pIdx - 1] = 1;
+          if (x < width - 1) isBarrier[pIdx + 1] = 1;
+          if (y > 0) isBarrier[pIdx - width] = 1;
+          if (y < height - 1) isBarrier[pIdx + width] = 1;
+        }
+      }
+    }
+
+    const isBackgroundWhitePixel = (pIdx: number): boolean => {
+      if (isBarrier[pIdx]) return false;
+      const dIdx = pIdx * 4;
+      if (rgbaData[dIdx + 3] < 50) return true;
+      const r = rgbaData[dIdx];
+      const g = rgbaData[dIdx + 1];
+      const b = rgbaData[dIdx + 2];
       const maxVal = Math.max(r, g, b);
       const minVal = Math.min(r, g, b);
-      if (minVal >= 175 && (maxVal - minVal) <= 18) return true;
-      return false;
+      // Only pure/near-pure neutral white studio background (never eat light gray/cream fur shading)
+      const strictCutoff = Math.max(240, threshold);
+      return minVal >= strictCutoff && maxVal - minVal <= 10;
     };
 
-    const tryAddSeed = (x: number, y: number): void => {
-      const pIdx = y * width + x;
-      if (visited[pIdx]) return;
-      visited[pIdx] = 1;
-      const dIdx = pIdx * 4;
-      if (isWhitePixel(dIdx)) {
-        rgbaData[dIdx + 3] = 0; // Transparent
-        queueX[tail] = x;
-        queueY[tail] = y;
-        tail++;
+    const runFloodFill = (protectInteriorSilhouette: boolean): Uint8Array => {
+      const visited = new Uint8Array(totalPixels);
+      const bgMask = new Uint8Array(totalPixels);
+      const queueX = new Int32Array(totalPixels);
+      const queueY = new Int32Array(totalPixels);
+      let head = 0;
+      let tail = 0;
+
+      const isProtectedInterior = (x: number, y: number): boolean => {
+        if (!protectInteriorSilhouette) return false;
+        // Enclosed both horizontally and vertically by character contour/features
+        return (
+          rowMinX[y] + 2 <= x &&
+          x <= rowMaxX[y] - 2 &&
+          colMinY[x] + 2 <= y &&
+          y <= colMaxY[x] - 2
+        );
+      };
+
+      const tryEnqueue = (x: number, y: number): void => {
+        const pIdx = y * width + x;
+        if (visited[pIdx]) return;
+        visited[pIdx] = 1;
+        if (isProtectedInterior(x, y)) return;
+        if (isBackgroundWhitePixel(pIdx)) {
+          bgMask[pIdx] = 1;
+          queueX[tail] = x;
+          queueY[tail] = y;
+          tail++;
+        }
+      };
+
+      for (let x = 0; x < width; x++) {
+        tryEnqueue(x, 0);
+        tryEnqueue(x, height - 1);
       }
+      for (let y = 0; y < height; y++) {
+        tryEnqueue(0, y);
+        tryEnqueue(width - 1, y);
+      }
+
+      while (head < tail) {
+        const cx = queueX[head];
+        const cy = queueY[head];
+        head++;
+
+        if (cx > 0) tryEnqueue(cx - 1, cy);
+        if (cx < width - 1) tryEnqueue(cx + 1, cy);
+        if (cy > 0) tryEnqueue(cx, cy - 1);
+        if (cy < height - 1) tryEnqueue(cx, cy + 1);
+      }
+
+      return bgMask;
     };
 
-    // Seed outer border pixels
-    for (let x = 0; x < width; x++) {
-      tryAddSeed(x, 0);
-      tryAddSeed(x, height - 1);
-    }
-    for (let y = 0; y < height; y++) {
-      tryAddSeed(0, y);
-      tryAddSeed(width - 1, y);
+    // First pass: standard border flood fill with contour barrier
+    let finalBgMask = runFloodFill(false);
+
+    // Check if flood fill leaked into the character's interior core (e.g., borderless white fur)
+    let interiorTotal = 0;
+    let interiorErased = 0;
+    for (let y = Math.floor(height * 0.2); y < Math.floor(height * 0.8); y++) {
+      for (let x = Math.floor(width * 0.2); x < Math.floor(width * 0.8); x++) {
+        if (
+          rowMinX[y] + 2 <= x &&
+          x <= rowMaxX[y] - 2 &&
+          colMinY[x] + 2 <= y &&
+          y <= colMaxY[x] - 2
+        ) {
+          interiorTotal++;
+          if (finalBgMask[y * width + x]) interiorErased++;
+        }
+      }
     }
 
-    while (head < tail) {
-      const cx = queueX[head];
-      const cy = queueY[head];
-      head++;
+    // If > 8% of the character's enclosed interior was erased, re-run with interior silhouette shield
+    if (interiorTotal > 0 && interiorErased / interiorTotal > 0.08) {
+      finalBgMask = runFloodFill(true);
+    }
 
-      // Check 4 neighbors
-      if (cx > 0) {
-        const pIdx = cy * width + (cx - 1);
-        if (!visited[pIdx]) {
-          visited[pIdx] = 1;
-          const dIdx = pIdx * 4;
-          if (isWhitePixel(dIdx)) {
-            rgbaData[dIdx + 3] = 0;
-            queueX[tail] = cx - 1;
-            queueY[tail] = cy;
-            tail++;
-          }
-        }
-      }
-      if (cx < width - 1) {
-        const pIdx = cy * width + (cx + 1);
-        if (!visited[pIdx]) {
-          visited[pIdx] = 1;
-          const dIdx = pIdx * 4;
-          if (isWhitePixel(dIdx)) {
-            rgbaData[dIdx + 3] = 0;
-            queueX[tail] = cx + 1;
-            queueY[tail] = cy;
-            tail++;
-          }
-        }
-      }
-      if (cy > 0) {
-        const pIdx = (cy - 1) * width + cx;
-        if (!visited[pIdx]) {
-          visited[pIdx] = 1;
-          const dIdx = pIdx * 4;
-          if (isWhitePixel(dIdx)) {
-            rgbaData[dIdx + 3] = 0;
-            queueX[tail] = cx;
-            queueY[tail] = cy - 1;
-            tail++;
-          }
-        }
-      }
-      if (cy < height - 1) {
-        const pIdx = (cy + 1) * width + cx;
-        if (!visited[pIdx]) {
-          visited[pIdx] = 1;
-          const dIdx = pIdx * 4;
-          if (isWhitePixel(dIdx)) {
-            rgbaData[dIdx + 3] = 0;
-            queueX[tail] = cx;
-            queueY[tail] = cy + 1;
-            tail++;
-          }
-        }
+    for (let pIdx = 0; pIdx < totalPixels; pIdx++) {
+      if (finalBgMask[pIdx]) {
+        rgbaData[pIdx * 4 + 3] = 0;
       }
     }
 

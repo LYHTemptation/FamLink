@@ -587,13 +587,11 @@ export default StyleSheet.create({
     marginRight: 14,
     position: 'relative',
     backgroundColor: 'transparent',
-    mixBlendMode: 'multiply' as any,
   },
   petAvatarImage: {
     width: 56,
     height: 56,
     resizeMode: 'contain',
-    mixBlendMode: 'multiply' as any,
   },
   petAvatarEmoji: {
     fontSize: 34,

@@ -1133,12 +1133,10 @@ const styles = StyleSheet.create({
   },
   petSleepBox: {
     alignItems: 'center',
-    mixBlendMode: 'multiply',
   },
   petImageSprite: {
     width: 76,
     height: 76,
-    mixBlendMode: 'multiply',
   },
   petEmojiSprite: {
     fontSize: 55,

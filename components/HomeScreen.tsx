@@ -858,7 +858,6 @@ function HomeScreenComponent({
                         width: 56,
                         height: 56,
                         objectFit: 'contain',
-                        mixBlendMode: 'multiply',
                         display: 'block',
                         pointerEvents: 'none',
                         userSelect: 'none',

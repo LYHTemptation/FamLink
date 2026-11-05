@@ -225,7 +225,6 @@ const styles = StyleSheet.create({
   petImageSprite: {
     width: 132,
     height: 132,
-    mixBlendMode: 'multiply',
   },
   petGroundShadow: {
     width: 82,

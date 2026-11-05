@@ -47,6 +47,7 @@ import {
   isStageGenerationRunning,
   detectSpecies,
 } from '../lib/petmongEvolutionService';
+import { useTransparentImage } from '../lib/imageTransparencyService';
 import { colors, typography, commonStyles } from '../theme';
 
 import { PetmongCharacter, FamilyMember, UserProfile } from '../types/domain';
@@ -93,6 +94,7 @@ export default function PetmongGrowthBookModal({
   const currentStageImageUrl =
     stageImages[selectedStageNum] ||
     (selectedStageNum === currentCharStage.stage ? activeChar?.image_url : null);
+  const transparentStageImageUrl = useTransparentImage(currentStageImageUrl);
 
   // Sync selected stage with pet's stage when opening
   useEffect(() => {
@@ -381,13 +383,12 @@ export default function PetmongGrowthBookModal({
                   {currentStageImageUrl ? (
                     Platform.OS === 'web' ? (
                       <img
-                        src={currentStageImageUrl}
+                        src={transparentStageImageUrl || currentStageImageUrl}
                         alt="petmong stage"
                         style={{
                           width: 156,
                           height: 156,
                           objectFit: 'contain',
-                          mixBlendMode: 'multiply',
                           display: 'block',
                           pointerEvents: 'none',
                           userSelect: 'none',
@@ -395,7 +396,7 @@ export default function PetmongGrowthBookModal({
                       />
                     ) : (
                       <Image
-                        source={{ uri: currentStageImageUrl }}
+                        source={{ uri: transparentStageImageUrl || currentStageImageUrl }}
                         style={styles.petShowcaseImage}
                         resizeMode="contain"
                       />
@@ -774,12 +775,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
-    mixBlendMode: 'multiply',
   },
   petShowcaseImage: {
     width: 156,
     height: 156,
-    mixBlendMode: 'multiply',
   },
   petShowcaseEmoji: {
     fontSize: 88,
