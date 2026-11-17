@@ -434,7 +434,7 @@ export async function generatePetmongMascotFromPhoto(params: {
 
     const isStage1Baby = targetStageNum === 1;
     const stage1BabyRequirement = isStage1Baby
-      ? `\n6. NEWBORN BABY INFANT REQUIREMENT (Stage 1 꼬물이 시절):
+      ? `\n6. NEWBORN BABY INFANT REQUIREMENT (Stage 1 아기몽 시절):
 Regardless of whether the input photo shows an adult animal, person, or object, you MUST transform them into a TRUE NEWBORN INFANT BABY VERSION of that subject!
 - Chubby baby cheeks, huge watery innocent baby eyes, 1.0 to 1.2 head-to-body newborn baby proportions.
 - If animal/feline/canine/beast: Newborn baby kitten/puppy, lying on its round tummy or crawling on floor with tiny paws, soft fluffy downy baby fur, tiny folded ears.

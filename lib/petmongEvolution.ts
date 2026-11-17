@@ -23,10 +23,10 @@ export interface PetmongSpeciesSpec {
 }
 
 // Family Companion Growth Milestones & System
-// Stage 1: Lv.1 ~ 4   (꼬물이 시절 / Baby Bean)
-// Stage 2: Lv.5 ~ 9   (총총이 시절 / Playful Little)
-// Stage 3: Lv.10 ~ 19 (포근이 시절 / Plush Companion)
-// Stage 4: Lv.20+     (지킴이 시절 / Cherished Guardian)
+// Stage 1: Lv.1 ~ 4   (아기몽 시절 / Baby Infant)
+// Stage 2: Lv.5 ~ 9   (성장몽 시절 / Playful Child)
+// Stage 3: Lv.10 ~ 19 (짝꿍몽 시절 / Caring Companion)
+// Stage 4: Lv.20+     (식구몽 시절 / Cherished Family)
 
 export const EVOLUTION_MILESTONES = [1, 5, 10, 20];
 
@@ -70,10 +70,10 @@ export const EVOLUTION_STAGES: Record<number, EvolutionStageSpec> = {
     stage: 1,
     minLevel: 1,
     maxLevel: 4,
-    name: '꼬물이',
-    stageTitle: '1단계: 꼬물이 시절 (Baby Bean)',
+    name: '아기몽',
+    stageTitle: '1단계: 아기몽 시절 (Baby Infant)',
     scale: 1.0,
-    desc: '한 손에 쏙 들어오는 작고 동글동글한 콩알! 호기심 어린 눈망울로 온 가족을 바라봐요.',
+    desc: '한 손에 쏙 들어오는 작고 순수한 첫 만남! 호기심 어린 눈망울로 온 가족을 바라봐요.',
     badgeColor: '#FFA39E',
     targetPeriod: '시작 (Day 1)',
     requiredExp: '0 EXP',
@@ -83,10 +83,10 @@ export const EVOLUTION_STAGES: Record<number, EvolutionStageSpec> = {
     stage: 2,
     minLevel: 5,
     maxLevel: 9,
-    name: '총총이',
-    stageTitle: '2단계: 총총이 시절 (Playful Little)',
+    name: '성장몽',
+    stageTitle: '2단계: 성장몽 시절 (Playful Child)',
     scale: 1.08,
-    desc: '아장아장 총총 뛰놀며 온 집안에 생기발랄한 웃음과 활력을 선물하는 사랑스러운 꼬마예요.',
+    desc: '아장아장 발걸음을 떼며 온 집안에 생기발랄한 웃음과 활력을 선물하는 사랑스러운 꼬마예요.',
     badgeColor: '#52C41A',
     targetPeriod: '약 2~3주차',
     requiredExp: '누적 2,000 EXP (Lv.5)',
@@ -96,10 +96,10 @@ export const EVOLUTION_STAGES: Record<number, EvolutionStageSpec> = {
     stage: 3,
     minLevel: 10,
     maxLevel: 19,
-    name: '포근이',
-    stageTitle: '3단계: 포근이 시절 (Plush Companion)',
+    name: '짝꿍몽',
+    stageTitle: '3단계: 짝꿍몽 시절 (Caring Companion)',
     scale: 1.18,
-    desc: '두 팔로 와락 안아주고 싶을 만큼 듬직하고 포근한 찹쌀떡 체형! 가족의 지친 하루를 따스하게 감싸줘요.',
+    desc: '두 팔로 와락 안아주고 싶을 만큼 포근하고 든든한 체형! 가족의 지친 하루를 따스하게 감싸줘요.',
     badgeColor: '#1890FF',
     targetPeriod: '약 2개월차',
     requiredExp: '누적 7,000 EXP (Lv.10)',
@@ -109,10 +109,10 @@ export const EVOLUTION_STAGES: Record<number, EvolutionStageSpec> = {
     stage: 4,
     minLevel: 20,
     maxLevel: 999,
-    name: '지킴이',
-    stageTitle: '4단계: 지킴이 시절 (Cherished Guardian)',
+    name: '식구몽',
+    stageTitle: '4단계: 식구몽 시절 (Cherished Family)',
     scale: 1.28,
-    desc: '온 가족의 사랑을 듬뿍 받아 완성된 영원한 수호신! 언제나 곁을 든든하게 지켜주는 평생 한식구예요.',
+    desc: '온 가족의 사랑을 듬뿍 받아 완성된 영원한 단짝! 언제나 곁을 지켜주는 평생 소중한 우리 집 식구예요.',
     badgeColor: '#FAAD14',
     targetPeriod: '약 4개월차 (최종)',
     requiredExp: '누적 14,000 EXP (Lv.20)',
@@ -124,13 +124,13 @@ export const getStageNameWithPet = (stageNum: number = 1, petName: string = '반
   const name = petName || '반려친구';
   switch (Number(stageNum)) {
     case 1:
-      return `꼬물이 ${name}`;
+      return `아기몽 ${name}`;
     case 2:
-      return `총총이 ${name}`;
+      return `성장몽 ${name}`;
     case 3:
-      return `포근이 ${name}`;
+      return `짝꿍몽 ${name}`;
     case 4:
-      return `지킴이 ${name}`;
+      return `식구몽 ${name}`;
     default:
       return name;
   }
@@ -260,49 +260,49 @@ export const PETMONG_SPECIES_LIST: PetmongSpeciesSpec[] = [
     name: '강아지',
     emoji: '🐶',
     desc: '의리와 사랑의 상징! 앙증맞은 아기 강아지에서 온 가족의 든든한 평생 짝꿍으로 성장해요.',
-    chain: ['🐾 아기 꼬물이', '🐶 장난꾸러기 친구', '🐕 든든한 가족 짝꿍', '✨🐕 온 가족의 평생 식구'],
+    chain: ['🐾 아기몽', '🐶 성장몽', '🐕 짝꿍몽', '✨🐕 식구몽'],
   },
   {
     id: 'feline',
     name: '고양이',
     emoji: '🐱',
     desc: '도도하고 다정한 사랑둥이! 사랑스러운 솜뭉치에서 눈빛만 봐도 통하는 단짝 냥이로 성장해요.',
-    chain: ['🐾 아기 솜뭉치', '🐱 호기심 꼬마 냥이', '🐈 마음 통하는 단짝', '✨🐱 온 가족의 평생 식구'],
+    chain: ['🐾 아기몽', '🐱 성장몽', '🐈 짝꿍몽', '✨🐱 식구몽'],
   },
   {
     id: 'rabbit',
     name: '토끼',
     emoji: '🐰',
     desc: '포근하고 지혜로운 요정! 쫑긋한 귀의 아기 토끼에서 활기와 위로를 건네는 가족 친구로 자라나요.',
-    chain: ['🐾 아기 솜토끼', '🐰 깡충 귀염둥이', '🐇 든든한 짝꿍 토끼', '✨🐰 온 가족의 평생 식구'],
+    chain: ['🐾 아기몽', '🐰 성장몽', '🐇 짝꿍몽', '✨🐰 식구몽'],
   },
   {
     id: 'bear',
     name: '곰돌이',
     emoji: '🐻',
     desc: '푸근하고 묵직한 안식처! 둥글둥글 아기 곰에서 가족을 포근하게 안아주는 듬직한 식구로 성장해요.',
-    chain: ['🐾 아기 곰돌이', '🐻 씩씩한 곰 친구', '🐻‍❄️ 든든하고 푸근한 짝꿍', '✨🐻 온 가족의 평생 식구'],
+    chain: ['🐾 아기몽', '🐻 성장몽', '🐻‍❄️ 짝꿍몽', '✨🐻 식구몽'],
   },
   {
     id: 'bird',
     name: '새 / 파랑새',
     emoji: '🐥',
     desc: '행복과 희망의 날갯짓! 작은 아기 새에서 가족에게 매일 기쁜 소식을 물어다 주는 파랑새로 자라나요.',
-    chain: ['🐾 솜털 아기 새', '🐥 날갯짓하는 친구', '🕊️ 다정한 짝꿍 파랑새', '✨🕊️ 온 가족의 평생 식구'],
+    chain: ['🐾 아기몽', '🐥 성장몽', '🕊️ 짝꿍몽', '✨🕊️ 식구몽'],
   },
   {
     id: 'fox',
     name: '여우',
     emoji: '🦊',
     desc: '사랑스럽고 영특한 눈망울! 복슬복슬 아기 여우에서 가족의 온기를 지키는 든든한 동반자가 돼요.',
-    chain: ['🐾 아기 여우 꼬물이', '🦊 호기심 여우 친구', '🦊 영특한 단짝 짝꿍', '✨🦊 온 가족의 평생 식구'],
+    chain: ['🐾 아기몽', '🦊 성장몽', '🦊 짝꿍몽', '✨🦊 식구몽'],
   },
   {
     id: 'deer',
     name: '꽃사슴',
     emoji: '🦌',
     desc: '맑고 평온한 숲의 온기! 초롱초롱한 아기 사슴에서 가족에게 평화와 위안을 주는 듬직한 반려가 돼요.',
-    chain: ['🐾 아기 꽃사슴', '🦌 사뿐사뿐 사슴 친구', '🦌 온화하고 듬직한 짝꿍', '✨🦌 온 가족의 평생 식구'],
+    chain: ['🐾 아기몽', '🦌 성장몽', '🦌 짝꿍몽', '✨🦌 식구몽'],
   },
   {
     id: 'rodent',
@@ -550,7 +550,7 @@ Composition: Prominent full-body framing filling 85% to 90% of canvas with minim
 
   if (targetStage === 2) {
     return `${baseInstruction}
-TARGET EVOLUTION: STAGE 2 (총총이 시절 - Toddler / Playful Little Stage)
+TARGET EVOLUTION: STAGE 2 (성장몽 시절 - Toddler / Playful Little Stage)
 Physical Maturation Details:
 ${spec.stage2Toddler}
 Posture & Personality:
@@ -559,7 +559,7 @@ Radiating lively ${personalityTrait} energy. Standing up on feet, jumping with j
 
   if (targetStage === 3) {
     return `${baseInstruction}
-TARGET EVOLUTION: STAGE 3 (포근이 시절 - Adolescent / Tall Juvenile Stage)
+TARGET EVOLUTION: STAGE 3 (짝꿍몽 시절 - Adolescent / Tall Juvenile Stage)
 Physical Maturation Details:
 ${spec.stage3Teen}
 Posture & Personality:
@@ -568,7 +568,7 @@ Noticeable growth spurt! Limbs and torso have grown visibly longer and leaner. S
 
   if (targetStage === 4) {
     return `${baseInstruction}
-TARGET EVOLUTION: STAGE 4 (지킴이 시절 - Full-Grown Majestic Adult Guardian)
+TARGET EVOLUTION: STAGE 4 (식구몽 시절 - Full-Grown Majestic Adult Guardian)
 Physical Maturation Details:
 ${spec.stage4Adult}
 Posture & Personality:
@@ -576,7 +576,7 @@ The ultimate peak of full-grown maturity and dignity. Stately adult proportions,
   }
 
   return `${baseInstruction}
-TARGET EVOLUTION: STAGE 1 (꼬물이 시절 - True Newborn Baby Infant Stage)
+TARGET EVOLUTION: STAGE 1 (아기몽 시절 - True Newborn Baby Infant Stage)
 Physical Maturation Details:
 ${spec.stage1Baby}
 Posture & Personality:

@@ -1147,7 +1147,7 @@ function InteriorScreen({
             if (setPetmongCharacters) {
               setPetmongCharacters((prev: any[]) => prev.map(c => c.id === updatedChar.id ? updatedChar : c));
             }
-            Alert.alert('외형 환생 완료! ✨', `500 P를 사용하여 ${newName.trim()}(이)가 새로운 외형으로 환생했습니다! 1단계 꼬물이부터 새로운 성장이 시작됩니다 🌱`);
+            Alert.alert('외형 환생 완료! ✨', `500 P를 사용하여 ${newName.trim()}(이)가 새로운 외형으로 환생했습니다! 1단계 아기몽부터 새로운 성장이 시작됩니다 🌱`);
 
             if (updatedChar?.id && updatedChar?.image_url) {
               startBackgroundStagePreGeneration(updatedChar, (stage, url) => {
@@ -1246,8 +1246,8 @@ function InteriorScreen({
 
       const alertTitle = isLeakedOrAuth ? 'AI API 키 확인 필요' : '반려몽 외형 생성 실패';
       const alertMsg = isLeakedOrAuth
-        ? 'Google Gemini API 키가 차단되었거나 등록되지 않았습니다.\n(.env 파일에 EXPO_PUBLIC_GEMINI_API_KEY 설정 필요)\n\n기본 귀여운 꼬물이 몽이 외형으로 적용하시겠습니까?'
-        : 'AI 이미지 생성 서버 응답이 원활하지 않습니다.\n기본 귀여운 꼬물이 몽이 외형으로 적용하시겠습니까?';
+        ? 'Google Gemini API 키가 차단되었거나 등록되지 않았습니다.\n(.env 파일에 EXPO_PUBLIC_GEMINI_API_KEY 설정 필요)\n\n기본 귀여운 아기몽 외형으로 적용하시겠습니까?'
+        : 'AI 이미지 생성 서버 응답이 원활하지 않습니다.\n기본 귀여운 아기몽 외형으로 적용하시겠습니까?';
 
       Alert.alert(
         alertTitle,
@@ -1284,7 +1284,7 @@ function InteriorScreen({
                   if (setPetmongCharacters) {
                     setPetmongCharacters((prev: any[]) => prev.map(c => c.id === updatedChar.id ? updatedChar : c));
                   }
-                  Alert.alert('외형 환생 완료! ✨', '기본 꼬물이 몽이 외형으로 환생했습니다! 1단계 아기몽부터 새롭게 성장합니다 🌱');
+                  Alert.alert('외형 환생 완료! ✨', '기본 아기몽 외형으로 환생했습니다! 1단계 아기몽부터 새롭게 성장합니다 🌱');
                   return;
                 }
 
@@ -1312,7 +1312,7 @@ function InteriorScreen({
                 if (setPetmongCharacters) {
                   setPetmongCharacters((prev: any[]) => [...prev, insertedChar]);
                 }
-                Alert.alert('탄생 완료! 🎉', '귀여운 아기 꼬물이 몽이가 부화했어요!');
+                Alert.alert('탄생 완료! 🎉', '귀여운 아기몽이 부화했어요!');
               } catch (e) {
                 setIsGenerating(false);
                 Alert.alert('오류', '반려몽 생성에 실패했습니다.');
@@ -1411,7 +1411,7 @@ function InteriorScreen({
           if (setPetmongCharacters) {
             setPetmongCharacters((prev: any[]) => prev.map(c => c.id === updatedChar.id ? updatedChar : c));
           }
-          Alert.alert('외형 환생 완료! ✨', `500 P를 사용하여 ${newName.trim()}(이)의 외형이 새롭게 환생했습니다! 1단계 꼬물이부터 새롭게 성장합니다 🌱`);
+          Alert.alert('외형 환생 완료! ✨', `500 P를 사용하여 ${newName.trim()}(이)의 외형이 새롭게 환생했습니다! 1단계 아기몽부터 새롭게 성장합니다 🌱`);
           return;
         }
 
